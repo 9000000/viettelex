@@ -961,4 +961,32 @@ constexpr std::string_view kNeutralLoanwords[138] = {
   "wifi","windows","xiaomi","youtube","zalo","zoom",
 };
 
+constexpr std::string_view kFunctionWords[128] = {
+  "about","across","after","all","along","although","am","an","and","another","any","are","as",
+  "at","be","because","been","before","behind","being","between","beyond","both","but","by",
+  "can","could","did","do","does","during","each","every","few","for","from","had","has","have",
+  "having","he","her","hers","herself","him","himself","his","how","i","if","in","into","is",
+  "it","its","itself","many","may","me","might","mine","much","must","my","myself","nor","not",
+  "of","on","onto","or","other","our","ours","ourselves","over","several","shall","she",
+  "should","since","so","some","such","than","that","the","their","theirs","them","themselves",
+  "then","there","these","they","this","those","though","through","to","under","unless","until",
+  "upon","us","was","we","were","what","when","where","whether","which","while","who","whom",
+  "whose","why","will","with","within","without","would","yet","you","your","yours","yourself",
+};
+
+constexpr std::string_view kContractionTails[3] = {
+  "ll","re","ve",
+};
+
+// Predecessor gates (EnglishContextWords.predecessorGates): kGateWords[i] restores inside
+// an English run only right after one of kGatePredecessors<i>. Rule order = bit order.
+constexpr std::string_view kGatePredecessors0[5] = {
+  "had","has","have","having","ve",
+};
+
+constexpr int kGateCount = 1;
+constexpr std::string_view kGateWords[kGateCount] = {"been"};
+struct GatePredecessors { const std::string_view* words; int count; };
+constexpr GatePredecessors kGatePredecessors[kGateCount] = {{kGatePredecessors0, 5}};
+
 }} // namespace vtx::gen

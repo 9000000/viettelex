@@ -86,6 +86,15 @@ internal object EnglishContextWords {
     val words = WordSet(parseWords(WORDS))
     val restoreOnly = WordSet(parseWords(RESTORE_ONLY))
     val neutralLoanwords = WordSet(parseWords(NEUTRAL))
+    /** Function words: open an English run on their own (see EnglishContextWords.swift). */
+    val functionWords = WordSet(parseWords(FUNCTION))
+    /** Contraction tails left by the apostrophe boundary (I've → ve): neutral. */
+    val contractionTails = WordSet(parseWords(CONTRACTION_TAILS))
+    /** Predecessor gates: gateWords[i] restores in a run only right after gatePredecessors[i]. */
+    val gateWords: Array<String> = arrayOf("been")
+    val gatePredecessors: Array<WordSet> = arrayOf(
+        WordSet(parseWords("have has had having ve")),
+    )
     const val maxLength = 12
     private const val WORDS = """
 i you he she it we they me him her us them my your his its our their mine yours hers ours
@@ -117,6 +126,19 @@ uri urw usa usc vary vast vees veest vias visa vons was
 a wow ok okay oh ah aha hey hi hello yay yeah yep nope oops ouch hmm huh haha hehe lol omg
 wtf bye sorry thanks thank please welcome congrats cool wonderful awesome amazing
 """
+    private const val FUNCTION = """
+i you he she it we they me him her us them my your his its our their mine yours hers ours
+theirs this that these those who whom whose which what myself yourself himself herself
+itself ourselves themselves is am are was were be been being do does did have has had
+having will would shall should can could may might must an the some any every each all
+both few many much several such other another of to in on at by for with from into onto
+over under about after before between through during without within along across behind
+beyond upon and or but nor so yet if then than because while when where why how though
+although unless until whether since as not there
+"""
+    private const val CONTRACTION_TAILS = """
+ve re ll
+"""
     private const val NEUTRAL = """
 app apps email mail wifi web blog file files link links game games chat team teams fan
 fans form font menu tab tabs click share live stream video videos photo photos camera
@@ -138,6 +160,8 @@ grab momo vnpay viettel vinaphone mobifone samsung xiaomi oppo huawei
 object EnglishContextLookup {
     fun opensEnglishRun(w: String): Boolean = EnglishContextWords.words.contains(w)
     fun isNeutralLoanword(w: String): Boolean = EnglishContextWords.neutralLoanwords.contains(w)
+    /** Từ chức năng: một mình đủ mở mạch tiếng Anh trong engine. */
+    fun isFunctionWord(w: String): Boolean = EnglishContextWords.functionWords.contains(w)
 }
 
 internal fun parseWords(list: String): HashSet<String> {

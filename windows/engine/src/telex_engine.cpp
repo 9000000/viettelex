@@ -334,7 +334,7 @@ void TelexEngine::commitBoundary(bool autoRestore, Action& out) {
     setSimple(out, Action::None);
     if (rawCount_ <= 0) { reopenRawCount_ = 0; reopenOutCount_ = 0; resetWord(); return; }
     if (overflowed_) {
-        if (contextualEnglish) previousWordEnglish_ = false;
+        if (contextualEnglish) clearEnglishContext();
         reopenRawCount_ = 0; reopenOutCount_ = 0;
         resetWord();
         return;
@@ -362,6 +362,8 @@ void TelexEngine::captureReopen(bool restored) {
     reopenRawCount_ = rawCount_;
     reopenOutCount_ = outCount_;
     reopenPrevEnglish_ = previousWordEnglish_;
+    reopenCandidate_ = englishCandidate_;
+    reopenGateBits_ = previousGateBits_;
 }
 
 int TelexEngine::reopenLastCommit(char16_t* buf, int cap) {
@@ -369,12 +371,16 @@ int TelexEngine::reopenLastCommit(char16_t* buf, int cap) {
     int n = reopenRawCount_;
     int expected = reopenOutCount_;
     bool prevEnglish = reopenPrevEnglish_;
+    bool prevCandidate = reopenCandidate_;
+    uint8_t prevGateBits = reopenGateBits_;
     uint8_t keys[kCapacity];
     char32_t want[kCapacity];
     for (int i = 0; i < n; ++i) keys[i] = reopenRaw_[i];
     for (int i = 0; i < expected; ++i) want[i] = reopenOut_[i];
     reset();
     previousWordEnglish_ = prevEnglish;
+    englishCandidate_ = prevCandidate;
+    previousGateBits_ = prevGateBits;
     Action a;
     for (int i = 0; i < n; ++i) feedAscii(keys[i], a);
     if (rawCount_ != n || outCount_ != expected) { reset(); return -1; }
@@ -403,9 +409,49 @@ bool TelexEngine::shouldRestoreRaw() const {
     if (upperToneKey_ || rawIsEnglishException() || (!composedIsValidSyllable() && !isTeencodeKeep()))
         return true;
     if (contextualEnglish && previousWordEnglish_ &&
-        (rawIsEnglishContextWord(true) || (collisionPrefersVietnamese && rawIsEnglishCollision())))
+        (rawIsEnglishContextWord(true) || (collisionPrefersVietnamese && rawIsEnglishCollision())) &&
+        predecessorGateAllows())
         return true;
     return false;
+}
+
+// Swift predecessorGateAllows: a gated word ("been") restores only right after one of its
+// predecessors ("has"); every other word is unaffected.
+bool TelexEngine::predecessorGateAllows() const {
+    char w[kCapacity];
+    int n = lowerAsciiInto(raw_, rawCount_, gen::kEnglishContextMaxLength, w);
+    if (n <= 0) return true;
+    std::string_view key(w, static_cast<size_t>(n));
+    for (int i = 0; i < gen::kGateCount; ++i)
+        if (gen::kGateWords[i] == key) return (previousGateBits_ & (1u << i)) != 0;
+    return true;
+}
+
+uint8_t TelexEngine::rawPredecessorBits() const {
+    char w[kCapacity];
+    int n = lowerAsciiInto(raw_, rawCount_, gen::kEnglishContextMaxLength, w);
+    if (n <= 0) return 0;
+    std::string_view key(w, static_cast<size_t>(n));
+    uint8_t bits = 0;
+    for (int i = 0; i < gen::kGateCount; ++i) {
+        const auto& p = gen::kGatePredecessors[i];
+        for (int k = 0; k < p.count; ++k)
+            if (p.words[k] == key) { bits |= static_cast<uint8_t>(1u << i); break; }
+    }
+    return bits;
+}
+
+bool TelexEngine::rawIsFunctionWord() const {
+    char w[kCapacity];
+    int n = lowerAsciiInto(raw_, rawCount_, gen::kEnglishContextMaxLength, w);
+    return n > 0 && inEnglishList(gen::kFunctionWords, w, n);
+}
+
+bool TelexEngine::rawIsContractionTail() const {
+    if (rawCount_ > 2) return false;
+    char w[kCapacity];
+    int n = lowerAsciiInto(raw_, rawCount_, gen::kEnglishContextMaxLength, w);
+    return n > 0 && inEnglishList(gen::kContractionTails, w, n);
 }
 
 bool TelexEngine::composedHasDiacritic() const {
@@ -429,7 +475,8 @@ bool TelexEngine::isRecognizedEnglish() const {
 
 TelexEngine::WordContext TelexEngine::classifyWordContext(bool restored) const {
     if (!restored && compositionHasDiacritic()) return WordContext::Vietnamese;
-    if (isRecognizedEnglish()) return WordContext::English;
+    if (isRecognizedEnglish())
+        return rawIsFunctionWord() ? WordContext::EnglishFunction : WordContext::English;
     {   // composedAsciiWord
         char w[kCapacity];
         int n = -1;
@@ -445,11 +492,13 @@ TelexEngine::WordContext TelexEngine::classifyWordContext(bool restored) const {
         }
         if (n > 0) {
             bool neutral = inEnglishList(gen::kNeutralLoanwords, w, n);
-            if (inEnglishList(gen::kEnglishContextWords, w, n) || inEnglishList(gen::kEnglishCollisions, w, n) || neutral)
-                return neutral ? WordContext::Neutral : WordContext::English;
+            if (inEnglishList(gen::kEnglishContextWords, w, n) || inEnglishList(gen::kEnglishCollisions, w, n) || neutral) {
+                if (neutral) return WordContext::Neutral;
+                return inEnglishList(gen::kFunctionWords, w, n) ? WordContext::EnglishFunction : WordContext::English;
+            }
         }
     }
-    if (rawIsNeutralLoanword() || rawIsEnglishContextWord(true)) return WordContext::Neutral;
+    if (rawIsNeutralLoanword() || rawIsEnglishContextWord(true) || rawIsContractionTail()) return WordContext::Neutral;
     if (!restored && SyllableValidator::isValidSyllable(out_, outCount_, teencode)) return WordContext::Vietnamese;
     if (rawCount_ <= 2) return WordContext::Neutral;
     return WordContext::English;
@@ -464,10 +513,24 @@ bool TelexEngine::rawIsNeutralLoanword() const {
 void TelexEngine::updateContext(bool restored) {
     if (!contextualEnglish || rawCount_ <= 0) return;
     switch (classifyWordContext(restored)) {
-    case WordContext::English: previousWordEnglish_ = true; break;
-    case WordContext::Vietnamese: previousWordEnglish_ = false; break;
+    case WordContext::EnglishFunction: previousWordEnglish_ = true; englishCandidate_ = false; break;
+    case WordContext::English: foldEnglishContentWord(); break;
+    case WordContext::Vietnamese: clearEnglishContext(); return;
     case WordContext::Neutral: break;
     }
+    previousGateBits_ = rawPredecessorBits();
+}
+
+void TelexEngine::foldEnglishContentWord() {
+    if (previousWordEnglish_) return;
+    if (englishCandidate_) { previousWordEnglish_ = true; englishCandidate_ = false; }
+    else englishCandidate_ = true;
+}
+
+void TelexEngine::clearEnglishContext() {
+    previousWordEnglish_ = false;
+    englishCandidate_ = false;
+    previousGateBits_ = 0;
 }
 
 bool TelexEngine::rawIsEnglishContextWord(bool includingRestoreOnly) const {
@@ -479,7 +542,7 @@ bool TelexEngine::rawIsEnglishContextWord(bool includingRestoreOnly) const {
 }
 
 void TelexEngine::reset() {
-    if (rawCount_ > 0) previousWordEnglish_ = false;
+    if (rawCount_ > 0) clearEnglishContext();
     resetWord();
     reopenRawCount_ = 0;
     reopenOutCount_ = 0;
@@ -488,7 +551,7 @@ void TelexEngine::reset() {
 int TelexEngine::commitText(bool autoRestore, char16_t* buf, int cap) {
     int n;
     if (overflowed_) {
-        if (contextualEnglish) previousWordEnglish_ = false;
+        if (contextualEnglish) clearEnglishContext();
         reopenRawCount_ = 0; reopenOutCount_ = 0;
         n = emit(out_, outCount_, buf, cap);
         resetWord();

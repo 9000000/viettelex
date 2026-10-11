@@ -79,6 +79,73 @@ class CompetitorReviewPortedTest {
     }
 }
 
+/** Ported from TelexCore/Tests/TelexCoreTests/ContextEnglishLoanwordTests.swift. */
+class ContextEnglishLoanwordPortedTest {
+    @Test fun testFieldReportSuggestionBenTren() {
+        assertEquals("suggestion bên trên", sentenceCtx("suggestion been treen") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("suggestion bên trên", sentenceCtx("suggestion been treen") { liveSpellCheck = true; contextualEnglish = true; freeMarking = false; collisionPrefersVietnamese = false })
+    }
+
+    @Test fun testLoanwordInVietnameseSentenceDoesNotOpenRun() {
+        assertEquals("file lên", sentenceCtx("file leen") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("commit lên github", sentenceCtx("commit leen github") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("deploy xong", sentenceCtx("deploy xong") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("review bền", sentenceCtx("review beenf") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("review bên kia", sentenceCtx("review been kia") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("meeting í", sentenceCtx("meeting is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("deadline á em", sentenceCtx("deadline as em") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("feedback bên dưới", sentenceCtx("feedback been duwowis") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("bug bên trong", sentenceCtx("bug been trong") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("push xong merge í", sentenceCtx("push xong merge is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+    }
+
+    @Test fun testTwoEnglishWordsOrFunctionWordOpenRun() {
+        assertEquals("fix bug is", sentenceCtx("fix bug is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = false; collisionPrefersVietnamese = false })
+        assertEquals("github repo is", sentenceCtx("github repo is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = false; collisionPrefersVietnamese = false })
+        assertEquals("he is", sentenceCtx("he is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = false; collisionPrefersVietnamese = false })
+        assertEquals("he is", sentenceCtx("he is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("what is", sentenceCtx("what is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("the list", sentenceCtx("the list") { liveSpellCheck = true; contextualEnglish = true; freeMarking = false; collisionPrefersVietnamese = false })
+        assertEquals("the list", sentenceCtx("the list") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("deploy app í", sentenceCtx("deploy app is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("deploy app script is", sentenceCtx("deploy app script is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+    }
+
+    @Test fun testRunCarriesThroughContentWords() {
+        assertEquals("I fixed the bug in this file", sentenceCtx("I fixed the bug in this file") { liveSpellCheck = true; contextualEnglish = true; freeMarking = false; collisionPrefersVietnamese = false })
+        assertEquals("I fixed the bug in this file", sentenceCtx("I fixed the bug in this file") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("and this is", sentenceCtx("and this is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("he fixed it xong roi í", sentenceCtx("he fixed it xong roi is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+    }
+
+    @Test fun testBeenNeedsHavePredecessor() {
+        assertEquals("it has been", sentenceCtx("it has been") { liveSpellCheck = true; contextualEnglish = true; freeMarking = false; collisionPrefersVietnamese = false })
+        assertEquals("it has been", sentenceCtx("it has been") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("I have been there", sentenceCtx("I have been there") { liveSpellCheck = true; contextualEnglish = true; freeMarking = false; collisionPrefersVietnamese = false })
+        assertEquals("I have been there", sentenceCtx("I have been there") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("they had been", sentenceCtx("they had been") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("having been", sentenceCtx("having been") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("he bên", sentenceCtx("he been") { liveSpellCheck = true; contextualEnglish = true; freeMarking = false; collisionPrefersVietnamese = false })
+        assertEquals("the bên", sentenceCtx("the been") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("it has email bên", sentenceCtx("it has email been") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+    }
+
+    @Test fun testContractionTailsAreNeutral() {
+        assertEquals("ve í", sentenceCtx("ve is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+    }
+
+    @Test fun testCaseInsensitive() {
+        assertEquals("It Has Been", sentenceCtx("It Has Been") { liveSpellCheck = true; contextualEnglish = true; freeMarking = false; collisionPrefersVietnamese = false })
+        assertEquals("Suggestion Bên trên", sentenceCtx("Suggestion Been treen") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+    }
+
+    @Test fun testSentenceInitialAmbiguousWordsUnchanged() {
+        assertEquals("thí í", sentenceCtx("this is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("this is", sentenceCtx("thiss is") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+        assertEquals("í it", sentenceCtx("is it") { liveSpellCheck = true; contextualEnglish = true; freeMarking = true; collisionPrefersVietnamese = true })
+    }
+}
+
 /** Ported from TelexCore/Tests/TelexCoreTests/ContextEnglishTests.swift. */
 class ContextEnglishPortedTest {
     @Test fun testAppDefaultsKeepVietnameseSentenceEndingInDidAsDi() {
@@ -162,9 +229,11 @@ class ContextEnglishPortedTest {
     }
 
     @Test fun testPositionSeedsEnglishContext() {
-        assertEquals("position is not okay", sentenceCtx("position is not okay") { liveSpellCheck = true; contextualEnglish = true })
-        assertEquals("github is", sentenceCtx("github is") { liveSpellCheck = true; contextualEnglish = true })
-        assertEquals("Position is", sentenceCtx("Position is") { liveSpellCheck = true; contextualEnglish = true })
+        assertEquals("position í", sentenceCtx("position is") { liveSpellCheck = true; contextualEnglish = true })
+        assertEquals("the position is not okay", sentenceCtx("the position is not okay") { liveSpellCheck = true; contextualEnglish = true })
+        assertEquals("github repo is", sentenceCtx("github repo is") { liveSpellCheck = true; contextualEnglish = true })
+        assertEquals("The Position is", sentenceCtx("The Position is") { liveSpellCheck = true; contextualEnglish = true })
+        assertEquals("my github is", sentenceCtx("my github is") { liveSpellCheck = true; contextualEnglish = true })
     }
 
     @Test fun testTonelessVietnameseStillKeepsVietnameseContext() {
@@ -174,8 +243,9 @@ class ContextEnglishPortedTest {
 
     @Test fun testEscapedEnglishWordSeedsEnglishContext() {
         assertEquals("this is", sentenceCtx("thiss is") { liveSpellCheck = true; contextualEnglish = true })
-        assertEquals("google is", sentenceCtx("gooogle is") { liveSpellCheck = true; contextualEnglish = true })
-        assertEquals("tested is", sentenceCtx("tessted is") { liveSpellCheck = true; contextualEnglish = true })
+        assertEquals("google search is", sentenceCtx("gooogle search is") { liveSpellCheck = true; contextualEnglish = true })
+        assertEquals("we tested is", sentenceCtx("we tessted is") { liveSpellCheck = true; contextualEnglish = true })
+        assertEquals("google í", sentenceCtx("gooogle is") { liveSpellCheck = true; contextualEnglish = true })
         assertEquals("web bán", sentenceCtx("wweb bans") { liveSpellCheck = true; contextualEnglish = true })
     }
 
@@ -190,7 +260,7 @@ class ContextEnglishPortedTest {
         assertEquals("zalo á em", sentenceCtx("zalo as em") { liveSpellCheck = true; contextualEnglish = true })
         assertEquals("iphone í", sentenceCtx("iphone is") { liveSpellCheck = true; contextualEnglish = true })
         assertEquals("the macos is", sentenceCtx("the macos is") { liveSpellCheck = true; contextualEnglish = true })
-        assertEquals("position is not okay", sentenceCtx("position is not okay") { liveSpellCheck = true; contextualEnglish = true })
+        assertEquals("the position is not okay", sentenceCtx("the position is not okay") { liveSpellCheck = true; contextualEnglish = true })
     }
 
     @Test fun testVietnameseAAndConfStayVietnamese() {
@@ -204,7 +274,7 @@ class ContextEnglishPortedTest {
     @Test fun testShortAbbreviationsDoNotOpenEnglishRun() {
         assertEquals("he dc is", sentenceCtx("he dc is") { liveSpellCheck = true; contextualEnglish = true })
         assertEquals("it is", sentenceCtx("it is") { liveSpellCheck = true; contextualEnglish = true })
-        assertEquals("position is", sentenceCtx("position is") { liveSpellCheck = true; contextualEnglish = true })
+        assertEquals("the position is", sentenceCtx("the position is") { liveSpellCheck = true; contextualEnglish = true })
     }
 }
 

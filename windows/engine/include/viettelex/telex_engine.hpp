@@ -75,7 +75,7 @@ public:
     bool hasSpellingError(bool autoRestore) const;
 
     void reset();
-    void resetContext() { previousWordEnglish_ = false; }
+    void resetContext() { clearEnglishContext(); }
 
     // ---- Re-open / re-edit -------------------------------------------------------
     void forgetLastCommit() { reopenRawCount_ = 0; reopenOutCount_ = 0; }
@@ -138,7 +138,11 @@ private:
     Tone lastEffTone_ = Tone::None;
     bool upperToneKey_ = false;
 
+    // English RUN open (function word, or 2nd English word in a row); a lone content
+    // word is only a candidate; gate bits = predecessorGates the previous word satisfies.
     bool previousWordEnglish_ = false;
+    bool englishCandidate_ = false;
+    uint8_t previousGateBits_ = 0;
 
     // re-open snapshot
     uint8_t reopenRaw_[kCapacity];
@@ -146,6 +150,8 @@ private:
     int reopenRawCount_ = 0;
     int reopenOutCount_ = 0;
     bool reopenPrevEnglish_ = false;
+    bool reopenCandidate_ = false;
+    uint8_t reopenGateBits_ = 0;
 
     // ---- internals (names follow the Swift source) --------------------------------
     void feedAscii(uint8_t ascii, Action& out);
@@ -155,10 +161,16 @@ private:
     bool composedHasDiacritic() const;
     bool composedIsRecognizedEnglish() const;
     bool isRecognizedEnglish() const;
-    enum class WordContext { English, Vietnamese, Neutral };
+    enum class WordContext { EnglishFunction, English, Vietnamese, Neutral };
     WordContext classifyWordContext(bool restored) const;
     bool rawIsNeutralLoanword() const;
     void updateContext(bool restored);
+    void foldEnglishContentWord();
+    void clearEnglishContext();
+    bool predecessorGateAllows() const;
+    uint8_t rawPredecessorBits() const;
+    bool rawIsFunctionWord() const;
+    bool rawIsContractionTail() const;
     bool rawIsEnglishContextWord(bool includingRestoreOnly = false) const;
     bool rawIsEnglishCollision() const;
     bool rawIsEnglishException() const;
@@ -208,7 +220,8 @@ bool isSpellingError(const char32_t* word, int length, bool teencode = true);
 } // namespace SyllableValidator
 
 /// EnglishContextLookup (TelexCore EnglishContextWords.swift): lowercase ASCII words that
-/// OPEN an English run (the, is, you, check…) — the same table `contextualEnglish` uses.
+/// are recognized English (the, is, you, people…) — the same table `contextualEnglish` uses.
+/// (Since 11/10/2026 the engine opens a run only on a function word or two English words.)
 namespace EnglishContextLookup {
 bool opensEnglishRun(const char* word, int length);
 } // namespace EnglishContextLookup

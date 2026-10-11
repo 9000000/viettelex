@@ -171,8 +171,10 @@ enum SwipeLangContext {
             // có dấu / đ ⇒ tiếng Việt; số, ký hiệu ⇒ không rõ
             return w.unicodeScalars.contains { $0.value > 127 } ? .vi : .neutral
         }
-        // cùng bảng với engine.contextualEnglish: từ mượn giữ nguyên mạch, từ chức năng
-        // tiếng Anh mở mạch
+        // cùng bảng với engine.contextualEnglish: từ mượn giữ nguyên mạch, từ tiếng Anh
+        // của bảng ngữ cảnh tính là .en. Đây là tiền nghiệm MỀM cho decoder (một từ Anh
+        // chỉ cân hai ngôn ngữ, bias 0.2) — khác engine (từ 11/10/2026 chỉ MỞ mạch khôi
+        // phục bằng từ chức năng hoặc hai từ Anh liền nhau), nên giữ nguyên ở đây.
         if EnglishContextLookup.isNeutralLoanword(w) { return .neutral }
         if EnglishContextLookup.opensEnglishRun(w) { return .en }
         let vnForm = SwipeLexicon.index(of: w) != nil

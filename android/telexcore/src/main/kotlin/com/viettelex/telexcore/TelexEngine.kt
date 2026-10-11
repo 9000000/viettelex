@@ -43,9 +43,16 @@ class TelexEngine {
     var vniMode = false
     /** Context-based English decision (experimental). */
     var contextualEnglish = false
-    /** Whether the PREVIOUS committed word was classified English. */
+    /**
+     * An English RUN is open (Swift `previousWordEnglish`): set by an English FUNCTION word
+     * or by the second English word in a row — never by one content word alone.
+     */
     var previousWordEnglish = false
         private set
+    /** Previous word was a lone English CONTENT word with no run open (Swift `englishCandidate`). */
+    private var englishCandidate = false
+    /** Predecessor-gate bits the previous committed word satisfies (Swift `previousGateBits`). */
+    private var previousGateBits = 0
     /** Force-restore English words that collide with valid syllables. Default ON. */
     var englishWordRestore = true
     /** Prefer a valid Vietnamese syllable over a standalone collision-table hit. */
@@ -107,6 +114,8 @@ class TelexEngine {
     private var reopenRawCount = 0
     private var reopenOutCount = 0
     private var reopenPrevEnglish = false
+    private var reopenCandidate = false
+    private var reopenGateBits = 0
 
     val isEmpty: Boolean get() = rawCount == 0
 
@@ -119,6 +128,7 @@ class TelexEngine {
         e.simpleTelex = simpleTelex; e.teencode = teencode; e.quickTelex = quickTelex
         e.bracketVowels = bracketVowels; e.vniMode = vniMode; e.contextualEnglish = contextualEnglish
         e.previousWordEnglish = previousWordEnglish; e.englishWordRestore = englishWordRestore
+        e.englishCandidate = englishCandidate; e.previousGateBits = previousGateBits
         e.collisionPrefersVietnamese = collisionPrefersVietnamese
         raw.copyInto(e.raw); e.rawCount = rawCount; e.overflowed = overflowed
         out.copyInto(e.out); e.outCount = outCount
@@ -137,6 +147,7 @@ class TelexEngine {
         reopenRaw.copyInto(e.reopenRaw); reopenOut.copyInto(e.reopenOut)
         e.reopenRawCount = reopenRawCount; e.reopenOutCount = reopenOutCount
         e.reopenPrevEnglish = reopenPrevEnglish
+        e.reopenCandidate = reopenCandidate; e.reopenGateBits = reopenGateBits
     }
 
     // MARK: - Public entry points
@@ -264,7 +275,7 @@ class TelexEngine {
         try {
             if (rawCount <= 0) { reopenRawCount = 0; reopenOutCount = 0; return TelexAction.None }
             if (overflowed) {
-                if (contextualEnglish) previousWordEnglish = false
+                if (contextualEnglish) clearEnglishContext()
                 reopenRawCount = 0; reopenOutCount = 0
                 return TelexAction.None
             }
@@ -294,6 +305,8 @@ class TelexEngine {
         reopenRawCount = rawCount
         reopenOutCount = outCount
         reopenPrevEnglish = previousWordEnglish
+        reopenCandidate = englishCandidate
+        reopenGateBits = previousGateBits
     }
 
     /** Discard the re-open snapshot. */
@@ -311,9 +324,13 @@ class TelexEngine {
         val n = reopenRawCount
         val expected = reopenOutCount
         val prevEnglish = reopenPrevEnglish
+        val prevCandidate = reopenCandidate
+        val prevGateBits = reopenGateBits
         // reset() clears the snapshot counts but not the buffers — replay from them.
         reset()
         previousWordEnglish = prevEnglish
+        englishCandidate = prevCandidate
+        previousGateBits = prevGateBits
         for (i in 0 until n) feed(reopenRaw[i].toChar())
         if (rawCount != n || outCount != expected) { reset(); return null }
         for (i in 0 until outCount) if (out[i] != reopenOut[i]) { reset(); return null }
@@ -344,9 +361,51 @@ class TelexEngine {
             (!composedIsValidSyllable() && !isTeencodeKeep())
         ) return true
         if (contextualEnglish && previousWordEnglish &&
-            (rawIsEnglishContextWord(true) || (collisionPrefersVietnamese && rawIsEnglishCollision()))
+            (rawIsEnglishContextWord(true) || (collisionPrefersVietnamese && rawIsEnglishCollision())) &&
+            predecessorGateAllows()
         ) return true
         return false
+    }
+
+    /** Swift `predecessorGateAllows`: a gated word ("been") needs its predecessor ("has"). */
+    private fun predecessorGateAllows(): Boolean {
+        val n = lowerAsciiInto(raw, rawCount, EnglishContextWords.maxLength)
+        if (n <= 0) return true
+        val i = gateIndex(n)
+        return i < 0 || (previousGateBits and (1 shl i)) != 0
+    }
+
+    /** Index of the gate rule whose word equals `wordBuf[0 until n]`, or -1. */
+    private fun gateIndex(n: Int): Int {
+        val gw = EnglishContextWords.gateWords
+        outer@ for (i in gw.indices) {
+            val w = gw[i]
+            if (w.length != n) continue
+            for (k in 0 until n) if (w[k].code != wordBuf[k]) continue@outer
+            return i
+        }
+        return -1
+    }
+
+    /** Gate bits satisfied by the raw word as a predecessor (Swift `predecessorBits(of:)`). */
+    private fun rawPredecessorBits(): Int {
+        val n = lowerAsciiInto(raw, rawCount, EnglishContextWords.maxLength)
+        if (n <= 0) return 0
+        var bits = 0
+        val gp = EnglishContextWords.gatePredecessors
+        for (i in gp.indices) if (gp[i].contains(wordBuf, n)) bits = bits or (1 shl i)
+        return bits
+    }
+
+    private fun rawIsFunctionWord(): Boolean {
+        val n = lowerAsciiInto(raw, rawCount, EnglishContextWords.maxLength)
+        return n > 0 && EnglishContextWords.functionWords.contains(wordBuf, n)
+    }
+
+    private fun rawIsContractionTail(): Boolean {
+        if (rawCount > 2) return false
+        val n = lowerAsciiInto(raw, rawCount, EnglishContextWords.maxLength)
+        return n > 0 && EnglishContextWords.contractionTails.contains(wordBuf, n)
     }
 
     private fun composedHasDiacritic(): Boolean {
@@ -383,15 +442,16 @@ class TelexEngine {
 
     private fun classifyWordContext(restored: Boolean): Int {
         if (!restored && compositionHasDiacritic()) return CTX_VIETNAMESE
-        if (isRecognizedEnglish()) return CTX_ENGLISH
+        if (isRecognizedEnglish()) return if (rawIsFunctionWord()) CTX_ENGLISH_FUNCTION else CTX_ENGLISH
         val wn = lowerAsciiInto(out, outCount, EnglishContextWords.maxLength)   // composedAsciiWord
         if (wn > 0) {
             val neutral = EnglishContextWords.neutralLoanwords.contains(wordBuf, wn)
             if (EnglishContextWords.words.contains(wordBuf, wn) || EnglishCollisions.words.contains(wordBuf, wn) || neutral) {
-                return if (neutral) CTX_NEUTRAL else CTX_ENGLISH
+                if (neutral) return CTX_NEUTRAL
+                return if (EnglishContextWords.functionWords.contains(wordBuf, wn)) CTX_ENGLISH_FUNCTION else CTX_ENGLISH
             }
         }
-        if (rawIsNeutralLoanword() || rawIsEnglishContextWord(true)) return CTX_NEUTRAL
+        if (rawIsNeutralLoanword() || rawIsEnglishContextWord(true) || rawIsContractionTail()) return CTX_NEUTRAL
         if (!restored && SyllableValidator.isValidSyllableScalars(out, outCount, teencode, valBuf)) return CTX_VIETNAMESE
         if (rawCount <= 2) return CTX_NEUTRAL
         return CTX_ENGLISH
@@ -405,10 +465,24 @@ class TelexEngine {
     private fun updateContext(restored: Boolean) {
         if (!contextualEnglish || rawCount <= 0) return
         when (classifyWordContext(restored)) {
-            CTX_ENGLISH -> previousWordEnglish = true
-            CTX_VIETNAMESE -> previousWordEnglish = false
+            CTX_ENGLISH_FUNCTION -> { previousWordEnglish = true; englishCandidate = false }
+            CTX_ENGLISH -> foldEnglishContentWord()
+            CTX_VIETNAMESE -> { clearEnglishContext(); return }
             else -> {}
         }
+        previousGateBits = rawPredecessorBits()
+    }
+
+    /** Content word: continue an open run; else the 2nd in a row opens it, the 1st is a candidate. */
+    private fun foldEnglishContentWord() {
+        if (previousWordEnglish) return
+        if (englishCandidate) { previousWordEnglish = true; englishCandidate = false } else englishCandidate = true
+    }
+
+    private fun clearEnglishContext() {
+        previousWordEnglish = false
+        englishCandidate = false
+        previousGateBits = 0
     }
 
     private fun rawIsEnglishContextWord(includingRestoreOnly: Boolean): Boolean {
@@ -419,16 +493,34 @@ class TelexEngine {
     }
 
     /** Clear the cross-word English context (focus / app switch). */
-    fun resetContext() { previousWordEnglish = false }
+    fun resetContext() { clearEnglishContext() }
 
     /** Caller vừa chèn NGUYÊN VĂN một từ ngoài engine (vuốt ra từ tiếng Anh): cập nhật ngữ cảnh chéo từ. */
-    fun noteExternalWord(english: Boolean) { if (contextualEnglish) previousWordEnglish = english }
+    fun noteExternalWord(english: Boolean) = noteExternalWord(null, english)
+
+    /** Biết chữ: từ chức năng mở mạch, từ nội dung chỉ là ứng viên; "has" mở cổng cho "been". */
+    fun noteExternalWord(word: String?, english: Boolean) {
+        if (!contextualEnglish) return
+        if (!english) { clearEnglishContext(); return }
+        val w = word?.lowercase()
+        if (w != null && EnglishContextWords.functionWords.contains(w)) {
+            previousWordEnglish = true; englishCandidate = false
+        } else {
+            foldEnglishContentWord()
+        }
+        var bits = 0
+        if (w != null) {
+            val gp = EnglishContextWords.gatePredecessors
+            for (i in gp.indices) if (gp[i].contains(w)) bits = bits or (1 shl i)
+        }
+        previousGateBits = bits
+    }
 
     /** Final text to commit at a word boundary, with auto-restore applied. Resets the word. */
     fun commitText(autoRestore: Boolean): String {
         try {
             if (overflowed) {
-                if (contextualEnglish) previousWordEnglish = false
+                if (contextualEnglish) clearEnglishContext()
                 reopenRawCount = 0; reopenOutCount = 0
                 return composed
             }
@@ -617,7 +709,7 @@ class TelexEngine {
 
     /** Drop the current word AND the re-open snapshot. */
     fun reset() {
-        if (rawCount > 0) previousWordEnglish = false
+        if (rawCount > 0) clearEnglishContext()
         resetWord()
         reopenRawCount = 0
         reopenOutCount = 0
@@ -1189,6 +1281,7 @@ class TelexEngine {
         private const val CTX_ENGLISH = 0
         private const val CTX_VIETNAMESE = 1
         private const val CTX_NEUTRAL = 2
+        private const val CTX_ENGLISH_FUNCTION = 3
 
         private val EMPTY_REPLACE = TelexAction.Replace(0, "")
 

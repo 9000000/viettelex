@@ -318,6 +318,15 @@ for _ in 0..<8000 {
     let cfgs = [iosDefault, "AC", "ACP", "ACL", "ACSt", "AFSLCtP"]
     run(cfgs[rng.int(cfgs.count)], parts.joined(separator: " ") + " ")
 }
+// Run state machine (11/10/2026): content word = candidate, function word / 2 English
+// words open the run, "been" predecessor gate, contraction tails neutral, reopen.
+for s in ["suggestion been treen ", "file leen ", "commit leen github ", "review beenf ",
+          "fix bug is ", "github repo is ", "deploy app is ", "deploy app script is ",
+          "push xong merge is ", "it has been ", "I have been there ", "he been ",
+          "it has email been ", "I ve been ", "you re is ", "ve is ", "position is ",
+          "the position is ", "it has bee ^n ", "fix bu ^g is ", "It Has Been "] {
+    for cfg in ["AC", "ACP", "AFLCP", iosDefault] { run(cfg, s) }
+}
 
 // Random fuzz: letters (weighted toward Telex keys), case, ⌫, boundaries, reopen,
 // reset, mid-word flag flips, digits/brackets, overflow-length words.

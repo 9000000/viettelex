@@ -141,9 +141,11 @@ final class ContextEnglishTests: XCTestCase {
     // defer-scope bug (`if newline { defer { resetContext() } }` fires immediately)
     // that wiped the "early = English" context BEFORE the restore decision, so Enter
     // committed "tô" while space restored "too". These two tests pin each order.
+    // 11/10/2026: seeded with "you" (function word) — a lone content word ("early")
+    // no longer opens an English run, see ContextEnglishLoanwordTests.
     func testNewlineResetAfterCommitKeepsEnglishRestore() {
         var e = TelexEngine(); e.liveSpellCheck = true; e.contextualEnglish = true
-        for ch in "early" { _ = e.feed(ch) }; _ = e.commitText(autoRestore: true)
+        for ch in "you" { _ = e.feed(ch) }; _ = e.commitText(autoRestore: true)
         for ch in "too" { _ = e.feed(ch) }
         XCTAssertEqual(e.commitText(autoRestore: true), "too")   // context intact → restored
         e.resetContext()                                          // Enter: reset AFTER commit
@@ -155,7 +157,7 @@ final class ContextEnglishTests: XCTestCase {
         // The buggy order, kept as documentation of WHY the invariant matters: reset
         // first and the same keystrokes ship the Vietnamese composition instead.
         var e = TelexEngine(); e.liveSpellCheck = true; e.contextualEnglish = true
-        for ch in "early" { _ = e.feed(ch) }; _ = e.commitText(autoRestore: true)
+        for ch in "you" { _ = e.feed(ch) }; _ = e.commitText(autoRestore: true)
         for ch in "too" { _ = e.feed(ch) }
         e.resetContext()                                          // ← the defer-scope bug
         XCTAssertEqual(e.commitText(autoRestore: true), "tô")
@@ -225,6 +227,13 @@ final class ContextEnglishTests: XCTestCase {
     func testInterjectionsRestoreInsideAnEnglishRun() {
         var e = TelexEngine()
         e.liveSpellCheck = true; e.simpleTelex = true; e.contextualEnglish = true
+        // "that's great wow": "that" (function word) opens the run — since 11/10/2026 a
+        // lone content word ("great") no longer does; the apostrophe is a boundary and
+        // "s" is a neutral 1-letter token.
+        for ch in "that" { _ = e.feed(ch) }
+        XCTAssertEqual(e.commitText(autoRestore: true), "that")
+        for ch in "s" { _ = e.feed(ch) }
+        XCTAssertEqual(e.commitText(autoRestore: true), "s")
         for ch in "great" { _ = e.feed(ch) }
         XCTAssertEqual(e.commitText(autoRestore: true), "great")
         for ch in "wow" { _ = e.feed(ch) }
@@ -267,10 +276,17 @@ final class ContextEnglishTests: XCTestCase {
 // Vietnamese. Now the same validator that blocked composition decides the context:
 // structurally-impossible Vietnamese opens an English run.
 final class ContextEnglishFieldReportTests: XCTestCase {
+    // CHANGED 11/10/2026 (field report "suggestion been treen", maintainer-approved):
+    // a structural English word is a CONTENT word — on its own it no longer opens a
+    // run (Vietnamese sentences carry such loanwords constantly), so "position is"
+    // keeps "í" (type "iss" for "is"). It still counts as English: a function word
+    // before it, or a second English word after it, opens the run.
     func testPositionSeedsEnglishContext() {
-        XCTAssertEqual(sentence("position is not okay", context: true), "position is not okay")
-        XCTAssertEqual(sentence("github is", context: true), "github is")
-        XCTAssertEqual(sentence("Position is", context: true), "Position is")   // case-blind
+        XCTAssertEqual(sentence("position is", context: true), "position í")
+        XCTAssertEqual(sentence("the position is not okay", context: true), "the position is not okay")
+        XCTAssertEqual(sentence("github repo is", context: true), "github repo is")
+        XCTAssertEqual(sentence("The Position is", context: true), "The Position is")   // case-blind
+        XCTAssertEqual(sentence("my github is", context: true), "my github is")
     }
 
     /// The other half of the tradeoff must not move: toneless-Vietnamese words that
@@ -287,8 +303,11 @@ final class ContextEnglishFieldReportTests: XCTestCase {
     /// is "is a diacritic on screen?".
     func testEscapedEnglishWordSeedsEnglishContext() {
         XCTAssertEqual(sentence("thiss is", context: true), "this is")
-        XCTAssertEqual(sentence("gooogle is", context: true), "google is")
-        XCTAssertEqual(sentence("tessted is", context: true), "tested is")
+        // Escaped CONTENT words count as English toward the two-word rule (a lone one
+        // no longer opens the run — 11/10/2026).
+        XCTAssertEqual(sentence("gooogle search is", context: true), "google search is")
+        XCTAssertEqual(sentence("we tessted is", context: true), "we tested is")
+        XCTAssertEqual(sentence("gooogle is", context: true), "google í")
         // Escaped LOANWORD stays NEUTRAL: it must not open a run, so a following
         // Vietnamese word still composes. "wweb" is the real escape here — a lone `w`
         // composes ư, so the doubled w is how "web" gets typed in full Telex.
@@ -313,8 +332,8 @@ final class ContextEnglishFieldReportTests: XCTestCase {
         XCTAssertEqual(sentence("iphone is", context: true), "iphone í")
         // …but inside an English run they keep it open ("the macos is").
         XCTAssertEqual(sentence("the macos is", context: true), "the macos is")
-        // The 08-14 case must not regress.
-        XCTAssertEqual(sentence("position is not okay", context: true), "position is not okay")
+        // The 08-14 case, with the run opened by a function word (11/10/2026).
+        XCTAssertEqual(sentence("the position is not okay", context: true), "the position is not okay")
     }
 
     /// Issue #91 (22/09/2026, Lark): "done rồi as" → "done rồi as". The tap dropped
@@ -323,6 +342,14 @@ final class ContextEnglishFieldReportTests: XCTestCase {
     /// A mid-word drop must clear the context: the previous word is now unknown.
     func testMidWordDropClearsEnglishContext() {
         var e = TelexEngine(); e.liveSpellCheck = true; e.contextualEnglish = true
+        // 11/10/2026: "done" alone no longer opens a run (content word) — "we done"
+        // does (function word first).
+        for ch in "done" { _ = e.feed(ch) }
+        _ = e.commitBoundary(autoRestore: true)
+        XCTAssertFalse(e.previousWordEnglish)
+        e.resetContext()
+        for ch in "we" { _ = e.feed(ch) }
+        _ = e.commitBoundary(autoRestore: true)
         for ch in "done" { _ = e.feed(ch) }
         _ = e.commitBoundary(autoRestore: true)
         XCTAssertTrue(e.previousWordEnglish)
@@ -367,6 +394,6 @@ final class ContextEnglishFieldReportTests: XCTestCase {
         // Neutral PRESERVES a run already open, and real short English still opens one.
         XCTAssertEqual(sentence("he dc is", context: true), "he dc is")
         XCTAssertEqual(sentence("it is", context: true), "it is")
-        XCTAssertEqual(sentence("position is", context: true), "position is")
+        XCTAssertEqual(sentence("the position is", context: true), "the position is")
     }
 }

@@ -503,7 +503,7 @@ class KeyboardSession(
     /** Chốt từ tiếng Anh nguyên văn đang mở (học + ngữ cảnh), trước khi phím kế chèn gì. */
     private fun settleLiteral(word: String) {
         commitAndLearn(word)
-        bridge.noteExternalWord(true)
+        bridge.noteExternalWord(true, word)
         recentEnglish.addLast(word.lowercase())
         while (recentEnglish.size > 4) recentEnglish.removeFirst()
     }

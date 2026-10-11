@@ -46,6 +46,12 @@ H = {
         "sentence": ("sentenceCtx", [LIVE, "contextualEnglish = {context}"]),
         "appDefaultSentence": ("sentenceCtx", [FREE, LIVE, "contextualEnglish = true", "collisionPrefersVietnamese = true"]),
     },
+    # typed(): space AND apostrophe are boundaries — only the apostrophe-free rows port
+    # (sentenceCtx splits on spaces only; see the skip below).
+    "ContextEnglishLoanwordTests.swift": {
+        "typed": ("sentenceCtx", [LIVE, "contextualEnglish = true", "freeMarking = {app|true}",
+                                  "collisionPrefersVietnamese = {app|true}"]),
+    },
     "TeencodeTests.swift": {
         "commit": ("commit", [FREE, LIVE]), "screen": ("composed", [FREE, LIVE]),
         "commitSimple": ("commit", [FREE, LIVE, "simpleTelex = true"]),
@@ -124,6 +130,8 @@ for fname in sorted(os.listdir(tests)):
         for m in eq_re.finditer(line):
             neg, helper, keys, extra, member, expected = m.groups()
             if "\\" in keys or "\\" in expected: continue
+            if kind_of := helpers.get(helper + (member or "")):
+                if kind_of[0] == "sentenceCtx" and "'" in keys: continue
             name = helper + (member or "")
             if name not in helpers: continue
             kind, cfg = helpers[name]

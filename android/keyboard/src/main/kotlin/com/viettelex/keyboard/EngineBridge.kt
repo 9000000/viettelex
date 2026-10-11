@@ -152,8 +152,11 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
         engine.forgetLastCommit()
     }
 
-    /** Từ nguyên văn vừa được chốt: ngữ cảnh tiếng Anh của engine ("check" rồi gõ "is" giữ "is"). */
-    fun noteExternalWord(english: Boolean) = engine.noteExternalWord(english)
+    /**
+     * Từ nguyên văn vừa được chốt: ngữ cảnh tiếng Anh của engine. Biết chữ thì từ chức năng
+     * ("it" rồi gõ "is" giữ "is") mở mạch; từ nội dung ("check") chỉ mở khi là từ Anh thứ hai.
+     */
+    fun noteExternalWord(english: Boolean, word: String? = null) = engine.noteExternalWord(word, english)
 
     private fun configure(e: TelexEngine, contextual: Boolean) {
         e.freeMarking = settings.freeMarking

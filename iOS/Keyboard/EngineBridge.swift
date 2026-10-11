@@ -543,7 +543,7 @@ final class EngineBridge {
         guard !proxy.isSecure, !passthrough else { if !text.isEmpty { proxy.insertText(text) }; return "" }
         if let literal, engine.isEmpty {
             // từ tiếng Anh nguyên văn: chốt như đã gõ, ngữ cảnh Anh cho từ gõ tiếp
-            engine.noteExternalWord(english: true)
+            engine.noteExternalWord(literal, english: true)   // chức năng mở mạch, nội dung thì chờ từ Anh thứ hai
             if !text.isEmpty { proxy.insertText(text) }
             lastWasOwnBoundary = text.last.map { !$0.isLetter } ?? false
             return literal

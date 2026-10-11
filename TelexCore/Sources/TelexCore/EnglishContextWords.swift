@@ -55,6 +55,90 @@ enum EnglishContextWords {
     /// Longest word in the set — lets the caller skip words that can't possibly match.
     static let maxLength = 12
 
+    /// RUN OPENERS — English FUNCTION words (field report 11/10/2026: "suggestion been
+    /// treen" came out "suggestion been trên" — the lone English noun "suggestion"
+    /// opened a run and "been" was restored, so "bên" was untypeable there).
+    /// Vietnamese sentences borrow English CONTENT words all the time (suggestion,
+    /// commit, deploy, review, bug, meeting, deadline, feedback…), so ONE content word
+    /// must not open an English run. A run opens only when:
+    ///   - the previous word is one of THESE function words (pronouns, be/auxiliaries/
+    ///     modals, articles/determiners, prepositions, conjunctions, `not`, `there`), or
+    ///   - two English words in a row were committed (content + content: "fix bug").
+    /// Once open, the run carries through content words ("I fixed the bug in this
+    /// file") and a Vietnamese word ends it; neutral loanwords preserve it.
+    /// Every entry must ALSO be recognized English (in `words` or EnglishCollisions) —
+    /// this set only says which recognized words may open a run on their own.
+    /// Deliberately left out:
+    ///   - `a` (restore-only, issue #93), `up out off` (Vietnamese verbs: "up ảnh",
+    ///     "out nhóm", "off máy"), `done doing` (participles: "done rồi"), and every
+    ///     adverb/adjective/noun of `words` (here now just very good time people…).
+    static let functionWords: Set<String> = parse("""
+        i you he she it we they me him her us them
+        my your his its our their mine yours hers ours theirs
+        this that these those who whom whose which what
+        myself yourself himself herself itself ourselves themselves
+        is am are was were be been being
+        do does did have has had having
+        will would shall should can could may might must
+        an the some any every each all both few many much
+        several such other another
+        of to in on at by for with from into onto over under about
+        after before between through during without within
+        along across behind beyond upon
+        and or but nor so yet if then than because while when where
+        why how though although unless until whether since as
+        not there
+        """)
+
+    /// PREDECESSOR GATES: a word listed here is restored to English inside a run ONLY
+    /// when the word IMMEDIATELY before it is one of its predecessors. Otherwise the
+    /// Vietnamese composition stands. "been" ⇔ "bên" is the motivating case: English
+    /// "been" only ever follows a form of "have" ("has been", "I've been"), while
+    /// "bên" is one of the most common Vietnamese words ("bên trên", "bên cạnh").
+    /// Format: one rule per line, `word: predecessor predecessor …`. At most 8 rules
+    /// (one bit each in the engine's predecessor mask).
+    /// `ve` = the tail of "I've"/"we've" — the apostrophe is a word boundary, so the
+    /// engine commits "ve" as a word of its own (see `contractionTails`).
+    static let predecessorGates: [(word: String, predecessors: Set<String>)] = parseGates("""
+        been: have has had having ve
+        """)
+
+    /// Contraction tails the apostrophe boundary leaves as words of their own ("I've" →
+    /// "I" ' "ve", "you're" → "re", "we'll" → "ll"). "ve"/"re" are ALSO toneless Vietnamese
+    /// syllables, which used to END the English run right before the word that needs it
+    /// ("I've been"). Neutral: preserve the run, never open one.
+    static let contractionTails: Set<String> = parse("""
+        ve re ll
+        """)
+
+    private static func parseGates(_ list: String) -> [(word: String, predecessors: Set<String>)] {
+        var rules: [(word: String, predecessors: Set<String>)] = []
+        for line in list.split(separator: "\n") {
+            let parts = line.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2, let word = parts[0].split(separator: " ").first else { continue }
+            let preds = Set(parts[1].split(separator: " ").map(String.init))
+            guard !preds.isEmpty else { continue }
+            rules.append((String(word), preds))
+        }
+        precondition(rules.count <= 8, "predecessorGates: at most 8 rules (UInt8 mask)")
+        return rules
+    }
+
+    /// Index of the gate rule for `w`, or nil when `w` is not gated.
+    static func gateIndex(of w: String) -> Int? {
+        for (i, r) in predecessorGates.enumerated() where r.word == w { return i }
+        return nil
+    }
+
+    /// Bit i set ⇔ `w` satisfies gate rule i as the immediately preceding word.
+    static func predecessorBits(of w: String) -> UInt8 {
+        var bits: UInt8 = 0
+        for (i, r) in predecessorGates.enumerated() where r.predecessors.contains(w) {
+            bits |= UInt8(1) << UInt8(i)
+        }
+        return bits
+    }
+
     private static func parse(_ list: String) -> Set<String> {
         var set = Set<String>(minimumCapacity: 512)
         for token in list.split(whereSeparator: { $0 == " " || $0 == "\n" }) {
@@ -178,8 +262,15 @@ enum EnglishContextWords {
 /// cùng bảng với `contextualEnglish`, để P(ngôn ngữ | từ trước) của decoder vuốt khớp
 /// quyết định của engine. Chữ thường ASCII.
 public enum EnglishContextLookup {
-    /// Từ tiếng Anh MỞ mạch tiếng Anh (the, is, you, check…).
+    /// Từ tiếng Anh thông dụng của bảng ngữ cảnh (the, is, you, people, good…) — nhận
+    /// diện NGÔN NGỮ. Từ 11/10/2026 engine chỉ MỞ mạch bằng từ chức năng
+    /// (`isFunctionWord`) hoặc hai từ Anh liền nhau; tên giữ nguyên cho caller cũ.
     public static func opensEnglishRun(_ w: String) -> Bool { EnglishContextWords.words.contains(w) }
+    /// Từ chức năng tiếng Anh (đại từ, trợ động từ, mạo từ, giới từ, liên từ): một mình
+    /// đủ mở mạch tiếng Anh trong engine.
+    public static func isFunctionWord(_ w: String) -> Bool {
+        EnglishContextWords.functionWords.contains(w)
+    }
     /// Từ mượn trung tính (email, app, file…): giữ nguyên mạch hiện tại.
     public static func isNeutralLoanword(_ w: String) -> Bool {
         EnglishContextWords.neutralLoanwords.contains(w)

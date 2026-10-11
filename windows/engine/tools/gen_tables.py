@@ -123,8 +123,20 @@ neutral = [w for b in blocks(section(ctx, "static let neutralLoanwords", "static
 ctxwords = [w for b in blocks(section(ctx, "private static let wordList", "private static let restoreOnlyList")) for w in words(b)]
 restore = [w for b in blocks(section(ctx, "private static let restoreOnlyList", None)) for w in words(b)]
 maxlen = int(re.search(r"static let maxLength = (\d+)", ctx).group(1))
+function = [w for b in blocks(section(ctx, "static let functionWords", "static let predecessorGates")) for w in words(b)]
+tails = [w for b in blocks(section(ctx, "static let contractionTails", "private static func parseGates")) for w in words(b)]
+gates = []
+for b in blocks(section(ctx, "static let predecessorGates", "static let contractionTails")):
+    for line in b.split("\n"):
+        if ":" not in line: continue
+        gw, preds = line.split(":", 1)
+        gates.append((gw.strip(), words(preds)))
+assert gates and len(gates) <= 8
+for gw, ps in gates:
+    assert re.fullmatch(r"[a-z]+", gw) and ps and all(re.fullmatch(r"[a-z]+", p) for p in ps), (gw, ps)
 
-for name, ws in (("collisions", collisions), ("neutral", neutral), ("ctx", ctxwords), ("restore", restore)):
+for name, ws in (("collisions", collisions), ("neutral", neutral), ("ctx", ctxwords), ("restore", restore),
+                 ("function", function), ("tails", tails)):
     assert ws, name
     for w in ws:
         assert re.fullmatch(r"[a-z]+", w), (name, w)
@@ -168,7 +180,19 @@ with open(out, "w", encoding="utf-8") as f:
     emit_words(f, "kEnglishContextWords", ctxwords)
     emit_words(f, "kEnglishRestoreOnly", restore)
     emit_words(f, "kNeutralLoanwords", neutral)
+    emit_words(f, "kFunctionWords", function)
+    emit_words(f, "kContractionTails", tails)
+    f.write("// Predecessor gates (EnglishContextWords.predecessorGates): kGateWords[i] restores inside\n")
+    f.write("// an English run only right after one of kGatePredecessors<i>. Rule order = bit order.\n")
+    for i, (_, ps) in enumerate(gates):
+        emit_words(f, f"kGatePredecessors{i}", ps)
+    f.write(f"constexpr int kGateCount = {len(gates)};\n")
+    f.write("constexpr std::string_view kGateWords[kGateCount] = {" + ", ".join(f'"{gw}"' for gw, _ in gates) + "};\n")
+    f.write("struct GatePredecessors { const std::string_view* words; int count; };\n")
+    f.write("constexpr GatePredecessors kGatePredecessors[kGateCount] = {"
+            + ", ".join(f"{{kGatePredecessors{i}, {len(set(ps))}}}" for i, (_, ps) in enumerate(gates)) + "};\n\n")
     f.write("}} // namespace vtx::gen\n")
 
 print(f"onsets={len(onsets_u)} rimes={len(rimes_u)} collisions={len(set(collisions))} "
-      f"ctx={len(set(ctxwords))} restore={len(set(restore))} neutral={len(set(neutral))} maxlen={maxlen}")
+      f"ctx={len(set(ctxwords))} restore={len(set(restore))} neutral={len(set(neutral))} maxlen={maxlen} "
+      f"function={len(set(function))} tails={len(set(tails))} gates={gates}")
