@@ -274,6 +274,7 @@ final class KeyboardViewController: UIInputViewController {
         // Không Full Access thì iOS chặn GHI App Group → cờ giữ nguyên/vắng,
         // banner vẫn hiện — đúng ý.
         reportStatusToApp()
+        keyboard.onShiftChange = { [weak self] in self?.shiftChanged() }
         keyboard.onSuggestion = { [weak self] item in
             guard let self else { return }
             if item == KeyboardView.toolUndoToken { self.undoTextTool(); return }
@@ -1318,15 +1319,47 @@ final class KeyboardViewController: UIInputViewController {
     private static let emailSuffixes = ["gmail.com", "yahoo.com", "outlook.com"]
     private static let domainTLDs = ["com", "vn", "net"]
 
-    /// đầu câu (auto-shift): gợi ý viết hoa chữ đầu như stock (Em, Anh, Tôi)
-    private func caseForContext(_ w: String) -> String {
-        if lowercaseSuggestions { return w.lowercased() }
-        return autoShiftOn ? w.prefix(1).uppercased() + w.dropFirst() : w
+    /// Shift cho hoa/thường gợi ý. Ô địa chỉ / tìm kiếm: bỏ Shift một-lần (gợi ý chữ
+    /// thường) — Caps Lock vẫn theo.
+    private var suggestionShift: SuggestionCase.Shift {
+        let s = keyboard?.suggestionShift ?? .off
+        return lowercaseSuggestions && s == .once ? .off : s
+    }
+    /// Shift lúc vẽ bar lần cuối — đổi Shift mà bar đã đúng thì khỏi tính lại.
+    private var barShift: SuggestionCase.Shift = .off
+    private var shiftRefreshQueued = false
+
+    /// Hoa/thường theo Shift + chữ đang gõ (SuggestionCase, như Gboard): Shift một-lần /
+    /// đầu câu ⇒ "Em, Anh, Tôi"; Caps Lock ⇒ "EM"; đang gõ "Bê" ⇒ "Bên".
+    private func caseForContext(_ w: String, typed: String = "") -> String {
+        let base = lowercaseSuggestions ? w.lowercased() : w
+        return SuggestionCase.display(base, shift: suggestionShift, typed: typed)
     }
 
     /// DisplayCase (tên riêng) — trừ ô địa chỉ / tìm kiếm: chữ thường (song sinh Android).
     private func displayCase(_ w: String, after prev: String? = nil) -> String {
         lowercaseSuggestions ? w.lowercased() : DisplayCase.apply(w, after: prev)
+    }
+
+    /// Shift/Caps đổi (KeyboardView.onShiftChange): vẽ lại bar NGAY như Gboard — gộp
+    /// về một lượt sau runloop; bỏ qua nếu bar đã vẽ với Shift này (phím chữ vừa nhả
+    /// Shift thì lượt gợi ý của chính phím đó đã tính) hoặc đang gõ dở mà không dính
+    /// Caps Lock (hoa/thường lúc đó theo chữ đã gõ).
+    private func shiftChanged() {
+        guard !shiftRefreshQueued else { return }
+        shiftRefreshQueued = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.shiftRefreshQueued = false
+            guard !self.applyingEdit, self.suggestionsActive else { return }
+            let s = self.suggestionShift
+            guard s != self.barShift else { return }
+            if !self.bridge.composedWord.isEmpty, s != .capsLock, self.barShift != .capsLock {
+                self.barShift = s
+                return
+            }
+            self.updateSuggestions()
+        }
     }
 
     /// Đệm danh sách gợi ý cho ĐỦ `need` phần tử bằng từ hay dùng nhất (loại
@@ -1336,7 +1369,7 @@ final class KeyboardViewController: UIInputViewController {
         guard base.count < need else { return Array(base.prefix(need)) }
         let top = bridge.englishMode ? SwipeEnglish.top : langModel.topWords(limit: need + 12)
         let candidates = SensitiveWords.filter(top, enabled: filterSensitive)
-            .map { caseForContext(DisplayCase.apply($0)) }
+            .map { caseForContext(DisplayCase.apply($0), typed: typed) }
         return SuggestionFill.pad(base, with: candidates, need: need, excluding: typed)
     }
 
@@ -1344,6 +1377,7 @@ final class KeyboardViewController: UIInputViewController {
         // Bar tắt HOẶC đang thu gọn → khỏi tính toán gì hết (VNSuggest,
         // re-rank, emoji, nextWords) — tiết kiệm CPU/RAM theo đúng nghĩa.
         suggestReq += 1                  // lượt mới → kết quả nền cũ (nếu có) bỏ
+        barShift = suggestionShift
         guard suggestionsActive, keyboard?.isBarCollapsed != true else { return }
         let composed = bridge.composedWord
         var set = KeyboardView.SuggestionSet()
@@ -1554,14 +1588,15 @@ final class KeyboardViewController: UIInputViewController {
                 SuggestRank.rankInline(pool, pmi: pmi, typedLen: composed.count,
                                        count: { lm.count(of: $0) }, ctx: ctxCache),
                 enabled: filterSensitive)
-            set.word = ranked.first.map { displayCase($0, after: lastWord) }
-            set.word2 = ranked.dropFirst().first.map { displayCase($0, after: lastWord) }
+            set.word = ranked.first.map { caseForContext(displayCase($0, after: lastWord), typed: composed) }
+            set.word2 = ranked.dropFirst().first.map { caseForContext(displayCase($0, after: lastWord), typed: composed) }
         } else if let fix {
             // Thử nghiệm: không từ nào khớp → nghi chạm trượt phím kề; đưa bản sửa
             // lên slot chính (tap để thay, không tự thay).
-            set.word = fix
+            set.word = caseForContext(fix, typed: composed)
         }
         // Trượt vào phím thanh mà vẫn ra từ ("casn" → cán, ý là cân): bản sửa vào slot 3.
+        let slip = slip.map { caseForContext($0, typed: composed) }
         if let slip, slip != set.word {
             if set.word == nil { set.word = slip } else { set.word2 = slip }
         }
@@ -1740,7 +1775,9 @@ final class KeyboardViewController: UIInputViewController {
         for _ in 0..<composed.count { textDocumentProxy.deleteBackward() }
         textDocumentProxy.insertText(isWord ? item + " " : item)
         bridge.reset()
+        // Chèn đúng dạng đang hiện ("Bên" khi Shift); học dạng thường (record lowercased).
         if isWord { commitAndLearn(item, accepted: true) } else { lastWord = nil; lastWord2 = nil }
+        keyboard.releaseOneShotShift()     // như gõ một chữ: Shift một-lần nhả, Caps giữ
         KeyboardView.clickModifier()
         updateAutoShift()
         updateSuggestions()

@@ -253,6 +253,64 @@ final class DisplayCaseTests: XCTestCase {
     }
 }
 
+/// Feedback 10/2026: bật Shift mà gợi ý không viết hoa như Gboard. SuggestionCase thuần
+/// (song sinh Android SuggestionCaseTests).
+final class SuggestionCaseTests: XCTestCase {
+    private func d(_ w: String, _ s: SuggestionCase.Shift, _ typed: String = "") -> String {
+        SuggestionCase.display(w, shift: s, typed: typed)
+    }
+
+    /// Chưa gõ (gợi ý từ kế tiếp): Shift tắt / một-lần / Caps Lock.
+    func testShiftStatesWithEmptyComposing() {
+        XCTAssertEqual(d("bên", .off), "bên")
+        XCTAssertEqual(d("bên", .once), "Bên")
+        XCTAssertEqual(d("bên", .capsLock), "BÊN")
+        // chữ Việt: đ/ư/ơ/ă có dạng hoa dựng sẵn
+        XCTAssertEqual(d("đi", .once), "Đi")
+        XCTAssertEqual(d("đường", .capsLock), "ĐƯỜNG")
+        XCTAssertEqual(d("ước", .once), "Ước")
+        XCTAssertEqual(d("ăn", .once), "Ăn")
+        // NFD (dấu tổ hợp) vẫn hoa đúng cụm đầu
+        XCTAssertEqual(d("e\u{0300}m", .once), "E\u{0300}m")
+    }
+
+    /// Đang gõ dở: hoa/thường theo chữ đã gõ, Shift (một-lần) không còn quyết định.
+    func testTypedPrefixCasingWins() {
+        XCTAssertEqual(d("bên", .off, "Bê"), "Bên")
+        XCTAssertEqual(d("bên", .off, "B"), "Bên")
+        XCTAssertEqual(d("bên", .off, "BÊ"), "BÊN")
+        XCTAssertEqual(d("bên", .off, "bê"), "bên")
+        XCTAssertEqual(d("bên", .once, "bê"), "bên")       // shift bật giữa từ: cho phím kế
+        XCTAssertEqual(d("bên", .capsLock, "B"), "BÊN")    // Caps: 1 chữ cũng HOA HẾT
+        XCTAssertEqual(d("đường", .off, "Đư"), "Đường")
+        XCTAssertEqual(d("đường", .off, "ĐƯ"), "ĐƯỜNG")
+        XCTAssertEqual(d("bên", .off, "bÊ"), "bên")        // chữ đầu thường ⇒ giữ
+    }
+
+    /// Không phá tên riêng / viết tắt / emoji / số / chip URL-email.
+    func testLeavesSpecialCandidatesAlone() {
+        XCTAssertEqual(d("iPhone", .once), "iPhone")
+        XCTAssertEqual(d("SenPrints", .once), "SenPrints")
+        XCTAssertEqual(d("FPT", .once), "FPT")
+        XCTAssertEqual(d("Nguyễn", .off), "Nguyễn")
+        XCTAssertEqual(d("iPhone", .capsLock), "IPHONE")
+        XCTAssertEqual(d("😀", .once), "😀")
+        XCTAssertEqual(d("😀", .capsLock), "😀")
+        XCTAssertEqual(d("100.000", .capsLock), "100.000")
+        XCTAssertEqual(d("@gmail.com", .capsLock), "@gmail.com")
+        XCTAssertEqual(d("", .once), "")
+    }
+
+    func testModeTable() {
+        XCTAssertEqual(SuggestionCase.mode(shift: .off, typed: ""), .asIs)
+        XCTAssertEqual(SuggestionCase.mode(shift: .once, typed: ""), .capitalized)
+        XCTAssertEqual(SuggestionCase.mode(shift: .capsLock, typed: ""), .upper)
+        XCTAssertEqual(SuggestionCase.mode(shift: .off, typed: "A"), .capitalized)
+        XCTAssertEqual(SuggestionCase.mode(shift: .off, typed: "AB"), .upper)
+        XCTAssertEqual(SuggestionCase.mode(shift: .off, typed: "Ab"), .capitalized)
+    }
+}
+
 final class SensitiveWordsTests: XCTestCase {
     func testFilterGate() {
         let words = ["vcl", "vui", "đcm", "cảm"]

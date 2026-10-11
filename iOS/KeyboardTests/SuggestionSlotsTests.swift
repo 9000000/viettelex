@@ -150,4 +150,102 @@ final class SuggestionSlotsTests: XCTestCase {
         XCTAssertTrue(rig.vc.debugKeyboard.debugSlotPayloads().contains("Cân"),
                       "\(rig.vc.debugKeyboard.debugSlotPayloads())")
     }
+
+    // MARK: Shift ⇒ gợi ý viết hoa như Gboard (feedback 10/2026)
+
+    /// Ô gợi ý là TỪ (bắt đầu bằng chữ cái) — bỏ token điều khiển/emoji.
+    @MainActor private func wordSlots(_ kb: KeyboardView) -> [String] {
+        kb.debugSlotPayloads().compactMap { $0 }.filter { $0.first?.isLetter == true }
+    }
+    private func capitalized(_ w: String) -> Bool { w.first?.isUppercase == true }
+    private func allCaps(_ w: String) -> Bool { w == w.uppercased() && w != w.lowercased() }
+
+    @MainActor private func shiftRig(autocap: UITextAutocapitalizationType = .sentences) -> KeyboardBenchTests.Rig {
+        let rig = KeyboardBenchTests.Rig()
+        rig.proxy.autocapitalizationType = autocap
+        return rig
+    }
+
+    /// Bấm Shift giữa câu (chưa gõ từ mới): bar đổi NGAY sang Hoa đầu; bấm đúp = Caps
+    /// Lock ⇒ HOA HẾT; tắt ⇒ về thường. Không cần gõ phím nào.
+    @MainActor func testShiftToggleRefreshesBarImmediately() throws {
+        let saved = UserDefaultsProvider.shared
+        UserDefaultsProvider.shared = KeyboardBenchTests.makeDefaults("B")
+        defer { UserDefaultsProvider.shared = saved }
+        let rig = shiftRig()
+        defer { rig.close() }
+        let kb = rig.vc.debugKeyboard
+        for (i, c) in "toi di ".enumerated() { _ = rig.key(c, index: i + 1, drain: 0.04) }
+        KeyboardBenchTests.spin(0.1)
+        XCTAssertFalse(kb.debugShiftOn)
+        let before = wordSlots(kb)
+        XCTAssertFalse(before.isEmpty)
+        XCTAssertTrue(before.allSatisfy { !capitalized($0) }, "\(before)")
+        let shiftKey = try XCTUnwrap(kb.debugControl("Shift"))
+        shiftKey.sendActions(for: .touchDown)
+        KeyboardBenchTests.spin(0.05)
+        let once = wordSlots(kb)
+        XCTAssertEqual(once.map { $0.lowercased() }, before.map { $0.lowercased() })
+        XCTAssertTrue(once.allSatisfy(capitalized), "\(once)")
+        XCTAssertFalse(once.allSatisfy(allCaps), "\(once)")
+        shiftKey.sendActions(for: .touchDown)          // < 0.3 s ⇒ Caps Lock
+        KeyboardBenchTests.spin(0.05)
+        let caps = wordSlots(kb)
+        XCTAssertTrue(caps.allSatisfy(allCaps), "\(caps)")
+        KeyboardBenchTests.spin(0.35)
+        shiftKey.sendActions(for: .touchDown)          // tắt Caps
+        KeyboardBenchTests.spin(0.05)
+        XCTAssertEqual(wordSlots(kb), before)
+    }
+
+    /// Chạm gợi ý khi Shift một-lần: chèn đúng dạng đang hiện ("Bên") rồi nhả Shift như
+    /// gõ một chữ. Ô không tự viết hoa (autocap .none) để auto-shift không che kết quả.
+    @MainActor func testCommitInsertsShiftedFormAndReleasesShift() throws {
+        let saved = UserDefaultsProvider.shared
+        UserDefaultsProvider.shared = KeyboardBenchTests.makeDefaults("B")
+        defer { UserDefaultsProvider.shared = saved }
+        let rig = shiftRig(autocap: .none)
+        defer { rig.close() }
+        let kb = rig.vc.debugKeyboard
+        for (i, c) in "toi di ".enumerated() { _ = rig.key(c, index: i + 1, drain: 0.04) }
+        KeyboardBenchTests.spin(0.1)
+        if kb.debugShiftOn { kb.debugControl("Shift")?.sendActions(for: .touchDown); KeyboardBenchTests.spin(0.35) }
+        try XCTUnwrap(kb.debugControl("Shift")).sendActions(for: .touchDown)
+        KeyboardBenchTests.spin(0.05)
+        XCTAssertTrue(kb.debugShiftOn)
+        let payloads = kb.debugSlotPayloads()
+        let i = try XCTUnwrap(payloads.firstIndex { $0?.first?.isLetter == true })
+        let shown = try XCTUnwrap(payloads[i])
+        XCTAssertTrue(capitalized(shown), shown)
+        let slot = kb.debugSlotControl(i)
+        slot.sendActions(for: .touchDown); slot.sendActions(for: .touchUpInside)
+        KeyboardBenchTests.spin(0.05)
+        XCTAssertTrue(rig.proxy.text.hasSuffix(" " + shown + " "), rig.proxy.text)
+        XCTAssertFalse(kb.debugShiftOn, "Shift một-lần phải nhả sau khi chọn gợi ý")
+        // bar sau đó về thường (Shift đã nhả)
+        XCTAssertTrue(wordSlots(kb).allSatisfy { !capitalized($0) }, "\(wordSlots(kb))")
+    }
+
+    /// Đầu câu (auto-shift) = Shift tay: gợi ý mở đầu Hoa đầu; gõ "be" (ra "Be") ⇒ ứng viên
+    /// đang gõ cũng Hoa đầu ("Bên"), trước đây ra "bên" và chạm thì mất chữ hoa.
+    @MainActor func testSentenceStartAndTypedCapitalCarryToCandidates() throws {
+        let saved = UserDefaultsProvider.shared
+        UserDefaultsProvider.shared = KeyboardBenchTests.makeDefaults("B")
+        defer { UserDefaultsProvider.shared = saved }
+        let rig = shiftRig()
+        defer { rig.close() }
+        let kb = rig.vc.debugKeyboard
+        KeyboardBenchTests.spin(0.1)
+        XCTAssertTrue(kb.debugShiftOn)
+        let open = wordSlots(kb)
+        XCTAssertFalse(open.isEmpty)
+        XCTAssertTrue(open.allSatisfy(capitalized), "\(open)")
+        for (i, c) in "be".enumerated() { _ = rig.key(c, index: i + 1, drain: 0.04) }
+        KeyboardBenchTests.spin(0.2)
+        XCTAssertEqual(rig.proxy.text, "Be")
+        let typing = wordSlots(kb)
+        XCTAssertGreaterThan(typing.count, 1)
+        XCTAssertTrue(typing.allSatisfy(capitalized), "\(typing)")
+        XCTAssertFalse(typing.allSatisfy(allCaps), "\(typing)")
+    }
 }

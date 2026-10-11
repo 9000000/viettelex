@@ -37,6 +37,7 @@ import com.viettelex.keyboard.KeyboardSession
 import com.viettelex.keyboard.KeyboardSettings
 import com.viettelex.keyboard.Keys
 import com.viettelex.keyboard.MainThread
+import com.viettelex.keyboard.SuggestionCase
 import com.viettelex.keyboard.SuggestionPlan
 import com.viettelex.keyboard.SwipeDecoder
 import com.viettelex.keyboard.SwipeEnglish
@@ -117,6 +118,14 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     private val autoShiftRun = Runnable { if (pendingGen == session.generation) applyAutoShift() }
     private val suggestRun = Runnable { if (pendingGen == session.generation) refreshBar() }
+    /**
+     * Shift đổi ⇒ vẽ lại bar như Gboard. Trễ bằng [SUGGEST_DELAY_MS] để lượt gợi ý của chính
+     * phím vừa gõ (dấu cách ⇒ auto-shift) chạy trước — session thấy bar đã đúng thì bỏ qua.
+     */
+    private val shiftRun = Runnable {
+        syncShift()
+        if (session.shiftNeedsRefresh()) refreshBar()
+    }
 
     // --- gõ vuốt ---
     /**
@@ -369,7 +378,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         proxy.uriField = (info.inputType and InputType.TYPE_MASK_CLASS) == InputType.TYPE_CLASS_TEXT &&
             (info.inputType and InputType.TYPE_MASK_VARIATION) == InputType.TYPE_TEXT_VARIATION_URI
         startTracking(info)
-        handler.removeCallbacks(autoShiftRun); handler.removeCallbacks(suggestRun)
+        handler.removeCallbacks(autoShiftRun); handler.removeCallbacks(suggestRun); handler.removeCallbacks(shiftRun)
         clearSwipeUndo()
 
         session.startInput(settings, FieldTraits(
@@ -416,7 +425,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         // tốn ~4.7 MB cấp phát) — nhả khi ẩn lâu ([idleRelease]; onTrimMemory hầu như không tới).
         handler.removeCallbacks(idleRelease)
         handler.postDelayed(idleRelease, IDLE_RELEASE_MS)
-        handler.removeCallbacks(autoShiftRun); handler.removeCallbacks(suggestRun)
+        handler.removeCallbacks(autoShiftRun); handler.removeCallbacks(suggestRun); handler.removeCallbacks(shiftRun)
         trackpadMoved = false                  // ô đóng: không auto-shift/gợi ý lúc nhả trackpad
         keyboard?.onHidden()
         feedback.releaseSound()                // âm phím riêng: nhả SoundPool khi ẩn
@@ -1037,8 +1046,11 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     override fun onSuggestion(item: String) {
         clearSwipeUndo()
         if (!proxy.begin()) return
+        syncShift()
         try { session.acceptSuggestion(item, proxy) } finally { proxy.end() }
         resetIfEditFailed()
+        // Chọn gợi ý = gõ một từ: Shift một-lần nhả (session đã hạ keyboardShift), Caps giữ.
+        if (session.keyboardShift == SuggestionCase.Shift.OFF) keyboard?.setAutoShift(false)
         applyAutoShift()
         refreshBar()
     }
@@ -1190,9 +1202,25 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         keyboard?.setAutoShift(on)
     }
 
+    override fun onShiftChanged() {
+        handler.removeCallbacks(shiftRun)
+        handler.postDelayed(shiftRun, SUGGEST_DELAY_MS)
+    }
+
+    /** Shift thật của bàn phím ảo → session (hoa/thường gợi ý, SuggestionCase). */
+    private fun syncShift() {
+        val kb = keyboard ?: return
+        session.keyboardShift = when (kb.shift) {
+            KeyboardView.Shift.OFF -> SuggestionCase.Shift.OFF
+            KeyboardView.Shift.ON -> SuggestionCase.Shift.ONCE
+            KeyboardView.Shift.CAPS -> SuggestionCase.Shift.CAPS_LOCK
+        }
+    }
+
     private fun refreshBar() {
         val st = strip ?: return
         if (!session.stripMode.shown || session.barCollapsed) return
+        syncShift()
         when (val plan = session.requestSuggestions(proxy)) {
             is SuggestionPlan.Ready -> st.show(plan.set)
             is SuggestionPlan.Background -> {

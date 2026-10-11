@@ -110,6 +110,8 @@ class KeyboardView(
         fun onEditAction(action: EditAction, selecting: Boolean)
         /** Rail / nút một tay đổi chế độ — IME lưu prefs rồi gọi lại [setOneHand]. */
         fun onOneHandChange(side: OneHandSide)
+        /** Shift/Caps Lock vừa đổi (tay, đầu câu, nhả sau một chữ, rời plane chữ…) — bar gợi ý theo Shift. */
+        fun onShiftChanged() {}
     }
 
     var listener: Listener? = null
@@ -118,7 +120,13 @@ class KeyboardView(
 
     // --- cấu hình (đặt bởi IME mỗi lần hiện; rebuild khi chữ ký đổi) ---
     var plane = Plane.LETTERS; private set
-    var shift = Shift.ON; private set
+    var shift = Shift.ON
+        private set(v) {
+            if (field == v) return
+            field = v
+            // Đang vuốt: shift đổi tạm quanh cú vuốt — lượt gợi ý sau vuốt tự vẽ lại bar.
+            if (!swiping) listener?.onShiftChanged()
+        }
     private var returnLabel = "return"
     private var inputKind = InputKind.NORMAL
     private var needsGlobe = false

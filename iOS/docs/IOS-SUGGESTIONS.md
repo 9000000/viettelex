@@ -125,6 +125,22 @@ lúc HIỂN THỊ và chèn (`senprints → SenPrints`, `iphone → iPhone`,
 nhằng** — vũ/đỗ/ngô/trang/nội/quốc bị loại có chủ ý (thà hiện thường còn hơn
 hoa sai giữa câu). Học vẫn đếm dưới khóa thường.
 
+**Shift / Caps Lock (`SuggestionCase`, như Gboard — 10/2026)**: áp SAU DisplayCase,
+chỉ lên vài ứng viên đang hiện, cả iOS lẫn Android (`DisplayCase.swift` / `DisplayCase.kt`):
+
+| Trạng thái | Chưa gõ (gợi ý từ kế tiếp / mở đầu) | Đang gõ dở |
+|---|---|---|
+| Shift tắt | giữ nguyên (`bên`) | theo chữ đã gõ |
+| Shift một-lần (tay hoặc đầu câu) | Hoa đầu (`Bên`) | theo chữ đã gõ |
+| Caps Lock | HOA HẾT (`BÊN`) | HOA HẾT |
+
+"Theo chữ đã gõ": ≥2 chữ cái đều hoa ⇒ HOA HẾT; chữ cái đầu hoa ⇒ Hoa đầu (`Bê` → `Bên`);
+còn lại giữ nguyên. Hoa đầu không đụng từ đã có chữ hoa (`iPhone`, `SenPrints`); ứng
+viên không bắt đầu bằng chữ cái (emoji, số, chip @/.) giữ nguyên. Ô địa chỉ / tìm
+kiếm bỏ Shift một-lần (Caps Lock vẫn theo). Đổi Shift ⇒ bar vẽ lại ngay (gộp một lượt,
+bỏ qua khi bar đã đúng / đang gõ dở mà không dính Caps). Chọn gợi ý chèn đúng dạng đang
+hiện, rồi nhả Shift một-lần như gõ một chữ; học vẫn dưới khóa thường.
+
 ### 6. `SensitiveWords` — lọc từ nhạy cảm
 
 Chuẩn ngành (Gboard/SwiftKey): từ tục **vẫn nằm trong datastore và vẫn được

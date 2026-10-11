@@ -275,6 +275,14 @@ class KeyboardSession(
     private var lastInsertWasSpace = false
     /** Auto-shift đang bật (gợi ý viết hoa chữ đầu). */
     var autoShiftOn = false; private set
+    /**
+     * Shift THẬT của bàn phím ảo (IME báo trước mỗi lượt gợi ý / khi Shift đổi) — hoa/thường
+     * gợi ý theo [SuggestionCase] như Gboard. null = không có bàn phím ảo (test thuần / chỉ
+     * phím cứng) ⇒ suy từ [autoShiftOn].
+     */
+    var keyboardShift: SuggestionCase.Shift? = null
+    /** Shift lúc tính bar lần cuối — đổi Shift mà bar đã đúng thì khỏi tính lại. */
+    private var barShift = SuggestionCase.Shift.OFF
     /** Công tắc "Tự động viết hoa đầu câu" ([KeyboardSettings.autoCapitalize]). */
     var autoCapitalize = true
     /** Bar tắt ở setting hoặc ô cấm. */
@@ -973,10 +981,27 @@ class KeyboardSession(
 
     // MARK: gợi ý
 
-    private fun caseForContext(w: String) = when {
-        traits.lowercaseSuggestions -> w.lowercase()
-        autoShiftOn -> Cp.capitalizeFirst(w)
-        else -> w
+    /** Shift cho hoa/thường gợi ý. Ô địa chỉ / tìm kiếm: bỏ Shift một-lần (Caps Lock vẫn theo). */
+    private val suggestionShift: SuggestionCase.Shift get() {
+        val s = keyboardShift ?: if (autoShiftOn) SuggestionCase.Shift.ONCE else SuggestionCase.Shift.OFF
+        return if (traits.lowercaseSuggestions && s == SuggestionCase.Shift.ONCE) SuggestionCase.Shift.OFF else s
+    }
+
+    /** Hoa/thường theo Shift + chữ đang gõ ([SuggestionCase]): "Em, Anh, Tôi" / "EM" / "Bê" ⇒ "Bên". */
+    private fun caseForContext(w: String, typed: String = ""): String =
+        SuggestionCase.display(if (traits.lowercaseSuggestions) w.lowercase() else w, suggestionShift, typed)
+
+    /**
+     * Shift/Caps vừa đổi (IME gọi sau khi gán [keyboardShift]): true ⇒ vẽ lại bar ngay như Gboard.
+     * false khi bar đã tính với Shift này (lượt gợi ý của phím chữ vừa nhả Shift đã chạy), hoặc
+     * đang gõ dở mà không dính Caps Lock (lúc đó hoa/thường theo chữ đã gõ).
+     */
+    fun shiftNeedsRefresh(): Boolean {
+        val s = suggestionShift
+        if (s == barShift || !suggestionsActive || barCollapsed) return false
+        if (bridge.composedWord.isNotEmpty() && s != SuggestionCase.Shift.CAPS_LOCK &&
+            barShift != SuggestionCase.Shift.CAPS_LOCK) { barShift = s; return false }
+        return true
     }
 
     /** Hoa/thường hiển thị của gợi ý: [DisplayCase] (tên riêng), trừ ô địa chỉ / tìm kiếm ⇒ chữ thường. */
@@ -987,13 +1012,14 @@ class KeyboardSession(
         if (base.size >= need) return base.take(need)
         val top = if (bridge.englishMode) SwipeEnglish.top else langModel.topWords(need + 12)
         val cands = SensitiveWords.filter(top, filterSensitive)
-            .map { caseForContext(displayCase(it)) }
+            .map { caseForContext(displayCase(it), typed) }
         return SuggestionFill.pad(base, cands, need, typed)
     }
 
     /** Gọi sau debounce 30 ms (hoặc khi hiện bàn phím / selection đổi / bật bar). */
     fun requestSuggestions(proxy: TextProxy): SuggestionPlan {
         suggestReq++
+        barShift = suggestionShift
         numberChip = null; mathChip = null
         if (barCollapsed) return SuggestionPlan.Ready(null)
         if (!suggestionsActive) return SuggestionPlan.Ready(if (stripMode == StripMode.TOOLS) toolsOnlySet(proxy) else null)
@@ -1142,12 +1168,13 @@ class KeyboardSession(
             val ctx = ctxCache
             val ranked = SensitiveWords.filter(
                 SuggestRank.rankInline(pool, pmi, Cp.count(composed), langModel::count, ctx), filterSensitive)
-            word = ranked.firstOrNull()?.let { displayCase(it, lastWord) }
-            word2 = ranked.getOrNull(1)?.let { displayCase(it, lastWord) }
+            word = ranked.firstOrNull()?.let { caseForContext(displayCase(it, lastWord), composed) }
+            word2 = ranked.getOrNull(1)?.let { caseForContext(displayCase(it, lastWord), composed) }
         } else if (fix != null) {
-            word = fix
+            word = caseForContext(fix, composed)
         }
         // Trượt vào phím thanh mà vẫn ra từ ("casn" → cán, ý là cân): bản sửa vào slot 3.
+        val slip = slip?.let { caseForContext(it, composed) }
         if (slip != null && slip != word) { if (word == null) word = slip else word2 = slip }
         var emojis: List<String> = emptyList()
         val cLow = composed.lowercase()
@@ -1330,7 +1357,10 @@ class KeyboardSession(
         if (n > 0 && proxy.confirmTail(bridge.composedWord)) proxy.deleteCodePoints(n)
         proxy.insertText(if (isWord) "$item " else item)
         bridge.reset()
+        // Chèn đúng dạng đang hiện ("Bên" khi Shift); học dạng thường (record lowercase).
         if (isWord) commitAndLearn(item, accepted = true) else { lastWord = null; lastWord2 = null }
+        // Như gõ một chữ: Shift một-lần nhả (IME hạ phím Shift), Caps Lock giữ.
+        keyboardShift = keyboardShift?.let { SuggestionCase.afterCommit(it) }
     }
 
     /**

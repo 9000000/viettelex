@@ -127,7 +127,21 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
     /// Đã gõ ký tự ở plane 123/#+= → space kế tiếp quay về chữ (PlanePolicy).
     private var typedInSymbolPlane = false
-    private var shift: ShiftState = .on          // Apple: sentence start = shifted
+    private var shift: ShiftState = .on {        // Apple: sentence start = shifted
+        // Thanh gợi ý theo Shift như Gboard (SuggestionCase) — báo controller khi đổi.
+        // Đang vuốt: shift đổi tạm (trả lại/nhả quanh cú vuốt) — swipeEnded tự vẽ lại bar.
+        didSet { if shift != oldValue, !swipeActive { onShiftChange?() } }
+    }
+    /// Shift/Caps Lock vừa đổi (tay, đầu câu, nhả sau một chữ, rời plane chữ…).
+    var onShiftChange: (() -> Void)?
+    /// Trạng thái Shift cho hoa/thường của gợi ý (SuggestionCase).
+    var suggestionShift: SuggestionCase.Shift {
+        switch shift { case .off: return .off; case .on: return .once; case .caps: return .capsLock }
+    }
+    /// Chọn gợi ý = gõ một từ: nhả Shift một-lần như phím chữ (Caps Lock giữ nguyên).
+    func releaseOneShotShift() {
+        if shift == .on { shift = .off; applyShiftAppearance() }
+    }
     private var returnTitle = "return"
     private var dark = false
     private var lastShiftTap: TimeInterval = 0

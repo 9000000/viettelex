@@ -93,3 +93,53 @@ object DisplayCase {
         "nguyễn" to "Nguyễn", "trịnh" to "Trịnh", "đặng" to "Đặng", "bùi" to "Bùi",
     )
 }
+
+/**
+ * Hoa/thường của gợi ý theo Shift + chữ đang gõ — như Gboard (feedback 10/2026: bật Shift
+ * mà gợi ý vẫn thường). Song sinh iOS `SuggestionCase` (DisplayCase.swift). Chỉ áp lên vài
+ * ứng viên đang hiện.
+ *  • Caps Lock ⇒ CHỮ HOA HẾT ("BÊN").
+ *  • Đang gõ dở: theo chữ đã gõ — ≥2 chữ cái đều hoa ⇒ HOA HẾT; chữ cái đầu hoa ⇒ Hoa đầu
+ *    ("Bê" → "Bên"); còn lại giữ nguyên.
+ *  • Chưa gõ (gợi ý từ kế tiếp / mở đầu): Shift một-lần (tay hoặc đầu câu) ⇒ Hoa đầu.
+ *  • Hoa đầu KHÔNG đụng từ đã có chữ hoa (tên riêng/viết tắt: "iPhone", "SenPrints"); ứng
+ *    viên không bắt đầu bằng chữ cái (emoji, số, chip @/.) giữ nguyên.
+ */
+object SuggestionCase {
+    enum class Shift { OFF, ONCE, CAPS_LOCK }
+    enum class Mode { AS_IS, CAPITALIZED, UPPER }
+
+    fun mode(shift: Shift, typed: String): Mode {
+        if (shift == Shift.CAPS_LOCK) return Mode.UPPER
+        var letters = 0; var upper = 0; var firstUpper = false
+        var i = 0
+        while (i < typed.length) {
+            val cp = typed.codePointAt(i)
+            if (Character.isLetter(cp)) {
+                if (Character.isUpperCase(cp) || Character.isTitleCase(cp)) { upper++; if (letters == 0) firstUpper = true }
+                letters++
+            }
+            i += Character.charCount(cp)
+        }
+        if (letters == 0) return if (shift == Shift.ONCE) Mode.CAPITALIZED else Mode.AS_IS
+        if (letters >= 2 && upper == letters) return Mode.UPPER
+        return if (firstUpper) Mode.CAPITALIZED else Mode.AS_IS
+    }
+
+    fun apply(w: String, mode: Mode): String {
+        if (mode == Mode.AS_IS || w.isEmpty() || !Character.isLetter(w.codePointAt(0))) return w
+        return when (mode) {
+            Mode.AS_IS -> w
+            Mode.UPPER -> w.uppercase(VI)
+            Mode.CAPITALIZED -> if (w.codePoints().anyMatch { Character.isUpperCase(it) }) w else Cp.capitalizeFirst(w)
+        }
+    }
+
+    /** Dạng hiển thị của [w] khi Shift = [shift], chữ đang gõ = [typed]. */
+    fun display(w: String, shift: Shift, typed: String = ""): String = apply(w, mode(shift, typed))
+
+    /** Chọn gợi ý = gõ một từ: Shift một-lần nhả, Caps Lock giữ. */
+    fun afterCommit(shift: Shift): Shift = if (shift == Shift.ONCE) Shift.OFF else shift
+
+    private val VI: java.util.Locale = java.util.Locale.forLanguageTag("vi")
+}

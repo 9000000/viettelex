@@ -98,3 +98,47 @@ enum DisplayCase {
         "nguyễn": "Nguyễn", "trịnh": "Trịnh", "đặng": "Đặng", "bùi": "Bùi",
     ]
 }
+
+/// Hoa/thường của gợi ý theo Shift + chữ đang gõ — như Gboard / bàn phím stock
+/// (feedback 10/2026: bật Shift mà gợi ý vẫn thường). Song sinh Android
+/// `SuggestionCase` (DisplayCase.kt). Chỉ áp lên vài ứng viên đang hiện.
+///   • Caps Lock ⇒ CHỮ HOA HẾT ("BÊN").
+///   • Đang gõ dở: theo chữ đã gõ — ≥2 chữ cái đều hoa ⇒ HOA HẾT; chữ cái đầu hoa ⇒
+///     Hoa đầu ("Bê" → "Bên"); còn lại giữ nguyên.
+///   • Chưa gõ (gợi ý từ kế tiếp / mở đầu): Shift một-lần (tay hoặc đầu câu) ⇒ Hoa đầu.
+///   • Hoa đầu KHÔNG đụng từ đã có chữ hoa (tên riêng/viết tắt: "iPhone", "SenPrints");
+///     ứng viên không bắt đầu bằng chữ cái (emoji, số, @/. chip) giữ nguyên.
+enum SuggestionCase: Equatable {
+    case asIs, capitalized, upper
+
+    enum Shift: Equatable { case off, once, capsLock }
+
+    static func mode(shift: Shift, typed: String) -> SuggestionCase {
+        if shift == .capsLock { return .upper }
+        var letters = 0, upper = 0
+        var firstUpper = false
+        for ch in typed where ch.isLetter {
+            if ch.isUppercase { upper += 1; if letters == 0 { firstUpper = true } }
+            letters += 1
+        }
+        if letters == 0 { return shift == .once ? .capitalized : .asIs }
+        if letters >= 2, upper == letters { return .upper }
+        return firstUpper ? .capitalized : .asIs
+    }
+
+    func apply(_ w: String) -> String {
+        guard self != .asIs, let f = w.first, f.isLetter else { return w }
+        switch self {
+        case .asIs: return w
+        case .upper: return w.uppercased()
+        case .capitalized:
+            if w.contains(where: { $0.isUppercase }) { return w }
+            return f.uppercased() + w.dropFirst()
+        }
+    }
+
+    /// Gộp: dạng hiển thị của `w` khi Shift = `shift`, chữ đang gõ = `typed`.
+    static func display(_ w: String, shift: Shift, typed: String = "") -> String {
+        mode(shift: shift, typed: typed).apply(w)
+    }
+}
