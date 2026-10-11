@@ -74,8 +74,8 @@
     "notes": "GNOME 50: tạm giữ gạch chân ở Chrome/Electron (lỗi GNOME làm mất phím Backspace của bộ gõ); nhận VS Code mới; Fcitx5 trên GNOME biết app ngay từ đầu phiên"
   },
   "android": {
-    "version": "1.5.2",
-    "apk": "https://github.com/ptrinh/viettelex/releases/download/android-v1.5.2/VietTelex-android-1.5.2.apk",
+    "version": "1.5.3",
+    "apk": "https://github.com/ptrinh/viettelex/releases/download/android-v1.5.3/VietTelex-android-1.5.3.apk",
     "play": "https://play.google.com/store/apps/details?id=com.viettelex.android"
   }
 }
