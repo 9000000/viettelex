@@ -68,6 +68,11 @@ enum KeyLayout {
     /// (strip nhường hết) ⇒ balloon "3" trên phím "e" bị cắt nửa ở mép trên. Stock cũng
     /// chừa đệm trên. 20pt + khe hàng 10 ⇒ bubble ≥ 24pt (chữ co cho vừa, không cắt).
     static let balloonHeadroom: CGFloat = 20
+    /// Đệm trên tối thiểu khi KHÔNG có gì vẽ lên trên hàng đầu (ô phóng to tắt, giữ phím ra ký
+    /// tự phụ tắt): 2 + khe hàng 10–11 ≈ 12–13pt như stock tắt thanh dự đoán (đo iOS 27,
+    /// 12/10/2026). Trước đây luôn 20 ⇒ tắt gợi ý + tắt hết phụ trợ vẫn dư dải trống (#119).
+    static let minimalHeadroom: CGFloat = 2
+    static func headroom(needsBalloon: Bool) -> CGFloat { needsBalloon ? balloonHeadroom : minimalHeadroom }
 
     /// Bo 2 góc trên của nền theme tự vẽ (OLED, pastel, ảnh nền) theo khung kính bàn phím
     /// iPhone iOS 26+: khung hệ thống bo góc trên ĐÚNG ở mép trên cửa sổ extension, nền đục
@@ -81,12 +86,13 @@ enum KeyLayout {
     static let emojiSearchRow: CGFloat = 46
     static func emojiSearchBarHeight(strip: CGFloat) -> CGFloat { max(emojiSearchRow, strip) }
 
-    static func chrome(keyArea: CGFloat, strip: CGFloat, mode: ChromeMode) -> Chrome {
+    static func chrome(keyArea: CGFloat, strip: CGFloat, mode: ChromeMode,
+                       headroom: CGFloat = balloonHeadroom) -> Chrome {
         // Strip hiệu dụng: không thấp hơn headroom balloon (bar tắt / thu gọn vẫn chừa đệm).
-        let strip = max(strip, balloonHeadroom)
+        let strip = max(strip, headroom)
         switch mode {
         case .keys: return Chrome(rowsTop: strip, rows: keyArea, total: keyArea + strip,
-                                  minTop: balloonHeadroom)
+                                  minTop: headroom)
         case .emoji: return Chrome(rowsTop: 0, rows: keyArea + strip, total: keyArea + strip)
         case .emojiSearch:
             // Ô tìm nằm chỗ strip (bar gợi ý ẩn); phần nó cao hơn strip thì bàn phím cao

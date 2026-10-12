@@ -145,6 +145,8 @@ enum L10n {
         "Độ trong suốt ký tự": "Label transparency",
         "Khôi phục giao diện gốc": "Reset appearance",
         "Chiều cao hàng phím": "Key row height",
+        "Kích thước như bàn phím iPhone": "iPhone keyboard size",
+        "Phím, khe và chiều cao bàn phím đúng như bàn phím gốc của iPhone (theo cỡ máy) — gõ theo thói quen không lệch phím. Bật thì chỉnh chiều cao hàng phím bên dưới tạm không áp dụng.": "Keys, gaps and keyboard height match the built-in iPhone keyboard for your model, so muscle memory lands on the right keys. While on, the key row height adjustment below is not applied.",
         "Hiện logo Vᴛ": "Show Vᴛ logo",
         "Bàn phím tách đôi": "Split keyboard",
         "Màn hình rộng (iPhone gập khi mở, iPhone xoay ngang, iPad): chia bàn phím làm hai nửa để gõ bằng hai ngón cái. Khi đang tách, gõ vuốt và chế độ một tay tạm tắt.": "On wide screens (an open foldable iPhone, iPhone in landscape, iPad): splits the keyboard into two halves for thumb typing. While split, swipe typing and one-handed mode are paused.",

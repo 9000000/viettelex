@@ -26,6 +26,10 @@ struct ThemeSettingsView: View {
     // Tính Năng → Giao diện gộp luôn logo + chiều cao hàng (không thuộc "Khôi phục giao diện gốc").
     @AppStorage("showSpaceLogo", store: groupDefaults) private var showSpaceLogo = true
     @AppStorage("rowHeightAdjust", store: groupDefaults) private var rowHeightAdjust = 0
+    /// "Kích thước như bàn phím iPhone" (#119, KeyGeometry.StockSize) — app ghi giá trị đầu
+    /// (cài mới bật) lúc khởi động; bật thì chỉnh tay chiều cao hàng không áp dụng.
+    @AppStorage(KeyGeometry.StockSize.settingKey, store: groupDefaults) private var stockKeySize = false
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
     @AppStorage("numberRow", store: groupDefaults) private var numberRow = false
     @AppStorage("showSuggestions", store: groupDefaults) private var showSuggestions = true
     /// Bàn phím tách đôi khi màn hình rộng (SplitLayout.settingKey) — mặc định TẮT.
@@ -44,7 +48,14 @@ struct ThemeSettingsView: View {
         Wallpaper.keyboardSize(screenSize: UIScreen.main.bounds.size,
                                pad: UIDevice.current.userInterfaceIdiom == .pad, landscape: false,
                                rowHeightAdjust: rowHeightAdjust, numberRow: numberRow,
-                               suggestions: showSuggestions)
+                               suggestions: showSuggestions, stockSize: stockKeySize)
+    }
+
+    /// Strip gợi ý dọc (preset stock: thấp hơn — KeyGeometry.StockSize.openStrip).
+    private var wallpaperStrip: CGFloat {
+        guard stockKeySize, !isPad else { return Wallpaper.suggestionStrip }
+        let w = min(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
+        return KeyGeometry.StockSize.openStrip(width: w, landscape: false) ?? Wallpaper.suggestionStrip
     }
 
     private static func loadPreviewImage() -> UIImage? {
@@ -143,6 +154,11 @@ struct ThemeSettingsView: View {
             }
 
             Section {
+                if !isPad {
+                    settingToggle(L("Kích thước như bàn phím iPhone"),
+                                  L("Phím, khe và chiều cao bàn phím đúng như bàn phím gốc của iPhone (theo cỡ máy) — gõ theo thói quen không lệch phím. Bật thì chỉnh chiều cao hàng phím bên dưới tạm không áp dụng."),
+                                  isOn: $stockKeySize)
+                }
                 Stepper(value: $rowHeightAdjust, in: -10...10) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L("Chiều cao hàng phím"))
@@ -155,6 +171,7 @@ struct ThemeSettingsView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
+                .disabled(stockKeySize && !isPad)
                 settingToggle(L("Hiện logo Vᴛ"), L("Logo mờ ở góc phải phím cách."), isOn: $showSpaceLogo)
                 settingToggle(L("Bàn phím tách đôi"), L("Màn hình rộng (iPhone gập khi mở, iPhone xoay ngang, iPad): chia bàn phím làm hai nửa để gõ bằng hai ngón cái. Khi đang tách, gõ vuốt và chế độ một tay tạm tắt."), isOn: $splitKeyboard)
             } header: { Text(L("Bàn phím")) }
@@ -184,7 +201,7 @@ struct ThemeSettingsView: View {
         .fullScreenCover(item: $editor) { input in
             WallpaperEditorView(
                 image: input.image, crop: input.crop, keyboardSize: portraitKeyboardSize,
-                stripHeight: showSuggestions ? Wallpaper.suggestionStrip : 0,
+                stripHeight: showSuggestions ? wallpaperStrip : 0,
                 palette: settings.palette(systemDark: scheme == .dark, wallpaperActive: true),
                 dim: settings.dim, blur: settings.blur,
                 onCancel: { editor = nil },

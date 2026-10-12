@@ -8,6 +8,10 @@ import UniformTypeIdentifiers
 @main
 struct VietTelexApp: App {
     init() {
+        // "Kích thước như bàn phím iPhone" (#119): cài mới bật sẵn, người dùng cũ giữ bố cục
+        // quen tay (tự bật ở Giao diện). Ghi MỘT lần — bàn phím đọc khoá này mỗi lần hiện.
+        KeyGeometry.StockSize.seedIfNeeded(UserDefaults(suiteName: "group.com.viettelex"),
+                                           extraStateKeys: BackupSettings.all.map(\.key))
         #if DEBUG
         let g = UserDefaults(suiteName: "group.com.viettelex")
         NSLog("DBG kbFullAccess=%d kbLastSeen=%f",

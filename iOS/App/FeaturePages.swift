@@ -135,6 +135,7 @@ struct FeatureSearchEntry: Identifiable {
             .init(viTitle: LK("Xuất / nhập file sao lưu"), keywords: "backup export import restore", page: .saoLuu),
         ]
         if UIDevice.current.userInterfaceIdiom == .phone {
+            e.append(.init(viTitle: LK("Kích thước như bàn phím iPhone"), keywords: "stock gốc apple cỡ phím chiều cao size height", page: .giaoDien))
             e.append(.init(viTitle: LK("Giữ phím hàng trên để ra số"), keywords: "số giữ lâu number", page: .phim))
             e.append(.init(viTitle: LK("Chế độ một tay"), keywords: "one hand một tay", page: .phim))
         }

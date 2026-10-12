@@ -114,15 +114,19 @@ enum Wallpaper {
     /// Cỡ (pt) vùng bàn phím mà ảnh nền phủ — cùng công thức KeyboardView.keyAreaHeight
     /// + strip gợi ý (mở; trạng thái thu gọn nằm trong container riêng của extension, app
     /// không đọc được). Bề ngang: dọc = cạnh ngắn màn hình, ngang = cạnh dài.
+    /// `stockSize` = preset "Kích thước như bàn phím iPhone" (KeyGeometry.StockSize): bước
+    /// hàng/khe/strip stock, bỏ qua chỉnh tay.
     static func keyboardSize(screenSize: CGSize, pad: Bool, landscape: Bool, rowHeightAdjust: Int,
-                             numberRow: Bool, suggestions: Bool) -> CGSize {
+                             numberRow: Bool, suggestions: Bool, stockSize: Bool = false) -> CGSize {
         let width = landscape ? max(screenSize.width, screenSize.height) : min(screenSize.width, screenSize.height)
         let base: CGFloat = pad ? (landscape ? 300 : 240) : (landscape ? 162 : KeyGeometry.phonePortraitBase)
         let adj = CGFloat(max(-10, min(10, rowHeightAdjust)))
-        let unit = (base + adj * 4) / 4
-        let keyArea = unit * 4 + (numberRow ? KeyGeometry.numberRowHeight(unit: unit) : 0)
-            - KeyGeometry.bottomRowTrim(pad: pad, landscape: landscape)
-        return CGSize(width: width, height: keyArea + (suggestions ? suggestionStrip : 0))
+        let spec = KeyGeometry.rowSpec(pad: pad, landscape: landscape, unfolded: false, width: width,
+                                       base: base, adjust: adj, stock: stockSize)
+        let strip = spec.stock
+            ? (KeyGeometry.StockSize.openStrip(width: width, landscape: landscape) ?? suggestionStrip)
+            : suggestionStrip
+        return CGSize(width: width, height: spec.keyArea(numberRow: numberRow) + (suggestions ? strip : 0))
     }
 
     static func aspect(_ size: CGSize) -> Double {
