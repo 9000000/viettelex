@@ -120,6 +120,7 @@ targets:
       - KeyboardTests
       - Keyboard/EngineBridge.swift
       - Keyboard/FieldPolicy.swift
+      - Keyboard/NumericKeypad.swift
       - Keyboard/CompositionSync.swift
       - Keyboard/PlanePolicy.swift
       - Keyboard/KeyLayout.swift

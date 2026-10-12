@@ -544,8 +544,11 @@ final class KeyboardViewController: UIInputViewController {
             keyboard.applyAppearance(t.appearance, style: traitCollection.userInterfaceStyle)
             // configureInputKind nhảy plane (số/chữ) — chỉ gọi khi loại ô thật sự đổi
             // (hoặc lúc hiện), kẻo đang ở plane ký hiệu thì bị kéo về.
-            if force || old?.inputKind != t.inputKind {
-                keyboard.configureInputKind(t.inputKind)
+            // Bàn số lớn (NumericKeypad): ô OTP kiểu mặc định giữ inputKind .normal ⇒ so cả kiểu bàn số.
+            let pad = UIDevice.current.userInterfaceIdiom == .pad
+            let keypad = t.keypadStyle(isPad: pad)
+            if force || old?.inputKind != t.inputKind || old?.keypadStyle(isPad: pad) != keypad {
+                keyboard.configureInputKind(t.inputKind, keypad: keypad)
             }
         }
         // Thanh gợi ý: gate qua toggle trong app. Ô từ chối gợi ý chữ (autocorrection = .no:
@@ -790,7 +793,8 @@ final class KeyboardViewController: UIInputViewController {
             }
             restoreUndo = nil; undoOfferActive = false
         case .text(let s):                            // numbers, symbols
-            if let d = Self.singleDigit(s), bridge.vniDigit(d, proxy: proxy) {
+            // Bàn số lớn: số chèn THẲNG (không phải phím dấu VNI của từ đang gõ — từ được chốt).
+            if !keyboard.keypadShown, let d = Self.singleDigit(s), bridge.vniDigit(d, proxy: proxy) {
                 // VNI: số trong lúc soạn từ (hàng số / plane 123) mang dấu — phím của từ
             } else {
                 let final = bridge.boundary(s, proxy: proxy)
