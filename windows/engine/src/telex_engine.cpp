@@ -339,7 +339,8 @@ void TelexEngine::commitBoundary(bool autoRestore, Action& out) {
         resetWord();
         return;
     }
-    bool wantsRestore = autoRestore && outCount_ > 0 && shouldRestoreRaw();
+    bool wantsRestore = outCount_ > 0
+        && (needsStandaloneWRunRestore() || (autoRestore && shouldRestoreRaw()));
     if (wantsRestore && compositionDiffersFromRaw()) {
         int limit = rawCount_ < outCount_ ? rawCount_ : outCount_;
         int lcp = 0;
@@ -389,13 +390,16 @@ int TelexEngine::reopenLastCommit(char16_t* buf, int cap) {
     return emit(out_, outCount_, buf, cap);
 }
 
+// A standalone run of three or more `w` keys is literal `www` text, regardless of the
+// general auto-restore preference (mirrors Swift needsStandaloneWRunRestore).
+bool TelexEngine::needsStandaloneWRunRestore() const {
+    if (rawCount_ < 3 || !compositionDiffersFromRaw()) return false;
+    for (int i = 0; i < rawCount_; ++i)
+        if ((raw_[i] | 0x20) != 'w') return false;
+    return true;
+}
+
 bool TelexEngine::shouldRestoreRaw() const {
-    if (rawCount_ >= 3) {
-        bool allW = true;
-        for (int i = 0; i < rawCount_; ++i)
-            if ((raw_[i] | 0x20) != 'w') { allW = false; break; }
-        if (allW) return true;
-    }
     if (markCancelled_) {
         if (composedIsValidSyllable()) return false;
         if (toneCancelSpan_ > 1) return !composedIsRecognizedEnglish() || rawIsEnglishContextWord();
@@ -557,7 +561,8 @@ int TelexEngine::commitText(bool autoRestore, char16_t* buf, int cap) {
         resetWord();
         return n;
     }
-    bool wantsRestore = autoRestore && outCount_ > 0 && shouldRestoreRaw();
+    bool wantsRestore = outCount_ > 0
+        && (needsStandaloneWRunRestore() || (autoRestore && shouldRestoreRaw()));
     captureReopen(wantsRestore);
     updateContext(wantsRestore);
     n = wantsRestore ? emitRaw(raw_, rawCount_, buf, cap) : emit(out_, outCount_, buf, cap);
@@ -567,6 +572,7 @@ int TelexEngine::commitText(bool autoRestore, char16_t* buf, int cap) {
 
 int TelexEngine::peekCommitText(bool autoRestore, char16_t* buf, int cap) const {
     if (overflowed_) return emit(out_, outCount_, buf, cap);
+    if (outCount_ > 0 && needsStandaloneWRunRestore()) return emitRaw(raw_, rawCount_, buf, cap);
     if (autoRestore && outCount_ > 0 && shouldRestoreRaw()) return emitRaw(raw_, rawCount_, buf, cap);
     return emit(out_, outCount_, buf, cap);
 }
@@ -780,7 +786,8 @@ bool TelexEngine::hasSpellingError(bool autoRestore) const {
     bool sameAsRaw = outCount_ == rawCount_;
     for (int i = 0; sameAsRaw && i < outCount_; ++i) sameAsRaw = out_[i] == static_cast<char32_t>(raw_[i]);
     if (sameAsRaw) return false;                           // left as typed: English / raw
-    if (autoRestore && shouldRestoreRaw()) return false;   // boundary restores the raw keys
+    if (needsStandaloneWRunRestore() || (autoRestore && shouldRestoreRaw()))
+        return false;                                      // boundary restores the raw keys
     return SyllableValidator::isSpellingError(out_, outCount_, teencode);
 }
 

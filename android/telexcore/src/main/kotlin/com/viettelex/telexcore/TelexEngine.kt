@@ -279,7 +279,8 @@ class TelexEngine {
                 reopenRawCount = 0; reopenOutCount = 0
                 return TelexAction.None
             }
-            val wantsRestore = autoRestore && outCount > 0 && shouldRestoreRaw()
+            val wantsRestore = outCount > 0 &&
+                (needsStandaloneWRunRestore() || (autoRestore && shouldRestoreRaw()))
             var action: TelexAction = TelexAction.None
             if (wantsRestore && compositionDiffersFromRaw()) {
                 val limit = minOf(rawCount, outCount)
@@ -339,12 +340,15 @@ class TelexEngine {
 
     // MARK: - Boundary restore decision (non-mutating apart from scratch buffers)
 
+    /** A standalone run of three or more `w` keys is literal `www` text, regardless
+     *  of the general auto-restore preference (mirrors Swift needsStandaloneWRunRestore). */
+    private fun needsStandaloneWRunRestore(): Boolean {
+        if (rawCount < 3 || !compositionDiffersFromRaw()) return false
+        for (i in 0 until rawCount) if ((raw[i] or 0x20) != 'w'.code) return false
+        return true
+    }
+
     private fun shouldRestoreRaw(): Boolean {
-        if (rawCount >= 3) {
-            var allW = true
-            for (i in 0 until rawCount) if ((raw[i] or 0x20) != 'w'.code) { allW = false; break }
-            if (allW) return true
-        }
         if (markCancelled) {
             if (composedIsValidSyllable()) return false
             if (toneCancelSpan > 1) {
@@ -524,7 +528,8 @@ class TelexEngine {
                 reopenRawCount = 0; reopenOutCount = 0
                 return composed
             }
-            val wantsRestore = autoRestore && outCount > 0 && shouldRestoreRaw()
+            val wantsRestore = outCount > 0 &&
+                (needsStandaloneWRunRestore() || (autoRestore && shouldRestoreRaw()))
             captureReopen(wantsRestore)
             updateContext(wantsRestore)
             return if (wantsRestore) rawKeystrokes else composed
@@ -536,6 +541,7 @@ class TelexEngine {
     /** Non-mutating twin of `commitText`: what the boundary WILL commit. */
     fun peekCommitText(autoRestore: Boolean): String {
         if (overflowed) return composed
+        if (outCount > 0 && needsStandaloneWRunRestore()) return rawKeystrokes
         if (autoRestore && outCount > 0 && shouldRestoreRaw()) return rawKeystrokes
         return composed
     }

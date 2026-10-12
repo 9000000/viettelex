@@ -157,6 +157,7 @@ private:
     void feedAscii(uint8_t ascii, Action& out);
     void takeSnapshots();
     void captureReopen(bool restored);
+    bool needsStandaloneWRunRestore() const;
     bool shouldRestoreRaw() const;
     bool composedHasDiacritic() const;
     bool composedIsRecognizedEnglish() const;
