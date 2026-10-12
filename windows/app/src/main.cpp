@@ -278,6 +278,16 @@ LRESULT CALLBACK mainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     if (textActionsMessage(msg, wp, lp, handled)) return handled;  // hotkey, TIP selection, timers  // hotkey, TIP selection, timers
     switch (msg) {
         case kAppCommandMsg: runCommand(static_cast<unsigned>(wp), lp); return 0;
+        case kMsgSwitchChord:
+            // Ctrl+Shift seen by the watcher. Inside VietTelex the TIP toggles by itself;
+            // on another keyboard, bring VietTelex in (in Việt) for this window.
+            if (activateVietTelexForChord(parseSwitchHotkey(g_settings.switchHotkey), gameSuspendedNow())) {
+                setTrayState(true);
+                if (showSwitchToast(parseSwitchIndicator(g_settings.switchIndicator), g_trayShown, gameSuspendedNow(),
+                                    currentNotificationState()))
+                    toastShow(L"V");
+            }
+            return 0;
         // Restart Manager / logoff / an upgrade closing us: agree, then exit cleanly
         // (settings are saved on every change, so there is nothing left to flush).
         case WM_TIMER:
@@ -575,6 +585,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     syncTrayIcon();
     hookSetElevationNotifier(showElevationNotice);
+    hookSetChordTarget(g_mainWnd, kMsgSwitchChord);
     hookConfigure(g_settings);
     textActionsConfigure();
     gameConfigure();

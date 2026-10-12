@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "input_switch.h"
 #include "registration.h"
 
 namespace vtx::app {
@@ -43,6 +44,27 @@ std::wstring selfPath() {
     return (n > 0 && n < MAX_PATH) ? std::wstring(buf, n) : std::wstring();
 }
 }  // namespace
+
+bool setDefaultKeyboardForUser() {
+    // SetDefaultLayoutOrTip (input.dll, documented in the TSF reference; no import library:
+    // LoadLibrary + GetProcAddress as the documentation shows). Profile-list format
+    // "0x042A:{CLSID}{PROFILE}"; flags 0 = store it AND apply it to the current session.
+    const std::string spec = defaultLayoutOrTipSpec(vtx::reg::kLangId, vtx::reg::kClsid, vtx::reg::kProfile);
+    const std::wstring w(spec.begin(), spec.end());
+    HMODULE input = LoadLibraryExW(L"input.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!input) return false;
+    using SetDefaultFn = BOOL(WINAPI*)(LPCWSTR, DWORD);
+    auto fn = reinterpret_cast<SetDefaultFn>(reinterpret_cast<void*>(GetProcAddress(input, "SetDefaultLayoutOrTip")));
+    const bool ok = fn && fn(w.c_str(), 0);
+    FreeLibrary(input);
+    return ok;
+}
+
+unsigned defaultInputLangId() {
+    HKL hkl = nullptr;
+    if (!SystemParametersInfoW(SPI_GETDEFAULTINPUTLANG, 0, &hkl, 0) || !hkl) return 0;
+    return LOWORD(reinterpret_cast<ULONG_PTR>(hkl));
+}
 
 bool addKeyboardForUser() { return callInstall(tipSpec(), 0); }
 bool removeKeyboardForUser() { return callInstall(tipSpec(), ILOT_UNINSTALL_); }

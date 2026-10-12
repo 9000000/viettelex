@@ -606,10 +606,19 @@ void TextService::evaluateHost(ITfContext* ctx) {
     session_.setCompositionOnlyContext(host_ == HostText::CompositionOnly);
 }
 
-bool TextService::fieldIsLiteral(ITfContext* ctx, TfEditCookie ec) {
+// At a word start: true = literal field (password, PIN, number, e-mail), let keys through.
+// Also switches a Chromium address bar to composition (app_policy.h
+// fieldPrefersComposition) — one input-scope read serves both.
+bool TextService::fieldPolicyAtWordStart(ITfContext* ctx, TfEditCookie ec) {
     int buf[32];
     const UINT n = inputScopesAtSelection(ctx, ec, buf, 32);
-    return n > 0 && classifyInputScopes(buf, n) == FieldPolicy::Literal;
+    if (n > 0 && classifyInputScopes(buf, n) == FieldPolicy::Literal) return true;
+    if (session_.outputMode() == OutputMode::InPlace && !session_.prefersComposition() &&
+        fieldPrefersComposition(config::exeName(), buf, n)) {
+        session_.setPreferComposition(true);
+        config::log("browser address bar (IS_URL): composition for this field (in-place breaks on inline autocomplete)");
+    }
+    return false;
 }
 
 // Input scopes of the field at the selection (up to `cap`); 0 = none / unknown.
@@ -757,11 +766,11 @@ STDMETHODIMP TextService::OnEndEdit(ITfContext* ctx, TfEditCookie ecReadOnly, IT
     // (Via the transitory-extension parent, this context is not the one holding our word;
     // the session re-verifies against the parent at every key instead.)
     if (session_.wordActive() && session_.wordMode() == OutputMode::InPlace && host_ != HostText::NormalViaParent) {
-        const std::u16string& shown = session_.shown();
         // Our own edits and the app inserting a key we passed keep the word right
         // before the caret; anything else (click, arrow, app rewrite) does not.
         // A forward selection (omnibox autocomplete suffix) is the app's, not a change.
-        if (ro.textBeforeCaret(static_cast<int>(shown.size())) != shown) session_.reset();
+        // An app that dropped the deletion of our replace moves the field to composition.
+        session_.verifyScreen(ro);
     }
     return S_OK;
 }
@@ -892,7 +901,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL* ea
             TsfTextSink sink(this, tc, ec);
             // Literal fields (password, PIN, number, e-mail): checked where a word would
             // start, so a field switch inside one context is caught too.
-            if (!session_.wordActive() && k.kind == KeyKind::Char && fieldIsLiteral(tc, ec)) return S_OK;
+            if (!session_.wordActive() && k.kind == KeyKind::Char && fieldPolicyAtWordStart(tc, ec)) return S_OK;
             result = session_.handleKey(k, sink) ? TRUE : FALSE;
             return S_OK;
         });

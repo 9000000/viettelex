@@ -13,6 +13,8 @@
 #include "direct_verify.h"
 #include "foreground.h"
 #include "hook_watchdog.h"
+#include "hotkey.h"
+#include "input_switch.h"
 #include "keymap.h"
 #include "session.h"
 #include "settings_store.h"
@@ -66,11 +68,18 @@ struct HookState {
     HWND ackHwnd = nullptr;    // window carrying kDirectOnProp (the TIP stays out there)
     uint64_t editSeq = 0;      // bumps on every injected edit (echo checks use the latest)
     bool suspended = false;    // game / fullscreen / Chế độ game: every key passes through
+    // Observe-only Ctrl+Shift watcher (input_switch.h): keeps the keyboard hook installed
+    // while the switch hotkey is Ctrl+Shift, so the chord also works while ANOTHER
+    // keyboard is the window's input method. Never eats a key.
+    bool watchChord = false;
+    ModifierChord chord;
 };
 HookState* h = nullptr;        // hook thread only
 DWORD g_hookTid = 0;
 HANDLE g_hookThread = nullptr;
 HANDLE g_hookReady = nullptr;
+HWND g_chordTarget = nullptr;  // main window: receives g_chordMsg when the chord completes
+UINT g_chordMsg = 0;
 
 // ---------------------------------------------------------------- UI-thread state
 struct UiState {
@@ -149,6 +158,21 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM wp, LPARAM lp) {
     if (isOwnInjected(kb->dwExtraInfo)) return CallNextHookEx(nullptr, code, wp, lp);  // never re-process ours
     h->watchdog.lowLevelKey(GetTickCount64());
     const bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
+    if (h->watchChord && !(kb->flags & LLKHF_INJECTED)) {
+        // GetAsyncKeyState is not updated for this event yet: apply it ourselves.
+        if (isChordModifierVk(kb->vkCode)) {
+            uint8_t before = 0;
+            if (GetAsyncKeyState(VK_CONTROL) < 0) before |= kModCtrl;
+            if (GetAsyncKeyState(VK_SHIFT) < 0) before |= kModShift;
+            if (GetAsyncKeyState(VK_MENU) < 0) before |= kModAlt;
+            if (GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0) before |= kModWin;
+            if (h->chord.note(chordHeldAfter(before, kb->vkCode, down)) && !down && !h->suspended && g_chordTarget)
+                PostMessageW(g_chordTarget, g_chordMsg, 0, 0);  // decided on the UI thread
+        } else if (down) {
+            h->chord.disarm();  // Ctrl+Shift+T etc. is not the switch chord
+        }
+    }
+    if (!h->wanted) return CallNextHookEx(nullptr, code, wp, lp);  // watching only
     if (!down) return CallNextHookEx(nullptr, code, wp, lp);
     if (h->suspended) return CallNextHookEx(nullptr, code, wp, lp);  // game / fullscreen
     if (kb->flags & LLKHF_INJECTED) {  // someone else's synthetic input: do not compose over it
@@ -221,6 +245,7 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM wp, LPARAM lp) {
 
 LRESULT CALLBACK mouseProc(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION && h && (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN || wp == WM_MBUTTONDOWN)) {
+        h->chord.disarm();  // a click between press and release is not a toggle
         h->session.reset();  // caret probably moved
         h->arming.click();
     }
@@ -252,6 +277,10 @@ void removeHooks() {
     h->kbHook = h->mouseHook = nullptr;
 }
 
+// Keyboard hook: typing (h->wanted) or the chord watcher. Mouse hook: both (a click
+// resets the word and disarms the chord).
+bool hooksNeeded() { return h->wanted || h->watchChord; }
+
 void installHooks() {
     removeHooks();
     HINSTANCE inst = GetModuleHandleW(nullptr);
@@ -260,12 +289,17 @@ void installHooks() {
     h->watchdog.hookInstalled(GetTickCount64());
 }
 
+void syncHooks() {
+    const bool need = hooksNeeded();
+    if (need && !h->kbHook) installHooks();
+    else if (!need && h->kbHook) removeHooks();
+    h->watchdog.setActive(need, GetTickCount64());
+}
+
 void applyWanted(bool on) {
-    if (on == h->wanted && (!on || h->kbHook)) return;
+    if (on == h->wanted && (!hooksNeeded() || h->kbHook)) return;
     h->wanted = on;
-    if (on) installHooks();
-    else removeHooks();
-    h->watchdog.setActive(on, GetTickCount64());
+    syncHooks();
     h->session.resetContext();
 }
 
@@ -278,10 +312,18 @@ void configureSession(const Settings& s) {
     o.shortcuts = &h->settings.shortcuts;
     h->session.configure(o);
     h->session.setOutputMode(OutputMode::InPlace);
+    const bool watch = chordWatcherWanted(parseSwitchHotkey(s.switchHotkey));
+    if (watch != h->watchChord) {
+        h->watchChord = watch;
+        h->chord.disarm();
+        syncHooks();
+        appLog("hook", watch ? "Ctrl+Shift watcher on (switches to VietTelex from another keyboard)"
+                             : "Ctrl+Shift watcher off");
+    }
 }
 
 LRESULT CALLBACK sinkProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    if (msg == WM_INPUT && h && h->wanted) {
+    if (msg == WM_INPUT && h && hooksNeeded()) {
         RAWINPUT ri;
         UINT sz = sizeof ri;
         if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lp), RID_INPUT, &ri, &sz, sizeof(RAWINPUTHEADER)) != UINT(-1) &&
@@ -475,6 +517,11 @@ void hookSetDirectFromTip(bool on) {
 }
 
 void hookSetElevationNotifier(void (*notify)(const std::wstring& exe)) { g_elevationNotify = notify; }
+
+void hookSetChordTarget(HWND wnd, UINT msg) {
+    g_chordTarget = wnd;
+    g_chordMsg = msg;
+}
 
 void hookDisableCurrentField() {
     if (g_hookTid) PostThreadMessageW(g_hookTid, kCmdDisableHere, 0, 0);

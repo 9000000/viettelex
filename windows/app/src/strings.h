@@ -107,6 +107,8 @@ enum class S {
     WelcomeImport, WelcomeDone, WelcomeOpenSettings,
     // Chuyển từ UniKey (import result)
     ImportResult, ImportSkipped, ImportViqr,
+    // Ctrl+Shift needs VietTelex active: make it Windows' default input method (Kiểu gõ page)
+    DefaultInputTitle, DefaultInputDesc, DefaultInputButton,
     Count
 };
 

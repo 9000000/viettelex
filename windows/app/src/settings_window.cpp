@@ -47,6 +47,7 @@ using std::min;
 #include "shortcuts.h"
 #include "strings.h"
 #include "text_action_logic.h"
+#include "tip_control.h"
 #include "uninstall.h"
 #include "updater.h"
 #include "utf.h"
@@ -96,6 +97,7 @@ enum Id : int {
     IdUninstall,
     IdPerAppWin,
     IdConflicts,
+    IdDefaultInput,
     IdIconTile = 6000,  // + IconChoice
 };
 
@@ -444,6 +446,16 @@ void onPerAppButton() {
     PostMessageW(g_wnd, WM_APP + 1, 0, 0);  // re-read and redraw
 }
 
+// "Make VietTelex the default input method" (input_switch.h defaultInputAdvice): only on
+// the user's click. If Windows did not take it, show its Typing page (Advanced keyboard
+// settings -> Override for default input method).
+void onDefaultInputButton() {
+    if (!setDefaultKeyboardForUser() ||
+        defaultInputAdvice(parseSwitchHotkey(g_settings.switchHotkey), defaultInputLangId()) != DefaultInputAdvice::None)
+        openTypingSettings();
+    PostMessageW(g_wnd, WM_APP + 1, 0, 0);  // re-read and redraw (the card disappears)
+}
+
 std::vector<FoundConflict> g_conflicts;  // detected when the Kiểu gõ page is built
 
 std::vector<Item> pageItems(int tab) {
@@ -472,6 +484,11 @@ std::vector<Item> pageItems(int tab) {
                                        : win == PerAppInput::Off ? S::PerAppWinOff
                                                                  : S::PerAppWinUnknown,
                                        IdPerAppWin));
+                // Ctrl+Shift / Alt+Z live in VietTelex: a window that starts on another
+                // keyboard (Windows' default) needs Win+Space first. Offer the fix.
+                if (defaultInputAdvice(parseSwitchHotkey(g_settings.switchHotkey), defaultInputLangId()) ==
+                    DefaultInputAdvice::MakeVietTelexDefault)
+                    v.push_back(buttonItem(S::DefaultInputTitle, S::DefaultInputDesc, IdDefaultInput));
             }
             v.push_back(comboItem(S::SwitchIndicator, S::SwitchIndicatorDesc, IdComboIndicator));
             v.push_back(section(S::SecGames));
@@ -896,6 +913,8 @@ void createControls() {
             } else if (it.ctl == Ctl::Button) {
                 if (it.ctlId == IdUninstall) it.hwnd = makeButton(tr(S::UninstallButton), it.ctlId, kBtnDanger);
                 else if (it.ctlId == IdConflicts) it.hwnd = makeButton(tr(S::ConflictButton), it.ctlId, kBtnPrimary);
+                else if (it.ctlId == IdDefaultInput)
+                    it.hwnd = makeButton(tr(S::DefaultInputButton), it.ctlId, kBtnPrimary);
                 else if (it.ctlId == IdPerAppWin)
                     it.hwnd = makeButton(tr(perAppAction(readPerAppInput()) == PerAppAction::Enable ? S::PerAppEnableButton
                                                                                                    : S::PerAppOpenButton),
@@ -1593,6 +1612,7 @@ void onCommand(int id, int code, HWND ctl) {
         case IdCheckNow: startUpdateCheck(g_mainWnd, true); break;
         case IdUninstall: uninstallVietTelex(); break;
         case IdPerAppWin: onPerAppButton(); break;
+        case IdDefaultInput: onDefaultInputButton(); break;
         default: break;
     }
 }

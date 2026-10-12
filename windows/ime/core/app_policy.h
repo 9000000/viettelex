@@ -93,4 +93,18 @@ HostText classifyContext(const ContextInfo& c);
 enum class FieldPolicy : uint8_t { Normal, Literal };
 FieldPolicy classifyInputScopes(const int* scopes, size_t count);
 
+// Chromium's NATIVE address bar (views::Textfield / OmniboxViewViews) cannot take an
+// in-place replace while inline autocomplete shows (2026-10 field report, Edge: "thế" ->
+// "theêz"). The suggestion is selected REVERSED — OnInlineAutocompleteTextMaybeChanged
+// selects {text end, user text end} — and TSFTextStore commits our SetText as
+// ExtendSelectionAndDelete(n, 0) + InsertText; Textfield::ExtendSelectionAndDelete extends
+// that reversed range, so it deletes inside the suggestion and the typed "e" survives.
+// Composition never deletes outside its range, and the omnibox moves the suggestion out
+// of the text while an IME composes (SetImeInlineAutocompletion) — the path every CJK IME
+// uses there. So: Chromium-family browser process + IS_URL field (the omnibox reports
+// TEXT_INPUT_TYPE_URL -> IS_URL for non-CJK input locales) -> compose this field.
+// Not Vivaldi/Firefox: their address bars are not views::Textfield (both fine per report).
+bool isChromiumNativeOmniboxBrowser(const std::string& exe);
+bool fieldPrefersComposition(const std::string& exe, const int* scopes, size_t count);
+
 }  // namespace vtx

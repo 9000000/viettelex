@@ -103,6 +103,7 @@ bool TypingSession::isWordKey(char32_t c) const {
 void TypingSession::reset() {
     if (engine_) vtx_reset(engine_);
     shown_.clear();
+    droppedSig_.clear();
     overflow_ = false;
     reopenArmed_ = false;
 }
@@ -112,10 +113,46 @@ void TypingSession::setCompositionOnlyContext(bool on) {
     if (vtx_is_empty(engine_)) wordMode_ = effectiveMode();
 }
 
+void TypingSession::setPreferComposition(bool on) {
+    preferComposition_ = on;
+    if (vtx_is_empty(engine_)) wordMode_ = effectiveMode();
+}
+
+void TypingSession::noteReplace(const std::u16string& oldShown, const std::u16string& expect,
+                                const std::u16string& insert) {
+    // A pure insertion has no deletion to drop.
+    if (expect.empty()) droppedSig_.clear();
+    else droppedSig_ = oldShown + insert;
+}
+
+bool TypingSession::screenStale(const std::u16string& before) {
+    auto endsWith = [&](const std::u16string& t) {
+        return before.size() >= t.size() && before.compare(before.size() - t.size(), t.size(), t) == 0;
+    };
+    if (endsWith(shown_)) return false;
+    // The app inserted our replacement but kept what it should have deleted ("the" + e ->
+    // "theê"): Chromium's views::Textfield (Chrome/Edge address bar) applies TSF's
+    // ExtendSelectionAndDelete to its REVERSED inline-autocomplete selection, so the
+    // delete lands inside the suggestion. Nothing typed in place can be trusted here.
+    if (!droppedSig_.empty() && endsWith(droppedSig_)) {
+        if (!preferComposition_ && opt_.log)
+            opt_.log("in-place: the app dropped the deletion of a replace -> composition for this field");
+        preferComposition_ = true;
+    }
+    return true;
+}
+
+void TypingSession::verifyScreen(TextSink& sink) {
+    if (!wordActive() || wordMode_ != OutputMode::InPlace || sink.blind()) return;
+    const size_t want = shown_.size() > droppedSig_.size() ? shown_.size() : droppedSig_.size();
+    if (screenStale(sink.textBeforeCaret(static_cast<int>(want)))) reset();
+}
+
 void TypingSession::resetContext() {
     reset();
     contextFallback_ = false;
     compositionOnly_ = false;
+    preferComposition_ = false;
     if (engine_) vtx_reset_context(engine_);
 }
 
@@ -184,8 +221,9 @@ bool TypingSession::handleWordKey(char32_t c, TextSink& sink) {
         if (wordMode_ == OutputMode::Composition) {
             stale = !sink.compositionActive();
         } else {
-            const std::u16string before = sink.textBeforeCaret(static_cast<int>(shown_.size()));
-            stale = before != shown_;
+            const size_t want = shown_.size() > droppedSig_.size() ? shown_.size() : droppedSig_.size();
+            const std::u16string before = sink.textBeforeCaret(static_cast<int>(want));
+            stale = screenStale(before);
             // NOTHING before the caret although we just let letters through: the store
             // does not show the app's text (IMM/CUAS hosts like mintty, xterm.js'
             // hidden textarea, consoles not flagged as such). In-place can never work
@@ -195,6 +233,7 @@ bool TypingSession::handleWordKey(char32_t c, TextSink& sink) {
         }
         if (stale) reset();
     }
+    droppedSig_.clear();
     if (vtx_is_empty(engine_)) {
         wordMode_ = effectiveMode();
         if (wordMode_ == OutputMode::InPlace && !sink.blind() && !sink.canReadContext()) {
@@ -250,6 +289,7 @@ bool TypingSession::handleWordKey(char32_t c, TextSink& sink) {
         reset();
         return false;
     }
+    noteReplace(shown_, expect, actionInsert(a));
     shown_ = now;
     return true;
 }
@@ -291,6 +331,7 @@ bool TypingSession::tryReEdit(char32_t c, TextSink& sink) {
     } else if (a.kind == VTX_REPLACE) {
         std::u16string expect;
         ok = tailOf(word, a.backspaces, expect) && sink.replaceBeforeCaret(expect, actionInsert(a));
+        if (ok) noteReplace(word, expect, actionInsert(a));
     } else {
         ok = true;  // VTX_NONE: consumed
     }
@@ -316,6 +357,7 @@ bool TypingSession::handleBackspace(TextSink& sink) {
         return false;
     }
     reopenArmed_ = false;
+    droppedSig_.clear();
     if ((comp && !sink.compositionActive()) || (!comp && sink.hasSelection())) {
         reset();
         return false;
@@ -356,6 +398,7 @@ bool TypingSession::handleBackspace(TextSink& sink) {
         reset();
         return false;
     }
+    noteReplace(shown_, expect, actionInsert(a));
     shown_ = now;
     if (shown_.empty()) reset();
     return true;

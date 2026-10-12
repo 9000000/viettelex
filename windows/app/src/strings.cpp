@@ -296,6 +296,14 @@ const Pair kStrings[] = {
      L"Mở tệp trong UniKey rồi lưu lại để có bản UTF-8.",
      L"An old UniKey file (VIQR encoding, no “version=1” line): accented letters were not converted, e.g. "
      L"“Vie^.t”. Open it in UniKey and save it again to get a UTF-8 file."},
+
+    // Default input method
+    {L"Bộ gõ mặc định của Windows", L"Windows default input method"},
+    {L"Windows đang mở ứng dụng mới bằng bàn phím khác, nên phải Win+Space về VietTelex trước khi phím chuyển "
+     L"Việt/Anh dùng được. Đặt VietTelex làm mặc định để ứng dụng mới mở ra là gõ được ngay.",
+     L"Windows opens new apps with another keyboard, so you need Win+Space back to VietTelex before the switch "
+     L"key works. Make VietTelex the default so new apps are ready to type."},
+    {L"Đặt làm mặc định", L"Make default"},
 };
 static_assert(sizeof(kStrings) / sizeof(kStrings[0]) == static_cast<size_t>(S::Count), "string table size");
 }  // namespace

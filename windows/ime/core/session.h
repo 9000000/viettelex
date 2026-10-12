@@ -112,6 +112,19 @@ public:
     // after each focus change; cleared by resetContext().
     void setCompositionOnlyContext(bool on);
     bool compositionOnlyContext() const { return compositionOnly_; }
+    // In-place is unsafe in this field although its text reads fine: compose (re-edit and
+    // ⌫ re-open stay on). Set by the TIP for a Chromium omnibox (app_policy.h
+    // fieldPrefersComposition), or by the session itself when the app dropped the deletion
+    // half of a replace (verifyScreen). Unlike contextFellBack() it never asks for the
+    // hook: Direct's backspace-retype races the omnibox autocomplete (macOS 1.4.14).
+    // Cleared by resetContext().
+    void setPreferComposition(bool on);
+    bool prefersComposition() const { return preferComposition_; }
+    // In-place word in progress, something changed the field (OnEndEdit): keep the word
+    // only if the text before the caret still ends with it. Recognises the "deletion
+    // dropped" signature (screen = word before the replace + inserted text) and switches
+    // this field to composition (setPreferComposition).
+    void verifyScreen(TextSink& sink);
     OutputMode wordMode() const { return wordMode_; }
     // The word the LAST handleKey committed at a printable boundary: its raw keys and the
     // text left on screen (auto-restore applied). Empty after any other key, after a
@@ -137,9 +150,17 @@ private:
     OutputMode wordMode_ = OutputMode::InPlace;   // mode of the word in progress
     bool contextFallback_ = false;
     bool compositionOnly_ = false;
+    bool preferComposition_ = false;
+    // After an in-place replace: what the screen shows if the app inserted our text but
+    // dropped the deletion (Chromium omnibox, 2026-10 field report "theêz"). Empty = none.
+    std::u16string droppedSig_;
     OutputMode effectiveMode() const {
-        return (contextFallback_ || compositionOnly_) ? OutputMode::Composition : mode_;
+        return (contextFallback_ || compositionOnly_ || preferComposition_) ? OutputMode::Composition : mode_;
     }
+    // True when `before` (text before the caret) is NOT the word on screen; detects the
+    // dropped-deletion signature on the way (-> setPreferComposition).
+    bool screenStale(const std::u16string& before);
+    void noteReplace(const std::u16string& oldShown, const std::u16string& expect, const std::u16string& insert);
     bool mayReadBack() const { return opt_.reEditWord && !compositionOnly_; }
     void fallBack(const char* why);
     SessionOptions opt_;
