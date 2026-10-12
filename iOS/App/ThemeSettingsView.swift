@@ -149,9 +149,9 @@ struct ThemeSettingsView: View {
                         Text(rowHeightAdjust == 0
                              ? L("Chuẩn")
                              : String(format: L("%+d pt mỗi hàng (%+d pt cả bàn phím)"),
-                                      // hàng số cao ¾ hàng chữ ⇒ tổng ×4,75 khi bật
+                                      // phím số = 0.8× phím chữ ⇒ tổng ×4,8 khi bật hàng số
                                       rowHeightAdjust,
-                                      Int((Double(rowHeightAdjust) * (numberRow ? 4.75 : 4)).rounded())))
+                                      Int((Double(rowHeightAdjust) * (numberRow ? 4 + Double(KeyGeometry.numberKeyRatio) : 4)).rounded())))
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }

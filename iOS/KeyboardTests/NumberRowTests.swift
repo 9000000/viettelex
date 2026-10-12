@@ -2,7 +2,8 @@ import XCTest
 import UIKit
 
 /// Hàng phím số tuỳ chọn (27/09/2026, người dùng Laban than thiếu hàng số):
-/// plane chữ có thêm 1…0 ở trên cùng, thấp 0.75× hàng chữ; plane số giữ 4 hàng.
+/// plane chữ có thêm 1…0 ở trên cùng, PHÍM số 0.8× phím chữ (12/10/2026 — trước 0.75× cả
+/// hàng kể khe ⇒ phím số 69% phím chữ, tester 1.2.8 "nhỏ quá, không cân đối"); plane số giữ 4 hàng.
 final class NumberRowTests: XCTestCase {
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
     private var trim: CGFloat { KeyGeometry.bottomRowTrim(pad: isPad, landscape: false) }
@@ -25,7 +26,7 @@ final class NumberRowTests: XCTestCase {
         let rows = kb.debugRowFrames()
         XCTAssertEqual(rows.count, 5, file: file, line: line)
         guard rows.count == 5 else { return }
-        XCTAssertEqual(rows[0].height, rows[1].height * KeyLayout.numberRowRatio,
+        XCTAssertEqual(rows[0].height, KeyLayout.numberRowHeight(unit: rows[1].height),
                        accuracy: 0.5, file: file, line: line)
         for r in rows[2..<4] {
             XCTAssertEqual(r.height, rows[1].height, accuracy: 0.5, file: file, line: line)
@@ -42,15 +43,36 @@ final class NumberRowTests: XCTestCase {
         let f = kb.convert(one.bounds, from: one)
         XCTAssertEqual(f.midX, q.midX, accuracy: 0.5, "1 thẳng cột q", file: file, line: line)
         XCTAssertEqual(f.width, q.width, accuracy: 0.5, file: file, line: line)
+        // Phím số (không tính khe) = 0.8× phím chữ — cân đối, không còn "nhỏ quá".
+        XCTAssertEqual(f.height, q.height * KeyLayout.numberKeyRatio, accuracy: 0.75, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(f.height / q.height, 0.78, file: file, line: line)
     }
 
-    func testKeyAreaHeightAddsThreeQuartersOfARow() {
-        XCTAssertEqual(KeyLayout.keyAreaHeight(base: 218, adjust: 0, numberRow: false), 218)
-        XCTAssertEqual(KeyLayout.keyAreaHeight(base: 218, adjust: 0, numberRow: true),
-                       218 + 218 / 4 * 0.75, accuracy: 0.001)
-        // chỉnh ±pt mỗi hàng: hàng số ăn 0.75 phần
+    func testKeyAreaHeightAddsANumberRowOfEightyPercentKeys() {
+        let gap = KeyGeometry.rowGap
+        XCTAssertEqual(KeyLayout.keyAreaHeight(base: 216, adjust: 0, numberRow: false), 216)
+        // dọc: hàng 54 = khe 10 + phím 44 ⇒ hàng số = 10 + 0.8 × 44 = 45.2
+        XCTAssertEqual(KeyLayout.numberRowHeight(unit: 54), 45.2, accuracy: 0.001)
+        XCTAssertEqual(KeyLayout.keyAreaHeight(base: 216, adjust: 0, numberRow: true),
+                       216 + 45.2, accuracy: 0.001)
+        // chỉnh ±pt mỗi hàng: hàng số ăn 0.8 phần
         XCTAssertEqual(KeyLayout.keyAreaHeight(base: 240, adjust: 5, numberRow: true),
-                       (240 + 20) / 4 * 4.75, accuracy: 0.001)
+                       260 + gap + 0.8 * (65 - gap), accuracy: 0.001)
+        // rowUnit là nghịch đảo của keyAreaHeight (máy gập / ngang / iPad / chỉnh hàng)
+        for base: CGFloat in [162, 208, 216, 240, 280] {
+            for adj: CGFloat in [-10, 0, 10] {
+                for nr in [false, true] {
+                    let area = KeyLayout.keyAreaHeight(base: base, adjust: adj, numberRow: nr)
+                    XCTAssertEqual(KeyLayout.rowUnit(keyArea: area, numberRow: nr), (base + 4 * adj) / 4,
+                                   accuracy: 0.001, "base=\(base) adj=\(adj) nr=\(nr)")
+                }
+            }
+        }
+        // Mọi chiều cao hàng thực tế (ngang 162/4 … iPad): phím số = 0.8 × phím chữ.
+        for unit: CGFloat in [36, 40.5, 52, 54, 60, 70] {
+            let numKey = KeyLayout.numberRowHeight(unit: unit) - gap
+            XCTAssertEqual(numKey / (unit - gap), 0.8, accuracy: 0.001, "unit=\(unit)")
+        }
     }
 
     @MainActor func testOffByDefaultKeepsFourEqualRows() {

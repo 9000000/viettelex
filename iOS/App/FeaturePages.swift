@@ -120,6 +120,7 @@ struct FeatureSearchEntry: Identifiable {
             .init(viTitle: LK("Giữ phím ra ký tự đặc biệt"), keywords: "ký hiệu symbol @ # giữ lâu", page: .phim),
             .init(viTitle: LK("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh"), keywords: "space ngôn ngữ english language", page: .phim),
             .init(viTitle: LK("Phóng to chữ khi bấm"), keywords: "key preview popup", page: .phim),
+            .init(viTitle: LK("Phím sẫm khi bấm"), keywords: "pressed key highlight", page: .phim),
             .init(viTitle: LK("Rung phím"), keywords: "haptic rung vibrate", page: .phim),
             .init(viTitle: LK("Âm thanh phím"), keywords: "sound click tiếng âm lượng volume kiểu style gỗ cơ máy chữ bong bóng custom", page: .phim),
             .init(viTitle: LK("Theme & ảnh nền"), keywords: "theme màu chủ đề wallpaper hình nền", page: .giaoDien),
@@ -506,6 +507,8 @@ struct PhimPage: View {
     @AppStorage("oneHandMode", store: featureDefaults) private var oneHandMode = "off"
     /// Ô phóng to chữ khi bấm phím — mặc định BẬT (KeyboardView.keyPreviewKey).
     @AppStorage("keyPreviewEnabled", store: featureDefaults) private var keyPreview = true
+    /// Phím sẫm khi bấm (KeyboardView.keyPressHighlightKey) — mặc định = keyPressHighlightDefault.
+    @AppStorage("keyPressHighlight", store: featureDefaults) private var keyPressHighlight = true
     @AppStorage("hapticFeedback", store: featureDefaults) private var hapticFeedback = false
     @AppStorage("hapticStrength", store: featureDefaults) private var hapticStrength = 45
     @AppStorage("keySound", store: featureDefaults) private var keySound = false
@@ -524,7 +527,7 @@ struct PhimPage: View {
     var body: some View {
         FeaturePageList(page: .phim) {
             Section {
-                settingToggle(L("Hàng phím số"), L("Thêm hàng 1 … 0 trên hàng chữ (bàn phím cao thêm ~¾ hàng)."), isOn: $numberRow)
+                settingToggle(L("Hàng phím số"), L("Thêm hàng 1 … 0 trên hàng chữ (bàn phím cao thêm gần một hàng)."), isOn: $numberRow)
                 // iPad có ký tự phụ vuốt xuống riêng ⇒ chỉ iPhone.
                 if isPhone {
                     if !numberRow {
@@ -546,13 +549,14 @@ struct PhimPage: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        Text(L("Thu hẹp bàn phím về một bên. Giữ lâu nút ☰ trên thanh gợi ý để bật/tắt nhanh."))
+                        Text(L("Thu hẹp bàn phím về một bên. Giữ lâu nút ☰ trên thanh gợi ý để bật/tắt nhanh; khi tắt Mẫu câu, nút đó thành nút một tay (chạm để bật/tắt)."))
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
             } header: { Text(L("Cử chỉ")) }
             Section {
                 settingToggle(L("Phóng to chữ khi bấm"), L("Ô chữ lớn nổi trên phím vừa chạm. Tắt cho gọn, nhẹ máy."), isOn: $keyPreview)
+                settingToggle(L("Phím sẫm khi bấm"), L("Phím đổi màu trong lúc chạm như bàn phím iPhone, kể cả khi tắt phóng to chữ."), isOn: $keyPressHighlight)
                 settingToggle(L("Rung phím"), L("Rung nhẹ mỗi lần chạm phím."), isOn: $hapticFeedback)
                 if hapticFeedback {
                     VStack(alignment: .leading, spacing: 4) {
