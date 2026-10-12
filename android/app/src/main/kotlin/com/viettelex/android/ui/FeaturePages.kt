@@ -110,6 +110,7 @@ internal data class FeatureSearchEntry(val viTitle: String, val keywords: String
             FeatureSearchEntry("Chế độ một tay", "one hand một tay", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Bàn phím thả nổi", "floating nổi kéo di chuyển float", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Phóng to chữ khi bấm", "key preview popup", FeaturePage.Phim), // l10n-key
+            FeatureSearchEntry("Phím sẫm khi bấm", "pressed key highlight darken", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Rung phím", "haptic rung vibrate", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Âm thanh phím", "sound click tiếng âm lượng volume kiểu style gỗ cơ máy chữ bong bóng custom", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Telex cho bàn phím cứng", "bluetooth usb dex chromebook hardware", FeaturePage.Phim), // l10n-key
@@ -472,7 +473,7 @@ private fun PhimPage(onBack: () -> Unit) {
     SubPageHeader(FeaturePage.Phim.title, onBack)
     val numberRow by rememberBoolPref(Keys.NUMBER_ROW, Prefs.D.numberRow)
     VTSection(header = tr("Phím")) {
-        BoolToggle(Keys.NUMBER_ROW, Prefs.D.numberRow, tr("Hàng phím số"), tr("Thêm hàng 1 … 0 trên hàng chữ (bàn phím cao thêm ~¾ hàng)."))
+        BoolToggle(Keys.NUMBER_ROW, Prefs.D.numberRow, tr("Hàng phím số"), tr("Thêm hàng 1 … 0 trên hàng chữ (bàn phím cao thêm gần một hàng)."))
         RowDivider()
         // Hàng số bật ⇒ giữ q…p ra số vô nghĩa (KeyAlternates.numbersSettingVisible).
         if (KeyAlternates.numbersSettingVisible(numberRow)) {
@@ -499,6 +500,9 @@ private fun PhimPage(onBack: () -> Unit) {
     }
     VTSection(header = tr("Phản hồi khi chạm")) {
         BoolToggle(Keys.KEY_PREVIEW, Prefs.D.keyPreview, tr("Phóng to chữ khi bấm"), tr("Ô chữ lớn nổi trên phím vừa chạm. Tắt nếu thấy rối mắt."))
+        RowDivider()
+        BoolToggle(Keys.KEY_PRESS_HIGHLIGHT, Prefs.D.keyPressHighlight, tr("Phím sẫm khi bấm"),
+            tr("Phím đổi màu trong lúc chạm, kể cả khi tắt phóng to chữ."))
         RowDivider()
         BoolToggle(Keys.HAPTIC_FEEDBACK, Prefs.D.hapticFeedback, tr("Rung phím"), tr("Rung nhẹ mỗi lần chạm phím."))
         HapticStrengthRow()

@@ -69,6 +69,14 @@ class SettingsRegressionTests {
         assertFalse(KeyboardSettings.load { if (it == Keys.KEY_PREVIEW) false else null }.keyPreview)
     }
 
+    /** Phím sẫm khi bấm: mặc định BẬT (như iOS), key trùng tên iOS, tắt được. */
+    @Test fun testKeyPressHighlightDefaultOnAndLoads() {
+        assertEquals("keyPressHighlight", Keys.KEY_PRESS_HIGHLIGHT)
+        assertTrue(KeyboardSettings().keyPressHighlight)
+        assertTrue(KeyboardSettings.load { null }.keyPressHighlight)
+        assertFalse(KeyboardSettings.load { if (it == Keys.KEY_PRESS_HIGHLIGHT) false else null }.keyPressHighlight)
+    }
+
     @Test fun testOneHandModeDefaultOffAndValidated() {
         assertEquals("off", KeyboardSettings.load { null }.oneHandMode)
         assertEquals("left", KeyboardSettings.load { if (it == Keys.ONE_HAND_MODE) "left" else null }.oneHandMode)

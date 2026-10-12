@@ -347,6 +347,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             th.dp(KeyLayout.keyAreaDp(th.tablet, th.landscape, settings.rowHeightAdjust, settings.numberRow)),
             field.numberSigned, field.numberDecimal, settings.numberRow, settings.showPeriodKey)
         kb.keyPreview = settings.keyPreview
+        kb.keyPressHighlight = settings.keyPressHighlight
         kb.configureSpaceFlick(settings.spaceSwipeLanguage, session.language)
         if (session.language == com.viettelex.keyboard.KeyboardLanguage.EN) warmEnglish()
         kb.textToolsEnabled = PlusGate.isUnlocked(PlusFeature.TEXT_TOOLS) && !field.isSecure
