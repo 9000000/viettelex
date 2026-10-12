@@ -120,6 +120,15 @@ public:
     // Cleared by resetContext().
     void setPreferComposition(bool on);
     bool prefersComposition() const { return preferComposition_; }
+    // The store mirrors the app ASYNCHRONOUSLY (Chromium's TSFTextStore: Chrome, Edge,
+    // Electron, WebView2 — the transitory contexts classifyContext keeps Normal): what it
+    // shows can be renderer round trips behind the page, while an in-place edit lands at
+    // the page's caret. In such a store a stale view never seeds an edit (the key goes
+    // through as typed and the field composes), failures never hand the field to the hook
+    // (fallBack -> preferComposition), and re-edit (seeded from the view) is off. Set by
+    // the TIP at each word start; cleared by resetContext().
+    void setAsyncStore(bool on) { asyncStore_ = on; }
+    bool asyncStore() const { return asyncStore_; }
     // In-place word in progress, something changed the field (OnEndEdit): keep the word
     // only if the text before the caret still ends with it. Recognises the "deletion
     // dropped" signature (screen = word before the replace + inserted text) and switches
@@ -151,6 +160,7 @@ private:
     bool contextFallback_ = false;
     bool compositionOnly_ = false;
     bool preferComposition_ = false;
+    bool asyncStore_ = false;
     // After an in-place replace: what the screen shows if the app inserted our text but
     // dropped the deletion (Chromium omnibox, 2026-10 field report "theêz"). Empty = none.
     std::u16string droppedSig_;
@@ -162,6 +172,9 @@ private:
     bool screenStale(const std::u16string& before);
     void noteReplace(const std::u16string& oldShown, const std::u16string& expect, const std::u16string& insert);
     bool mayReadBack() const { return opt_.reEditWord && !compositionOnly_; }
+    // Re-edit seeds a word from the text before the caret; an async store may show it
+    // without the keys still in flight (model of the 2026-10 report: "tuwf" -> "tuưf").
+    bool mayReEdit() const { return mayReadBack() && !asyncStore_; }
     void fallBack(const char* why);
     SessionOptions opt_;
     std::u16string shown_;     // what the current word looks like on screen

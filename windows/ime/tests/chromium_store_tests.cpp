@@ -1,0 +1,219 @@
+// Field report 2026-10 (Windows, Messenger/Facebook in a Chromium browser): Telex
+// "hai chuwowng trinhf hocj AI tuwf lowps 1" came out "ại chương tình ọc AI ừ óp 1" —
+// letters gone. These tests drive the real session over a model of Chromium's TSF store
+// (chromium_store.h: a cache that lags the page; edits land at the page's caret).
+//
+// Before the fix, the same model typed e.g. "hai chuưowng triìn hoọ AI tuừ loưps 1"
+// (letters deleted / misplaced) in ~40% of random report schedules, and with a steady lag
+// the field "fell back" — which hands it to VietTelex.exe's hook (blind backspace+retype).
+#include "chromium_store.h"
+#include "session.h"
+#include "settings.h"
+#include "test.h"
+
+using namespace vtx;
+using vtx::test::ChromiumLaggingStore;
+
+namespace {
+
+constexpr const char* kReport = "hai chuwowng trinhf hocj AI tuwf lowps 1";
+constexpr const char* kWant = "hai chương trình học AI từ lớp 1";
+
+struct ChromeRig {
+    Settings settings;
+    TypingSession s;
+    ChromiumLaggingStore doc;
+    // Every n-th key the browser refuses the synchronous edit session (0 = never):
+    // TextService::OnKeyDown then resets the word and lets the key through.
+    int refuseEvery = 0;
+    int keys = 0;
+    explicit ChromeRig(int lag) {
+        s.setOutputMode(OutputMode::InPlace);
+        SessionOptions o;
+        o.engineFlags = settings.engineFlags();
+        o.autoRestore = settings.autoRestore;
+        o.reEditWord = settings.reEditWord;
+        o.shortcuts = &settings.shortcuts;
+        s.configure(o);
+        s.setAsyncStore(true);  // what the TIP says for a Chromium (transitory) context
+        doc.lag = lag;
+    }
+    void key(char c) {
+        KeyInput k;
+        k.kind = KeyKind::Char;
+        k.ch = static_cast<unsigned char>(c);
+        ++keys;
+        bool eaten = false;
+        if (s.wantsKey(k)) {
+            // (A store refuses a synchronous lock while it holds one — not mid-composition
+            // in this model.)
+            if (refuseEvery && keys % refuseEvery == 0 && !doc.comp) s.reset();
+            else eaten = s.handleKey(k, doc);
+        }
+        if (!eaten) {
+            CHECK(!doc.comp);  // a key reaching the app never finds our composition open
+            doc.appInsert(static_cast<char16_t>(c));
+        }
+        report();
+    }
+    // A renderer report; OnEndEdit (outside a composition) re-checks an in-place word.
+    void report() {
+        if (doc.report() && !doc.comp) s.verifyScreen(doc);
+    }
+    std::string type(const char* p) {
+        for (; *p; ++p) key(*p);
+        return utf16ToUtf8(doc.page.text);
+    }
+};
+
+// Letters a reader sees: lower-case, diacritics stripped, Telex modifier keys dropped
+// (a word that came out unaccented, "chuwowng", still holds every letter of "chương").
+std::u16string letters(const std::u16string& s) {
+    static const char16_t* const kFrom =
+        u"àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ";
+    static const char16_t* const kTo =
+        u"aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd";
+    std::u16string out;
+    for (char16_t c : s) {
+        if (c >= u'A' && c <= u'Z') c = static_cast<char16_t>(c - u'A' + u'a');
+        for (size_t i = 0; kFrom[i]; ++i)
+            if (kFrom[i] == c) { c = kTo[i]; break; }
+        if (c == u'w' || c == u'f' || c == u's' || c == u'r' || c == u'x' || c == u'j' || c == u'z') continue;
+        out += c;
+    }
+    return out;
+}
+
+// Every letter of `want` is still on the page, in order (extra ones allowed).
+bool noLetterLost(const std::u16string& page, const char* want) {
+    const std::u16string a = letters(page), b = letters(utf8ToUtf16(want));
+    size_t i = 0;
+    for (char16_t c : a)
+        if (i < b.size() && c == b[i]) ++i;
+    return i == b.size();
+}
+
+}  // namespace
+
+TEST(chromium_store_without_lag_types_in_place) {
+    ChromeRig r(0);
+    CHECK_EQ(r.type(kReport), std::string(kWant));
+    CHECK(r.s.wordMode() == OutputMode::InPlace);
+    CHECK(!r.s.prefersComposition());
+}
+
+TEST(chromium_store_steady_lag_types_the_report_intact) {
+    for (int lag = 1; lag <= 4; ++lag) {
+        ChromeRig r(lag);
+        CHECK_EQ(r.type(kReport), std::string(kWant));
+        CHECK(r.s.prefersComposition());  // the field composes once the lag shows
+        CHECK(!r.s.contextFellBack());     // ... and is never handed to the hook
+    }
+}
+
+TEST(chromium_store_bursty_reports_type_the_report_intact) {
+    // A busy page (React/Lexical): reports arrive only every k keys, then catch up.
+    for (int k = 2; k <= 5; ++k) {
+        for (int phase = 0; phase < k; ++phase) {
+            ChromeRig r(1000);
+            int i = 0;
+            for (const char* p = kReport; *p; ++p, ++i) {
+                r.key(*p);
+                if ((i + phase) % k == 0) {
+                    r.doc.catchUp();
+                    if (!r.doc.comp) r.s.verifyScreen(r.doc);
+                }
+            }
+            CHECK_EQ(utf16ToUtf8(r.doc.page.text), std::string(kWant));
+            CHECK(!r.s.contextFellBack());
+        }
+    }
+}
+
+TEST(chromium_store_random_reports_and_refusals_never_lose_a_letter) {
+    // Random report timing (sometimes a stale-but-newer state, sometimes a full catch-up)
+    // and, for some runs, every 5th edit session refused. Accents may be missing on a
+    // word typed while the store lagged; no typed letter may ever be lost or reordered.
+    int intact = 0;
+    for (unsigned seed = 1; seed <= 2000; ++seed) {
+        ChromeRig r(1000);
+        r.refuseEvery = seed % 7 == 0 ? 5 : 0;
+        unsigned x = seed;
+        for (const char* p = kReport; *p; ++p) {
+            r.key(*p);
+            x = x * 1103515245u + 12345u;
+            const unsigned m = (x >> 16) % 4;
+            if (m == 0) {
+                r.doc.catchUp();
+                if (!r.doc.comp) r.s.verifyScreen(r.doc);
+            } else if (m == 1) {
+                r.doc.lag = static_cast<int>((x >> 20) % 3);
+                r.report();
+                r.doc.lag = 1000;
+            }
+        }
+        const bool ok = noLetterLost(r.doc.page.text, kWant);
+        if (!ok) std::printf("  seed %u: %s\n", seed, utf16ToUtf8(r.doc.page.text).c_str());
+        CHECK(ok);
+        CHECK(!r.s.contextFellBack());
+        if (utf16ToUtf8(r.doc.page.text) == kWant) ++intact;
+    }
+    CHECK(intact > 1500);  // most schedules: the whole sentence, accents included
+}
+
+TEST(chromium_store_stale_view_keeps_the_word_until_the_next_key) {
+    // A report older than our last edit ("tu" while we typed "tư") is lag, not a change.
+    ChromeRig r(1000);
+    r.type("tu");
+    r.doc.catchUp();
+    r.key('w');
+    CHECK_EQ(utf16ToUtf8(r.doc.page.text), std::string("tư"));
+    r.doc.view = r.doc.history[2];  // the page after "tu", before our edit
+    r.s.verifyScreen(r.doc);
+    CHECK(r.s.wordActive());
+    r.doc.catchUp();
+    r.type("f ");
+    CHECK_EQ(utf16ToUtf8(r.doc.page.text), std::string("từ "));
+}
+
+TEST(chromium_store_edit_key_on_a_stale_view_goes_through_as_typed) {
+    // The view still lacks the "u" when "w" needs to edit it: an edit from that view would
+    // land at the page's caret and eat the wrong letter. The key goes through instead.
+    ChromeRig r(1000);
+    r.type("tu");
+    r.key('w');
+    CHECK_EQ(utf16ToUtf8(r.doc.page.text), std::string("tuw"));
+    CHECK(r.s.prefersComposition());
+    CHECK(!r.s.contextFellBack());
+    r.doc.catchUp();
+    r.type(" lowps ");
+    CHECK_EQ(utf16ToUtf8(r.doc.page.text), std::string("tuw lớp "));
+    CHECK(r.s.wordMode() == OutputMode::Composition);
+}
+
+TEST(chromium_store_failures_never_hand_the_field_to_the_hook) {
+    // TextService::OnKeyDown asks VietTelex.exe's hook to type a field whose in-place
+    // edits failed (contextFellBack). In a browser that is the wrong cure: compose.
+    ChromeRig r(1000);
+    r.type("h");  // the view shows nothing yet: a lagging page, not an unreadable field
+    r.type("ai ");
+    CHECK(!r.s.contextFellBack());
+    CHECK(r.s.prefersComposition());
+    CHECK_EQ(utf16ToUtf8(r.doc.page.text), std::string("hai "));
+}
+
+TEST(chromium_store_turns_reedit_off) {
+    // Re-edit seeds the word from the view; in an async store the view may lack the
+    // boundary just typed (" " still in flight) and the edit would hit the page's caret.
+    for (int async = 0; async < 2; ++async) {
+        ChromeRig r(0);
+        r.s.setAsyncStore(async != 0);
+        r.type("viet");
+        r.s.reset();  // e.g. the caret was clicked back to the end of the word
+        r.key('j');
+        CHECK_EQ(utf16ToUtf8(r.doc.page.text), std::string(async ? "vietj" : "viẹt"));
+    }
+    ChromeRig r(0);
+    r.s.resetContext();
+    CHECK(!r.s.asyncStore());  // a new field is evaluated afresh by the TIP
+}

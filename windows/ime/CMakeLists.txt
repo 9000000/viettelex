@@ -29,6 +29,7 @@ if(VTX_IME_TESTS)
   add_executable(vtx_ime_tests
     tests/test_main.cpp
     tests/caret_hints_tests.cpp
+    tests/chromium_store_tests.cpp
     tests/core_tests.cpp
     tests/session_tests.cpp)
   target_include_directories(vtx_ime_tests PRIVATE tests)
