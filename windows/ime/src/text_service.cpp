@@ -1,5 +1,6 @@
 #include "text_service.h"
 
+#include <cstdio>
 #include <new>
 
 #include "config.h"
@@ -803,6 +804,64 @@ bool TextService::prepareKey(WPARAM wp, bool down, KeyInput& out) {
     return true;
 }
 
+// (#121) Keys we let through are typed by the app with the thread's keyboard layout. When
+// that is the stock Vietnamese layout instead of the profile's US substitute, the number
+// row types ă â ê ô ̀ ̉ ̃ ́ ̣ đ: eat such a key and type its US character ourselves.
+// Nothing changes for a key the layout types like US (one cached lookup per key).
+bool TextService::retypeAsUs(ITfContext* ctx, WPARAM wp, bool inject) {
+    const uint32_t vkey = static_cast<uint32_t>(wp);
+    if (!ctx || vkey > 0xFF || isModifierVk(vkey)) return false;
+    Modifiers m;
+    m.shift = keyDown(VK_SHIFT);
+    m.ctrl = keyDown(VK_CONTROL);
+    m.alt = keyDown(VK_MENU);
+    m.win = keyDown(VK_LWIN) || keyDown(VK_RWIN);
+    m.capsLock = (GetKeyState(VK_CAPITAL) & 1) != 0;
+    const KeyInput k = classifyKey(vkey, m);
+    if (k.kind != KeyKind::Char || k.ch > 0xFFFF) return false;
+    const HKL hkl = GetKeyboardLayout(0);
+    const uintptr_t h = reinterpret_cast<uintptr_t>(hkl);
+    if (!isVietnameseHkl(h)) return false;
+    LayoutMatch lm = layoutMatch_.get(h, vkey, m.shift, m.capsLock);
+    if (lm == LayoutMatch::Unknown) {
+        BYTE state[256] = {};
+        if (m.shift) state[VK_SHIFT] = 0x80;
+        if (m.capsLock) state[VK_CAPITAL] = 0x01;
+        WCHAR buf[8] = {};
+        // wFlags bit 2 (0x4): do not change the keyboard state (dead keys) — Win10 1607+.
+        const int n = ToUnicodeEx(vkey, MapVirtualKeyExW(vkey, MAPVK_VK_TO_VSC, hkl), state, buf, 8, 0x4, hkl);
+        lm = layoutTypesUs(k.ch, n, reinterpret_cast<const char16_t*>(buf)) ? LayoutMatch::Same
+                                                                             : LayoutMatch::Differs;
+        layoutMatch_.put(h, vkey, m.shift, m.capsLock, lm);
+        if (lm == LayoutMatch::Differs && layoutLogged_ != h) {
+            layoutLogged_ = h;
+            char msg[160];
+            snprintf(msg, sizeof msg, "keyboard layout %08llX does not type like US: keys let through are retyped (#121)",
+                     static_cast<unsigned long long>(h));
+            config::log(msg);
+        }
+    }
+    if (!shouldRetypeAsUs(k, h, lm)) return false;
+    // Games / fullscreen, apps set to "off" (games, remote desktop), the secure desktop:
+    // keys stay exactly as pressed.
+    if (suspended() || config::appMode() == AppMode::Off || config::secureMode()) return false;
+    // Only into a field that takes text: not a game / canvas, not read-only.
+    if (compartmentFlag(ctx, GUID_COMPARTMENT_KEYBOARD_DISABLED, ~0) ||
+        compartmentFlag(ctx, GUID_COMPARTMENT_EMPTYCONTEXT, ~0))
+        return false;
+    TF_STATUS st = {};
+    if (SUCCEEDED(ctx->GetStatus(&st)) && (st.dwDynamicFlags & TF_SD_READONLY) != 0) return false;
+    if (!inject) return true;
+    INPUT in[2] = {};
+    for (int i = 0; i < 2; ++i) {
+        in[i].type = INPUT_KEYBOARD;
+        in[i].ki.wScan = static_cast<WORD>(k.ch);
+        in[i].ki.dwFlags = KEYEVENTF_UNICODE | (i ? KEYEVENTF_KEYUP : 0);
+        in[i].ki.dwExtraInfo = kInjectedMagic;  // the hook and this TIP let it through
+    }
+    return SendInput(2, in, sizeof(INPUT)) == 2;
+}
+
 STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
     if (!foreground) {
         ++keyGen_;
@@ -818,7 +877,11 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL
     if (!isModifierVk(static_cast<uint32_t>(wp))) ++keyGen_;  // background hint work: "typing on cancels"
     if (hint_ && hintKeyTest(wp, eaten)) return S_OK;         // Tab / Esc while a caret hint shows
     KeyInput k;
-    if (!prepareKey(wp, true, k)) return S_OK;
+    // Every key let through below asks retypeAsUs (#121): eaten here, retyped in OnKeyDown.
+    if (!prepareKey(wp, true, k)) {  // English, modifiers, games...
+        *eaten = retypeAsUs(ctx, wp, false) ? TRUE : FALSE;
+        return S_OK;
+    }
     if (!session_.wordActive()) {
         evaluateHost(ctx);
         // A handed-over field the app since marked NoDirect (or elevated): compose.
@@ -833,16 +896,22 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL
     }
     if (directActive_) {  // the hook types in this field
         noteHintKey(k, ctx, false);
+        *eaten = retypeAsUs(ctx, wp, false) ? TRUE : FALSE;
         return S_OK;
     }
     // No focused context, keyboard disabled (games, canvases), read-only, ANSI window:
-    // never eat a key there (SampleIME _IsKeyboardDisabled).
+    // never eat a key there (SampleIME _IsKeyboardDisabled) — retypeAsUs only takes a
+    // writable, keyboard-enabled context (password / PIN fields included).
     if (host_ == HostText::Ignore || host_ == HostText::Literal) {
         noteHintKey(k, ctx, false);
+        *eaten = retypeAsUs(ctx, wp, false) ? TRUE : FALSE;
         return S_OK;
     }
     *eaten = session_.wantsKey(k) ? TRUE : FALSE;
-    if (!*eaten) noteHintKey(k, keyTarget(ctx), false);  // OnKeyDown will not see this key
+    if (!*eaten) {
+        noteHintKey(k, keyTarget(ctx), false);  // OnKeyDown will not see this key...
+        *eaten = retypeAsUs(ctx, wp, false) ? TRUE : FALSE;  // ...unless it retypes it
+    }
     return S_OK;
 }
 
@@ -869,7 +938,11 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL* ea
         }
     }
     KeyInput k;
-    if (!ctx || !prepareKey(wp, true, k)) return S_OK;
+    if (!ctx) return S_OK;
+    if (!prepareKey(wp, true, k)) {
+        *eaten = retypeAsUs(ctx, wp, true) ? TRUE : FALSE;  // #121
+        return S_OK;
+    }
     if (!session_.wordActive()) {
         evaluateHost(ctx);
         // A handed-over field the app since marked NoDirect (or elevated): compose.
@@ -882,8 +955,10 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL* ea
             config::log("handover acked: the hook types in this field");
         }
     }
-    if (directActive_) return S_OK;  // the hook types in this field
-    if (host_ == HostText::Ignore || host_ == HostText::Literal || !session_.wantsKey(k)) return S_OK;
+    if (directActive_ || host_ == HostText::Ignore || host_ == HostText::Literal || !session_.wantsKey(k)) {
+        *eaten = retypeAsUs(ctx, wp, true) ? TRUE : FALSE;  // #121; else the key goes to the app
+        return S_OK;
+    }
     // Classic Edit/RichEdit: read and edit through the full transitory-extension parent.
     ITfContext* target = (host_ == HostText::NormalViaParent && targetCtx_) ? targetCtx_ : ctx;
     BOOL result = FALSE;
@@ -916,6 +991,8 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL* ea
     // In-place just proved impossible in this field (nothing readable, e.g. xterm.js):
     // hand it to the hook rather than composing with an underline.
     if (session_.contextFellBack() && !result) requestDirect("in-place failed in this field -> direct (hook)");
+    // A digit / punctuation that ended the word goes to the app: in US, not via the layout (#121).
+    if (!result && retypeAsUs(ctx, wp, true)) result = TRUE;
     *eaten = result;
     noteHintKey(k, keyTarget(ctx), hr == S_OK);  // (target may be released by the fallback)
     return S_OK;

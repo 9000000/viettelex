@@ -62,6 +62,11 @@ gen-golden` → port → `ctest` xanh. CI chạy cả ba (Swift, Kotlin, C++).
 
 ### 4.1 Đăng ký
 - CLSID riêng, profile **vi-VN (0x042A)**, tên hiển thị **"Tiếng Việt (VietTelex)"**, icon Vᴛ.
+- Layout thay thế US (`SubstituteLayout = 0x04090409`), nhưng KHÔNG dựa hẳn vào nó (#121): phím
+  TIP để app tự gõ (số, dấu câu, chế độ Anh, Direct) đi qua layout của thread; nếu đó là layout
+  "Vietnamese" gốc (1→ă…) thì TIP nuốt phím và tự gõ ký tự US (SendInput Unicode) — chỉ phím
+  layout gõ khác US, chỉ trong ô nhận chữ, không trong game/app "off"/secure desktop
+  (`keymap.h` `shouldRetypeAsUs`, `TextService::retypeAsUs`).
 - Category: `GUID_TFCAT_TIP_KEYBOARD`, `GUID_TFCAT_TIPCAP_UIELEMENTENABLED`,
   `GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT` (UWP/Store/Start/Search), `GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT`,
   `GUID_TFCAT_TIPCAP_SECUREMODE` (hộp thoại UAC/lock screen: chạy chế độ tối thiểu, không đọc

@@ -6,6 +6,8 @@
 // result never depends on whichever layout Windows would otherwise pair with vi-VN
 // (the stock "Vietnamese" layout puts ă â ê ô on the number row — typing "1" would
 // give "ă"). Same idea as macOS KeyboardLayoutOverride pinning an ASCII layout.
+// Keys the TIP does NOT eat are still typed by the app through the thread's layout: see
+// "Keys the TIP lets through" below (#121: the substitute is not always what you get).
 #pragma once
 #include <cstdint>
 
@@ -58,5 +60,41 @@ inline bool isModifierVk(uint32_t v) {
            v == vk::RShift || v == vk::LControl || v == vk::RControl || v == vk::LMenu ||
            v == vk::RMenu || v == vk::LWin || v == vk::RWin || v == vk::Capital;
 }
+
+// ---- Keys the TIP lets through (#121) ----------------------------------------------
+// Digits, punctuation, English mode, Direct fields...: every key the TIP does not eat is
+// turned into a character by the APP, through the thread's keyboard layout
+// (TranslateMessage / ToUnicode). If that layout is the stock Microsoft "Vietnamese" one
+// (KLID 0000042A) — the profile's US substitute layout not applied, e.g. when the user
+// also has that keyboard under Tiếng Việt — the number row comes out as
+// ă â ê ô ̀ ̉ ̃ ́ ̣ đ. The TIP then eats such a key and types its US-QWERTY character
+// itself. Keys the layout types like US (letters, space, most punctuation) are never
+// touched, so on a US-mapped thread none of this changes anything.
+
+// Does the thread's layout type `us` for this key? `count`/`units` are what
+// ToUnicodeEx(..., flags 0x4) returned: < 0 dead key, 0 nothing, else UTF-16 units.
+bool layoutTypesUs(char32_t us, int count, const char16_t* units);
+
+enum class LayoutMatch : uint8_t { Unknown = 0, Same, Differs };
+
+// layoutTypesUs per (key, Shift, Caps), remembered for the current HKL: one ToUnicodeEx
+// per distinct key, not per keystroke. A different HKL forgets everything.
+class LayoutMatchCache {
+public:
+    LayoutMatch get(uintptr_t hkl, uint32_t vkCode, bool shift, bool capsLock) const;
+    void put(uintptr_t hkl, uint32_t vkCode, bool shift, bool capsLock, LayoutMatch m);
+
+private:
+    uintptr_t hkl_ = 0;
+    LayoutMatch m_[4][256] = {};
+};
+
+// Input language of an HKL (its low word) is Vietnamese (0x042A).
+inline bool isVietnameseHkl(uintptr_t hkl) { return (hkl & 0xFFFF) == 0x042A; }
+
+// Should the TIP type `k` itself (as k.ch) instead of letting the app type it? Only a
+// printable, non-chord key; only under a Vietnamese-language HKL (another language's
+// layout is never second-guessed); only when that layout would type something else.
+bool shouldRetypeAsUs(const KeyInput& k, uintptr_t hkl, LayoutMatch m);
 
 }  // namespace vtx

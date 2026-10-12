@@ -35,6 +35,68 @@ TEST(keymap_us_punctuation_not_vietnamese_layout) {
     CHECK_EQ(classifyKey(vk::Oem4, m).ch, U'{');
 }
 
+// #121: what ToUnicodeEx reports for the number row under the stock "Vietnamese" layout
+// (KLID 0000042A), as in the report: 1..0 -> ă â ê ô, five combining tones, đ.
+static const char16_t kViNumberRow[10] = {u'đ', u'ă', u'â', u'ê', u'ô',
+                                          u'̀', u'̉', u'̃', u'́', u'̣'};  // VK '0'..'9'
+constexpr uintptr_t kHklVietnamese = 0x042A042A;  // vi-VN, Vietnamese layout
+constexpr uintptr_t kHklViSubstUs = 0x0409042A;   // vi-VN on a US layout (substitute applied)
+constexpr uintptr_t kHklUs = 0x04090409;
+
+TEST(layout_types_us) {
+    const char16_t one = u'1', a = u'a';
+    CHECK(layoutTypesUs(U'1', 1, &one));
+    CHECK(layoutTypesUs(U'a', 1, &a));
+    CHECK(!layoutTypesUs(U'1', 1, &kViNumberRow[1]));  // ă
+    CHECK(!layoutTypesUs(U'5', 1, &kViNumberRow[5]));  // combining grave
+    CHECK(!layoutTypesUs(U'1', -1, &one));             // dead key
+    CHECK(!layoutTypesUs(U'1', 0, nullptr));           // layout types nothing
+    const char16_t two[2] = {u'1', u'1'};
+    CHECK(!layoutTypesUs(U'1', 2, two));               // two characters (ligature key)
+    const char16_t pair[2] = {0xD83D, 0xDE00};         // U+1F600 as a surrogate pair
+    CHECK(layoutTypesUs(U'\U0001F600', 2, pair));
+}
+
+TEST(retype_number_row_under_vietnamese_layout) {
+    Modifiers m;
+    for (uint32_t d = 0; d < 10; ++d) {
+        KeyInput k = classifyKey('0' + d, m);
+        LayoutMatch lm = layoutTypesUs(k.ch, 1, &kViNumberRow[d]) ? LayoutMatch::Same : LayoutMatch::Differs;
+        CHECK(shouldRetypeAsUs(k, kHklVietnamese, lm));
+        CHECK_EQ(k.ch, static_cast<char32_t>(U'0' + d));  // ...and what we type is the digit
+    }
+    // A key the Vietnamese layout already types like US is left to the app.
+    const char16_t a = u'a';
+    KeyInput ka = classifyKey('A', m);
+    CHECK(!shouldRetypeAsUs(ka, kHklVietnamese, layoutTypesUs(ka.ch, 1, &a) ? LayoutMatch::Same : LayoutMatch::Differs));
+    // Never before ToUnicodeEx answered, never for another language, never for non-printables.
+    KeyInput k1 = classifyKey('1', m);
+    CHECK(!shouldRetypeAsUs(k1, kHklVietnamese, LayoutMatch::Unknown));
+    CHECK(!shouldRetypeAsUs(k1, kHklUs, LayoutMatch::Differs));
+    CHECK(shouldRetypeAsUs(k1, kHklViSubstUs, LayoutMatch::Differs));
+    CHECK(!shouldRetypeAsUs(classifyKey(vk::Return, m), kHklVietnamese, LayoutMatch::Differs));
+    Modifiers ctrl;
+    ctrl.ctrl = true;  // Ctrl+1 is an app shortcut: the VK goes through untouched
+    CHECK(!shouldRetypeAsUs(classifyKey('1', ctrl), kHklVietnamese, LayoutMatch::Differs));
+    CHECK(isVietnameseHkl(kHklVietnamese) && isVietnameseHkl(kHklViSubstUs) && !isVietnameseHkl(kHklUs));
+}
+
+TEST(layout_match_cache) {
+    LayoutMatchCache c;
+    CHECK(c.get(kHklVietnamese, '1', false, false) == LayoutMatch::Unknown);
+    c.put(kHklVietnamese, '1', false, false, LayoutMatch::Differs);
+    c.put(kHklVietnamese, 'A', true, true, LayoutMatch::Same);
+    CHECK(c.get(kHklVietnamese, '1', false, false) == LayoutMatch::Differs);
+    CHECK(c.get(kHklVietnamese, '1', true, false) == LayoutMatch::Unknown);  // Shift is its own entry
+    CHECK(c.get(kHklVietnamese, 'A', true, true) == LayoutMatch::Same);
+    CHECK(c.get(kHklUs, '1', false, false) == LayoutMatch::Unknown);         // other HKL: not known
+    c.put(kHklUs, '1', false, false, LayoutMatch::Same);                     // switching forgets the old HKL
+    CHECK(c.get(kHklVietnamese, '1', false, false) == LayoutMatch::Unknown);
+    CHECK(c.get(kHklUs, '1', false, false) == LayoutMatch::Same);
+    c.put(kHklUs, 0x1FF, false, false, LayoutMatch::Differs);                // out of range: ignored
+    CHECK(c.get(kHklUs, 0x1FF, false, false) == LayoutMatch::Unknown);
+}
+
 TEST(keymap_kinds) {
     Modifiers m;
     CHECK(classifyKey(vk::Back, m).kind == KeyKind::Backspace);
