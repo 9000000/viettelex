@@ -362,8 +362,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let collapsing = barCollapsed
         if !collapsing { suggestionBar.isHidden = false; suggestionBar.alpha = 0 }
         UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseInOut]) {
-            let strip: CGFloat = collapsing ? 14 : Self.openStrip
-            let c = KeyLayout.chrome(keyArea: self.keyAreaHeight(), strip: strip, mode: self.chromeMode)
+            let strip: CGFloat = collapsing ? 14 : self.openStripNow
+            let c = KeyLayout.chrome(keyArea: self.keyAreaHeight(), strip: strip, mode: self.chromeMode,
+                                     headroom: self.headroomNow)
             self.rowsTopConstraint?.constant = c.rowsTop
             self.heightConstraint?.constant = c.total + self.safeBottom + self.hostFillExtra
             self.suggestionBar.alpha = collapsing ? 0 : 1
@@ -548,7 +549,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         chevronZone.isHidden = !open
         layoutClipboardExtras(stripOpen: open)
         guard open, bounds.width > 0 else { stripZonesKey = nil; return }
-        let strip = max(rowsTopConstraint?.constant ?? Self.openStrip, Self.openStrip)
+        let strip = max(rowsTopConstraint?.constant ?? openStripNow, openStripNow)
         // layoutSubviews chạy cả khi gõ (shift/balloon) — trạng thái không đổi thì khỏi
         // dựng lại ảnh SF Symbol + insets mỗi lượt.
         let key = StripZonesKey(width: bounds.width, strip: strip, templates: templatesActive, ink: palette.barInk,
@@ -700,14 +701,15 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let s = KeyLayout.keyboardSafeBottom(pad: Self.isPad, viewSafeBottom: v)
         if s != safeBottom { safeBottom = s; updateSuggestionChrome() }
     }
-    /// iPhone dọc: hàng đáy thấp hơn 4pt để 3 hàng chữ nằm đúng chỗ stock (KeyGeometry).
-    private var bottomTrim: CGFloat {
-        KeyGeometry.bottomRowTrim(pad: Self.isPad, landscape: isLandscapeNow)
-    }
-    private func keyAreaHeight() -> CGFloat {
+    /// Hình học hàng phím hiện tại (KeyGeometry.RowSpec): bố cục mặc định (+ chỉnh tay ±pt mỗi
+    /// hàng) hoặc preset "Kích thước như bàn phím iPhone" (#119 — bỏ qua chỉnh tay). Thuần + rẻ
+    /// (phoneForm cache theo bounds) — gọi được trên đường layout.
+    var rowSpec: KeyGeometry.RowSpec {
+        let pad = Self.isPad
         let landscape = isLandscapeNow
+        let form: KeyLayout.PhoneForm? = (!pad && bounds.width > 0) ? phoneForm : nil
         let base: CGFloat
-        if UIDevice.current.userInterfaceIdiom == .pad {
+        if pad {
             base = landscape ? 300 : 240
         } else {
             // 216 → 218 (25/09/2026): phím nhỉnh hơn chút; 224 làm cả bàn phím cao
@@ -715,15 +717,43 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             // 218 → 216 − 4 (27/09/2026, đo stock iOS 26/27 — KeyGeometry): bước hàng 54
             // như stock, hàng đáy vùng 50 → 3 hàng chữ trùng vị trí stock tính từ đáy.
             // Máy gập mở: 208 (KeyLayout.phoneKeyAreaBase) thay 162 "ngang" — phím lùn.
-            base = bounds.width > 0 ? KeyLayout.phoneKeyAreaBase(phoneForm)
-                : (landscape ? 162 : KeyGeometry.phonePortraitBase)
+            base = form.map(KeyLayout.phoneKeyAreaBase) ?? (landscape ? 162 : KeyGeometry.phonePortraitBase)
         }
-        return KeyLayout.keyAreaHeight(base: base, adjust: rowHeightAdjust,
-                                       numberRow: numberRowEnabled) - bottomTrim
+        return KeyGeometry.rowSpec(pad: pad, landscape: landscape, unfolded: form == .unfolded,
+                                   width: bounds.width, base: base, adjust: rowHeightAdjust,
+                                   stock: stockSizeSetting, homeButton: !pad && needsGlobe)
     }
+    /// iPhone dọc: hàng đáy thấp hơn 4pt để 3 hàng chữ nằm đúng chỗ stock (KeyGeometry).
+    private var bottomTrim: CGFloat { rowSpec.bottomTrim }
+    private func keyAreaHeight() -> CGFloat { rowSpec.keyArea(numberRow: numberRowEnabled) }
     /// Chiều cao một hàng phím chuẩn (hàng số: KeyLayout.numberRowHeight).
-    private func rowUnitHeight() -> CGFloat {
-        KeyLayout.rowUnit(keyArea: keyAreaHeight() + bottomTrim, numberRow: numberRowEnabled)
+    private func rowUnitHeight() -> CGFloat { rowSpec.unit }
+    /// Lề / khe ngang theo hình học hiện tại (preset ngang: lề 4.33, khe 6.67 như stock).
+    private var sideMarginNow: CGFloat { rowSpec.sideMargin }
+    private var keyGapNow: CGFloat { rowSpec.keyGap }
+
+    /// Preset "Kích thước như bàn phím iPhone" (Giao diện → Bàn phím, App Group
+    /// KeyGeometry.StockSize.settingKey) — đọc MỘT lần mỗi lần hiện (applyAppearance).
+    private(set) var stockSizeSetting = false
+    #if DEBUG
+    func debugSetStockSize(_ on: Bool) {
+        stockSizeSetting = on
+        lastLayoutWidth = -1; setNeedsLayout(); rebuild()
+    }
+    #endif
+    /// Strip gợi ý mở: preset = khoảng từ mép trên tới phím như thanh dự đoán stock (dọc 29:
+    /// 29 + khe 11 = 40 ≈ stock 39.7–40); mặc định 34.
+    private var openStripNow: CGFloat {
+        let spec = rowSpec
+        guard spec.stock else { return Self.openStrip }
+        return KeyGeometry.StockSize.openStrip(width: bounds.width, landscape: isLandscapeNow,
+                                               homeButton: needsGlobe) ?? Self.openStrip
+    }
+    /// Headroom balloon phía trên hàng đầu (KeyLayout.headroom): chỉ chừa khi có thứ cần vẽ
+    /// lên trên phím (ô phóng to / giữ phím ra ký tự phụ). Tắt cả hai ⇒ gợi ý tắt không còn
+    /// dải trống 20pt (#119 "thừa khoảng trắng khi đã tắt các chức năng bổ trợ").
+    private var headroomNow: CGFloat {
+        KeyLayout.headroom(needsBalloon: keyPreviewEnabled || !activeAlts.isEmpty)
     }
 
     // Gắn vào window mới biết interfaceOrientation thật — ép layout lại để
@@ -751,11 +781,12 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // chiều cao strip (chỉ ẩn bar): đổi chiều cao bàn phím khi vào emoji làm host
         // relayout dở dang — dải trống + vạch đè hàng emoji đầu (Telegram, 25/09/2026).
         let strip = KeyLayout.stripHeight(reserved: stripReserved, collapsed: barCollapsed,
-                                          open: Self.openStrip)
+                                          open: openStripNow)
         // Lưới emoji chiếm luôn dải strip (thanh tìm nằm đúng chỗ thanh gợi ý như stock):
         // chỉ dời vùng hàng phím, tổng chiều cao GIỮ NGUYÊN → host không relayout.
         // Tìm emoji: ô tìm thế chỗ strip, phím chữ giữ đủ keyArea (KeyLayout.chrome).
-        let c = KeyLayout.chrome(keyArea: keyAreaHeight(), strip: strip, mode: chromeMode)
+        let c = KeyLayout.chrome(keyArea: keyAreaHeight(), strip: strip, mode: chromeMode,
+                                 headroom: headroomNow)
         if rowsTopConstraint?.constant != c.rowsTop { rowsTopConstraint?.constant = c.rowsTop }
         baseRequestedHeight = c.total + safeBottom
         let total = baseRequestedHeight + hostFillExtra
@@ -772,6 +803,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if !visible || barCollapsed { pasteCard.isHidden = true; notePasteOffer(false) }   // thu gọn / emoji plane
         lastSuggestionSig = ""   // chrome đổi → lượt show kế ghi lại (kể cả thẻ Dán)
         refreshCollapseButton(visible: visible)
+        refreshBarHitInsets()
     }
 
     // Rotation / Split View: indent hàng 2 và chiều cao tính theo bounds THẬT,
@@ -788,14 +820,16 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             // Tách đôi (chỉ khi công tắc bật): xoay / gập-mở đổi bề ngang ⇒ dựng lại theo bề
             // ngang mới (vào/ra kiểu tách, bề rộng phím). Công tắc tắt: không làm gì.
             if splitSetting, splitMode || builtSplit { rebuild() }
+            // Preset stock: xoay đổi khe/lề (dọc 11/6/6.67 ↔ ngang 8/6.67/4.33) ⇒ dựng lại.
+            else if builtGeom != nil, builtGeom != geomSig { rebuild() }
         }
         applyOneHand()
         if let r = indentedRow {
             // Thụt theo bề ngang VÙNG PHÍM (một tay: hẹp hơn view) — hàng 2 đúng nửa phím.
-            let inset = KeyGeometry.indentedMargin(width: keysWidth, margin: Self.sideMargin,
-                                                   gap: Self.keyGap, units: indentedRowInset)
+            let inset = KeyGeometry.indentedMargin(width: keysWidth, margin: sideMarginNow,
+                                                   gap: keyGapNow, units: indentedRowInset)
             if r.layoutMargins.left != inset {
-                r.layoutMargins = UIEdgeInsets(top: KeyGeometry.rowGap, left: inset, bottom: 0, right: inset)
+                r.layoutMargins = UIEdgeInsets(top: rowSpec.gap, left: inset, bottom: 0, right: inset)
             }
         }
         applyBottomTrim()
@@ -810,7 +844,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             let w = Self.stripZoneWidth
             let clipW = clipboardButtonVisible ? Self.clipZoneWidth : 0   // chừa nút 📋
             pasteCard.frame = CGRect(x: w, y: Self.barTopPad, width: max(bounds.width - 2 * w - clipW, 0),
-                                     height: Self.openStrip - Self.barTopPad)
+                                     height: openStripNow - Self.barTopPad)
         }
     }
 
@@ -965,18 +999,29 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         }
     }
 
+    /// Hit-area ô gợi ý nở xuống đúng phần strip còn lại dưới bar 20pt (strip preset 29 ≠ 34 —
+    /// xoay máy đổi strip ⇒ cập nhật, không lấn hàng Q–P).
+    private var barHitStrip: CGFloat = -1
+    private func refreshBarHitInsets() {
+        guard barWired else { return }
+        let strip = openStripNow
+        guard strip != barHitStrip else { return }
+        barHitStrip = strip
+        let barHit = UIEdgeInsets(top: -8, left: -3, bottom: -max(strip - 20 - Self.barTopPad, 0), right: -3)
+        suggestionBar.hitInsets = UIEdgeInsets(top: barHit.top, left: 0, bottom: barHit.bottom, right: 0)
+        for b in slotButtons + emojiButtons { b.hitInsets = barHit }
+    }
+
     private func buildSuggestionPoolIfNeeded() {
         guard !barWired else { return }
         barWired = true
         // Bar 20pt trong strip openStrip → nút nở hit-area xuống ĐÚNG phần còn lại
         // của strip (34−20−4 = 10pt), không lấn hàng Q–P bên dưới.
-        let barHit = UIEdgeInsets(top: -8, left: -3,
-                                  bottom: -(Self.openStrip - 20 - Self.barTopPad), right: -3)
-        suggestionBar.hitInsets = UIEdgeInsets(top: barHit.top, left: 0, bottom: barHit.bottom, right: 0)
+        barHitStrip = -1
+        refreshBarHitInsets()
         for b in slotButtons + emojiButtons {
             b.backgroundColor = .clear
             b.isMultipleTouchEnabled = true
-            b.hitInsets = barHit
             // Chốt payload lúc CHẠM XUỐNG: gợi ý nền về giữa down/up đổi ô thì vẫn chèn
             // đúng chữ đang hiện dưới ngón tay (bug 27/09/2026).
             b.addAction(UIAction { [weak b] _ in b?.downPayload = b?.payload }, for: .touchDown)
@@ -1251,7 +1296,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let showClip = stripOpen && clipboardButtonVisible
         if clipboardButtonVisible || clipZoneMade { clipZone.isHidden = !showClip }
         if showClip, bounds.width > 0 {
-            let strip = max(rowsTopConstraint?.constant ?? Self.openStrip, Self.openStrip)
+            let strip = max(rowsTopConstraint?.constant ?? openStripNow, openStripNow)
             let w = Self.stripZoneWidth, cw = Self.clipZoneWidth
             clipZone.frame = CGRect(x: bounds.width - w - cw, y: 0, width: cw, height: strip)
             clipZone.setImage(UIImage(systemName: "doc.on.clipboard",
@@ -1341,7 +1386,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             let w = Self.stripZoneWidth
             let clipW = clipboardButtonVisible ? Self.clipZoneWidth : 0   // chừa nút 📋
             pasteCard.frame = CGRect(x: w, y: Self.barTopPad, width: max(bounds.width - 2 * w - clipW, 0),
-                                     height: Self.openStrip - Self.barTopPad)
+                                     height: openStripNow - Self.barTopPad)
             (pasteCard.viewWithTag(91) as? UILabel)?.textColor = ink
             (pasteCard.viewWithTag(92) as? UILabel)?.textColor = ink.withAlphaComponent(0.55)
             (pasteCard.viewWithTag(93) as? UIImageView)?.tintColor = ink.withAlphaComponent(0.8)
@@ -1509,6 +1554,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // Chiều cao hàng phím ±10pt (Settings → Giao diện) — đọc mỗi lần hiện.
         let adj = UserDefaultsProvider.shared?.object(forKey: "rowHeightAdjust") as? Int ?? 0
         rowHeightAdjust = CGFloat(max(-10, min(10, adj)))
+        // "Kích thước như bàn phím iPhone" (#119): bật thì bỏ qua chỉnh tay ở trên (RowSpec).
+        stockSizeSetting = KeyGeometry.StockSize.setting(UserDefaultsProvider.shared)
         numberRowEnabled = UserDefaultsProvider.shared?.bool(forKey: Self.numberRowKey) ?? false
         // Bàn phím tách đôi (mặc định TẮT) — rebuild() cuối hàm áp nếu đổi.
         splitSetting = UserDefaultsProvider.shared?.bool(forKey: SplitLayout.settingKey) ?? false
@@ -1699,6 +1746,14 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private var builtKind: InputKind = .normal
     private var builtNumberRow = false
     private var builtPressHighlight = KeyboardView.keyPressHighlightDefault
+    /// Khe/lề dựng vào constraint lúc build (preset stock: dọc ≠ ngang) — đổi là dựng lại.
+    /// (Phần cắt / đệm hàng đáy đổi tại chỗ ở applyBottomTrim — không cần dựng lại.)
+    private struct GeomSig: Equatable { let gap, keyGap, sideMargin: CGFloat }
+    private var geomSig: GeomSig {
+        let s = rowSpec
+        return GeomSig(gap: s.gap, keyGap: s.keyGap, sideMargin: s.sideMargin)
+    }
+    private var builtGeom: GeomSig?
 
     // Cache view theo plane: bấm 123/#+=/ABC chỉ tráo arrangedSubviews thay vì
     // xé/dựng lại ~40 button + constraints mỗi lần. Emoji KHÔNG cache (recents
@@ -1746,6 +1801,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             || builtAlts != activeAlts
             || builtSplit != split
             || builtKeypad != keypadStyle
+            || builtGeom != geomSig
         let widthChanged = builtWidth != bounds.width
         let sigChanged = styleChanged || widthChanged
         if builtPlane == plane, !sigChanged { return }
@@ -1785,6 +1841,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         builtAlts = activeAlts
         builtSplit = split
         builtKeypad = keypadStyle
+        builtGeom = geomSig
         dropAltHold()                            // phím cũ sắp bị gỡ
         commaTimer?.cancel(); commaTimer = nil; commaFired = false
         letterKeys.removeAll()
@@ -2043,7 +2100,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if numberRow {
             crossRow(rows[0].heightAnchor.constraint(equalTo: ref.heightAnchor,
                                                      multiplier: KeyLayout.numberRowMultiplier,
-                                                     constant: KeyLayout.numberRowConstant))
+                                                     constant: rowSpec.numberRowConstant))
         }
         for r in rows[(numberRow ? 2 : 1)..<(rows.count - 1)] {
             crossRow(r.heightAnchor.constraint(equalTo: ref.heightAnchor))
@@ -2060,12 +2117,12 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private func applyBottomTrim() {
         guard !Self.isPad, let c = crossRowConstraints.first(where: { $0.identifier == Self.bottomTrimID })
         else { return }
-        let trim = bottomTrim
+        let spec = rowSpec
+        let trim = spec.bottomTrim
         if c.constant != -trim { c.constant = -trim }
-        let top = KeyGeometry.bottomRowTopMargin(pad: false, landscape: isLandscapeNow)
-        if let bottom = rowsContainer.arrangedSubviews.last as? UIStackView,
-           bottom.layoutMargins.top != top {
-            bottom.layoutMargins.top = top
+        if let bottom = rowsContainer.arrangedSubviews.last as? UIStackView {
+            if bottom.layoutMargins.top != spec.bottomTop { bottom.layoutMargins.top = spec.bottomTop }
+            if bottom.layoutMargins.bottom != spec.bottomPad { bottom.layoutMargins.bottom = spec.bottomPad }
         }
     }
 
@@ -2323,7 +2380,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         rowsContainer.insertArrangedSubview(bar, at: 0)
         // Ô tìm cao cố định = phần bàn phím cao thêm (KeyLayout.chrome .emojiSearch) — trước
         // đây bằng một hàng chữ và CHIA keyArea với 4 hàng chữ ⇒ phím bị ép (bug 1.2.x).
-        let strip = KeyLayout.stripHeight(reserved: stripReserved, collapsed: barCollapsed, open: Self.openStrip)
+        let strip = KeyLayout.stripHeight(reserved: stripReserved, collapsed: barCollapsed, open: openStripNow)
         let h = bar.heightAnchor.constraint(equalToConstant: KeyLayout.emojiSearchBarHeight(strip: strip))
         crossRow(h)
         searchBarHeight = h
@@ -2407,7 +2464,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private var nestedRows: Bool { builtSplit && (plane == .letters || plane == .numbers || plane == .symbols) }
 
     private var splitMetrics: SplitLayout.Metrics {
-        SplitLayout.metrics(width: bounds.width, margin: Self.sideMargin, gap: Self.keyGap)
+        SplitLayout.metrics(width: bounds.width, margin: sideMarginNow, gap: keyGapNow)
     }
     private func fixWidth(_ v: UIView, _ w: CGFloat) {
         v.widthAnchor.constraint(equalToConstant: w).isActive = true
@@ -2416,7 +2473,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private func splitHalf(_ views: [UIView], left: CGFloat, right: CGFloat) -> UIStackView {
         let h = UIStackView(arrangedSubviews: views)
         h.axis = .horizontal
-        h.spacing = Self.keyGap
+        h.spacing = keyGapNow
         h.distribution = .fill
         h.isLayoutMarginsRelativeArrangement = true
         h.insetsLayoutMarginsFromSafeArea = false
@@ -2425,7 +2482,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
     /// Hàng tách: [nửa trái `half`][khe co giãn, không nhận chạm][nửa phải `half`].
     private func splitRow(_ l: UIStackView, _ r: UIStackView, half: CGFloat,
-                          top: CGFloat = KeyGeometry.rowGap) -> UIStackView {
+                          top: CGFloat? = nil) -> UIStackView {
         let gap = UIView()
         gap.isUserInteractionEnabled = false
         let row = UIStackView(arrangedSubviews: [l, gap, r])
@@ -2434,7 +2491,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         row.distribution = .fill
         row.isLayoutMarginsRelativeArrangement = true
         row.insetsLayoutMarginsFromSafeArea = false   // safe area: chỉ qua safeBottom (rowsBottom)
-        row.layoutMargins = UIEdgeInsets(top: top, left: Self.sideMargin, bottom: 0, right: Self.sideMargin)
+        row.layoutMargins = UIEdgeInsets(top: top ?? rowSpec.gap, left: sideMarginNow, bottom: 0, right: sideMarginNow)
         fixWidth(l, half)
         fixWidth(r, half)
         return row
@@ -2525,7 +2582,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let ret = returnButton()
         fixWidth(ret, m.keyWidth * 1.9)
         right.append(ret)
-        let top = KeyGeometry.bottomRowTopMargin(pad: Self.isPad, landscape: isLandscapeNow)
+        let top = rowSpec.bottomTop
         return splitRow(splitHalf(left, left: 0, right: 0), splitHalf(right, left: 0, right: 0),
                         half: m.half, top: top)
     }
@@ -2807,7 +2864,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
 
         let stack = UIStackView(arrangedSubviews: views)
         stack.axis = .horizontal
-        stack.spacing = Self.keyGap
+        stack.spacing = keyGapNow
         stack.distribution = .fill
         stack.isLayoutMarginsRelativeArrangement = true
         // Hàng đáy SÁT đáy hơn như stock (so ảnh 25/09/2026: stock cách đáy bàn phím
@@ -2822,9 +2879,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // safeBottom (rowsBottom). Trước đây iPhone để true ⇒ xoay/gập máy gập lúc safeBottom chưa
         // kịp đổi thì hàng đáy ăn 18pt vào lề ⇒ phím dẹt (Duo gập + ngang, Phil 06/10/2026).
         stack.insetsLayoutMarginsFromSafeArea = false
-        let bottomTop = KeyGeometry.bottomRowTopMargin(pad: Self.isPad, landscape: isLandscapeNow)
-        stack.layoutMargins = UIEdgeInsets(top: bottomTop, left: Self.sideMargin,
-                                           bottom: 0, right: Self.sideMargin)
+        let bottomTop = rowSpec.bottomTop
+        stack.layoutMargins = UIEdgeInsets(top: bottomTop, left: sideMarginNow,
+                                           bottom: rowSpec.bottomPad, right: sideMarginNow)
         // Tỉ lệ từ KeyLayout (test: đúng một phím co giãn = space).
         let spec = padStock ? KeyLayout.padBottomRow(padStyle, letters: padLetters) : KeyLayout.phoneBottom
         func frac(_ id: String) -> CGFloat { KeyLayout.units(id, in: spec) ?? 0.1 }
@@ -2871,16 +2928,16 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                      proportional: Bool = false) -> UIView {
         let stack = UIStackView(arrangedSubviews: views)
         stack.axis = .horizontal
-        stack.spacing = Self.keyGap
+        stack.spacing = keyGapNow
         stack.distribution = proportional ? .fillProportionally : .fill
         stack.isLayoutMarginsRelativeArrangement = true
         stack.insetsLayoutMarginsFromSafeArea = false   // xem bottomRow
         // bounds.width có thể = 0 lúc init — layoutSubviews chỉnh lại ngay
         // pass đầu (và sau mỗi lần xoay / đổi cỡ Split View)
         // 10/0 thay 5/5 (khe giữa hàng vẫn 10): hàng đáy sát đáy (26/09/2026).
-        let side = KeyGeometry.indentedMargin(width: keysWidth, margin: Self.sideMargin,
-                                              gap: Self.keyGap, units: sideInset)
-        stack.layoutMargins = UIEdgeInsets(top: KeyGeometry.rowGap, left: side,
+        let side = KeyGeometry.indentedMargin(width: keysWidth, margin: sideMarginNow,
+                                              gap: keyGapNow, units: sideInset)
+        stack.layoutMargins = UIEdgeInsets(top: rowSpec.gap, left: side,
                                            bottom: 0, right: side)
         if sideInset > 0 { indentedRow = stack; indentedRowInset = sideInset }
         // equal widths for plain letter keys

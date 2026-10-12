@@ -109,6 +109,17 @@ struct SwipePracticeView: View {
     @AppStorage("swipePracticeSave") private var save = false
     @AppStorage("rowHeightAdjust", store: UserDefaults(suiteName: "group.com.viettelex"))
     private var rowHeightAdjust = 0
+    @AppStorage(KeyGeometry.StockSize.settingKey, store: UserDefaults(suiteName: "group.com.viettelex"))
+    private var stockKeySize = false
+    /// Bước hàng như bàn phím thật: preset "như bàn phím iPhone" ⇒ bước stock theo cỡ máy.
+    private var practiceRowHeight: CGFloat {
+        if stockKeySize, UIDevice.current.userInterfaceIdiom == .phone,
+           let m = KeyGeometry.StockSize.metrics(width: min(UIScreen.main.bounds.width, UIScreen.main.bounds.height),
+                                                 landscape: false) {
+            return m.pitch
+        }
+        return 54 + CGFloat(max(-10, min(10, rowHeightAdjust)))
+    }
     @State private var share: ShareItem?
     @State private var confirmDelete = false
 
@@ -172,7 +183,7 @@ struct SwipePracticeView: View {
                     Text(L("Nét vuốt chỉ nằm trên máy này (không sao lưu iCloud, không tự gửi đi). Xuất JSON để gửi cho nhà phát triển nếu bạn muốn giúp gõ vuốt chính xác hơn."))
                 }
             }
-            PracticeKeyboard(rowHeight: 54 + CGFloat(max(-10, min(10, rowHeightAdjust)))) { path, layout in
+            PracticeKeyboard(rowHeight: practiceRowHeight) { path, layout in
                 m.submit(path, layout: layout, save: save)
             }
         }

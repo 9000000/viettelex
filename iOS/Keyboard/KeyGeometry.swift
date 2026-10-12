@@ -17,6 +17,7 @@
 // stock. Tổng vùng phím 212 (cũ 218). Phím đáy 43 như stock (khe 7) — bản đầu để 44
 // trông cao hơn stock (Phil so ảnh 27/09).
 import CoreGraphics
+import Foundation
 
 enum KeyGeometry {
     /// Lề trái/phải hàng phím. iPhone như stock (6.5); iPad giữ 3 (đã đo riêng).
@@ -26,8 +27,9 @@ enum KeyGeometry {
     /// Hàng phím số: PHÍM số = 0.8× phím chữ (không tính khe) — KeyLayout.numberRowHeight.
     static let numberKeyRatio: CGFloat = 0.8
     /// Cao hàng số (khe + phím) khi hàng chữ cao `unit` (khe + phím). Dùng chung app (Wallpaper).
-    static func numberRowHeight(unit: CGFloat) -> CGFloat {
-        rowGap + numberKeyRatio * max(unit - rowGap, 0)
+    /// `gap` = khe trên mỗi hàng (preset "như bàn phím iPhone" có khe riêng — RowSpec).
+    static func numberRowHeight(unit: CGFloat, gap: CGFloat = rowGap) -> CGFloat {
+        gap + numberKeyRatio * max(unit - gap, 0)
     }
     /// Vùng phím chuẩn 4 hàng × 54 trước khi trừ phần cắt ở hàng đáy (iPhone dọc).
     static let phonePortraitBase: CGFloat = 216
@@ -66,6 +68,163 @@ enum KeyGeometry {
             if d <= reach, best == nil || d < best!.1 { best = (i, d) }
         }
         return best.map { (index: $0.0, distance: $0.1) }
+    }
+
+    // MARK: Hình học hàng phím (một nguồn cho KeyboardView + ảnh nền trong app)
+
+    /// Hình học dọc + ngang của hàng phím iPhone/iPad. Mặc định = bố cục VietTelex đã chỉnh
+    /// (27/09/2026); `stock` = preset "Kích thước như bàn phím iPhone" (#119, StockSize).
+    struct RowSpec: Equatable {
+        /// Bước hàng chữ (khe trên + phím).
+        var unit: CGFloat
+        /// Khe trên mỗi hàng chữ (layoutMargins.top).
+        var gap: CGFloat
+        /// Hàng đáy = unit − trim. Dương: hàng đáy thấp hơn (3 hàng chữ khớp stock tính từ đáy);
+        /// âm: hàng đáy cao hơn, phần thêm là đệm DƯỚI phím đáy (phím stock nằm cao hơn đáy view).
+        var bottomTrim: CGFloat
+        /// Lề trên hàng đáy (khe giữa hàng 3 và hàng đáy).
+        var bottomTop: CGFloat
+        /// Lề trái/phải + khe ngang giữa phím.
+        var sideMargin: CGFloat
+        var keyGap: CGFloat
+        /// Có phải preset stock không (KeyboardView: bỏ chỉnh tay, strip/headroom stock).
+        var stock: Bool = false
+
+        var bottomRowHeight: CGFloat { unit - bottomTrim }
+        /// Đệm dưới phím hàng đáy (chỉ khi trim âm).
+        var bottomPad: CGFloat { max(-bottomTrim, 0) }
+        /// Phím chữ / phím hàng đáy (không tính khe).
+        var letterKeyHeight: CGFloat { unit - gap }
+        var bottomKeyHeight: CGFloat { bottomRowHeight - bottomTop - bottomPad }
+        /// Tổng vùng phím (4 hàng + hàng số nếu bật).
+        func keyArea(numberRow: Bool) -> CGFloat {
+            unit * 4 + (numberRow ? numberRowHeight(unit: unit, gap: gap) : 0) - bottomTrim
+        }
+        /// Hàng số = multiplier × hàng chữ + constant (constraint Auto Layout).
+        var numberRowConstant: CGFloat { (1 - numberKeyRatio) * gap }
+    }
+
+    /// - base: vùng 4 hàng chuẩn của bố cục mặc định (iPhone dọc 216 / ngang 162 / máy gập mở
+    ///   208 — KeyLayout.phoneKeyAreaBase; iPad 240 / 300).
+    /// - adjust: ±pt mỗi hàng (Settings) — BỎ QUA khi preset stock (preset = số đo đúng).
+    /// - stock: preset bật; chỉ áp cho iPhone (không iPad, không máy gập mở — chưa có số đo).
+    /// - homeButton: iPhone có nút Home (SE) — không có dải 🌐/mic hệ thống dưới bàn phím
+    ///   (KeyboardView: needsGlobe trên iPhone).
+    static func rowSpec(pad: Bool, landscape: Bool, unfolded: Bool, width: CGFloat,
+                        base: CGFloat, adjust: CGFloat, stock: Bool, homeButton: Bool = false) -> RowSpec {
+        if stock, !pad, !unfolded,
+           let m = StockSize.metrics(width: width, landscape: landscape, homeButton: homeButton) {
+            let trim = m.bottomTrim
+            let top = trim >= 0 ? m.pitch - trim - m.keyHeight : m.pitch - m.keyHeight
+            return RowSpec(unit: m.pitch, gap: m.pitch - m.keyHeight, bottomTrim: trim, bottomTop: top,
+                           sideMargin: m.sideMargin, keyGap: m.keyGap, stock: true)
+        }
+        let unit = (base + adjust * 4) / 4
+        let flat = pad || landscape          // máy gập mở cũng "ngang" (không cắt hàng đáy)
+        return RowSpec(unit: unit, gap: rowGap,
+                       bottomTrim: bottomRowTrim(pad: pad, landscape: flat),
+                       bottomTop: bottomRowTopMargin(pad: pad, landscape: flat),
+                       sideMargin: sideMargin(pad: pad), keyGap: pad ? 10 : 6)
+    }
+
+    /// Preset "Kích thước như bàn phím iPhone" (issue #119, iPhone 16 Pro Max / iOS 27: "+4
+    /// mỗi hàng vẫn lệch, gõ nhầm vì quen phím iPhone"). Số đo bàn phím Apple English (US)
+    /// trên simulator iOS 27.0 (12/10/2026, XCUITest frame + ảnh @3x, đo pixel mép phím; máy:
+    /// SE 3, 17e, 17, 17 Pro, Air, 16 Plus, 17 Pro Max):
+    ///
+    ///   máy (bề ngang dọc)         bước hàng  phím  khe ngang  lề    kính→đỉnh phím  đáy phím→đáy màn
+    ///   17e 390, 17/17 Pro 402         54      43       6     6.67   13 / 40 (gợi ý)        71
+    ///   Air 420, 16 Plus 430, PM 440   56      45       6     6.67   12.7 / 39.7            82
+    ///   SE 375 (nút Home, @2x)         54      42       6     6.5    13.5 / 40.5             4
+    ///   ngang (mọi máy có tai thỏ)     40      32      6.67   4.33   7 / 51                 22
+    ///
+    /// View extension VietTelex (đo cùng simulator, bàn phím bật qua AppleKeyboards): đáy view
+    /// cách đáy màn hình 75pt ở dọc trên CẢ 402 lẫn 440 (dải 🌐/mic hệ thống không đổi), 20pt
+    /// ở ngang. Máy lớn: phím stock đáy 82 ⇒ phím đáy mình phải nằm CAO hơn đáy view 7pt; bố cục
+    /// mặc định (bước 54, phím đáy sát đáy view) đặt hàng Q thấp hơn stock ~18pt trên 16/17 Pro
+    /// Max — đúng lỗi #119 ("+4 mỗi hàng" vẫn lệch 3–7pt, phím cao 48 thay 45).
+    enum StockSize {
+        /// Khoá App Group (Bool). Không có khoá = TẮT (người dùng cũ giữ bố cục quen tay);
+        /// app ghi `true` một lần cho cài mới (StockSize.initialValue).
+        static let settingKey = "stockKeySize"
+        /// Bề ngang dọc từ đây trở lên = nhóm máy lớn (Air 420, Plus/Pro Max 430/440).
+        static let largeMinWidth: CGFloat = 420
+
+        struct Metrics: Equatable {
+            var pitch: CGFloat
+            var keyHeight: CGFloat
+            var keyGap: CGFloat
+            var sideMargin: CGFloat
+            /// Mép trên khung kính → đỉnh phím hàng 1 khi KHÔNG / CÓ thanh dự đoán.
+            var topPad: CGFloat
+            var predictiveTopPad: CGFloat
+            /// Đáy view extension − đáy phím hàng đáy stock (pt). Dương: phím stock thấp hơn
+            /// đáy view mình ⇒ cắt hàng đáy (3 hàng chữ vẫn trùng stock). Âm: phím stock cao hơn
+            /// đáy view ⇒ đệm dưới phím đáy.
+            var bottomTrim: CGFloat
+            var rowGap: CGFloat { pitch - keyHeight }
+        }
+
+        /// Dọc máy thường: đáy view 75, phím đáy stock 71 ⇒ cắt 4 (như bố cục mặc định).
+        static let standardPortrait = Metrics(pitch: 54, keyHeight: 43, keyGap: 6, sideMargin: 6.67,
+                                              topPad: 13, predictiveTopPad: 40, bottomTrim: 4)
+        /// Dọc máy lớn: đáy view 75, phím đáy stock 82 ⇒ đệm dưới 7.
+        static let largePortrait = Metrics(pitch: 56, keyHeight: 45, keyGap: 6, sideMargin: 6.67,
+                                           topPad: 12.67, predictiveTopPad: 39.67, bottomTrim: -7)
+        /// Ngang (máy có tai thỏ): đáy view 20, phím đáy stock 22 ⇒ đệm dưới 2.
+        static let landscape = Metrics(pitch: 40, keyHeight: 32, keyGap: 6.67, sideMargin: 4.33,
+                                       topPad: 7, predictiveTopPad: 51, bottomTrim: -2)
+        /// SE (nút Home): bàn phím sát đáy màn hình, phím đáy stock cách đáy 4 ⇒ đệm dưới 4.
+        static let homeButtonPortrait = Metrics(pitch: 54, keyHeight: 42, keyGap: 6, sideMargin: 6.5,
+                                                topPad: 13.5, predictiveTopPad: 40.5, bottomTrim: -4)
+        /// SE ngang: dọc như stock (đo lại bằng VietTelex: hàng đáy trùng 339–371). Ngang KHÔNG
+        /// theo stock — stock SE chỉ dùng giữa màn hình (phím 46, lề ~72), view mình full bề ngang
+        /// ⇒ giữ lề/khe mặc định.
+        static let homeButtonLandscape = Metrics(pitch: 40, keyHeight: 32, keyGap: 6, sideMargin: 6.5,
+                                                 topPad: 7, predictiveTopPad: 51, bottomTrim: -4)
+
+        /// Bề ngang chưa layout (0, lúc dựng view): đoán dọc máy thường — cùng khe/lề với dọc
+        /// máy lớn nên khi có bề ngang thật không phải dựng lại phím.
+        static func metrics(width: CGFloat, landscape: Bool, homeButton: Bool = false) -> Metrics? {
+            if homeButton { return landscape ? homeButtonLandscape : homeButtonPortrait }
+            if landscape { return Self.landscape }
+            return width >= largeMinWidth ? largePortrait : standardPortrait
+        }
+
+        /// Strip gợi ý mở theo preset: đỉnh view → đỉnh phím = như thanh dự đoán stock
+        /// (dọc 29 + khe 11 = 40 ≈ 39.7–40). Ngang giữ 34 (stock 44 — không cao thêm cho đủ).
+        static func openStrip(width: CGFloat, landscape: Bool, homeButton: Bool = false) -> CGFloat? {
+            guard let m = metrics(width: width, landscape: landscape, homeButton: homeButton) else { return nil }
+            return min(defaultOpenStrip, (m.predictiveTopPad - m.rowGap).rounded())
+        }
+        /// KeyboardView.openStrip / Wallpaper.suggestionStrip.
+        static let defaultOpenStrip: CGFloat = 34
+
+        /// Đọc cài đặt: không có khoá = tắt.
+        static func setting(_ d: UserDefaults?) -> Bool { d?.bool(forKey: settingKey) ?? false }
+
+        /// Giá trị ghi lần đầu app chạy bản có preset: cài MỚI (App Group chưa có cài đặt nào
+        /// của người dùng) ⇒ bật; người dùng cũ ⇒ tắt (giữ bố cục quen tay, tự bật trong app).
+        static func initialValue(existingKeys: Set<String>, stateKeys: Set<String> = userStateKeys) -> Bool {
+            existingKeys.isDisjoint(with: stateKeys)
+        }
+        /// Ghi giá trị lần đầu nếu chưa có khoá (app gọi lúc khởi động). Trả giá trị hiện hành.
+        @discardableResult
+        static func seedIfNeeded(_ d: UserDefaults?, extraStateKeys: [String] = []) -> Bool {
+            guard let d else { return false }
+            if d.object(forKey: settingKey) != nil { return d.bool(forKey: settingKey) }
+            let on = initialValue(existingKeys: Set(d.dictionaryRepresentation().keys),
+                                  stateKeys: userStateKeys.union(extraStateKeys))
+            d.set(on, forKey: settingKey)
+            return on
+        }
+        /// Khoá chỉ xuất hiện khi người dùng đã dùng app/bàn phím (đổi cài đặt, thêm mẫu câu,
+        /// bàn phím đã chạy với Toàn quyền…).
+        static let userStateKeys: Set<String> = [
+            "rowHeightAdjust", "numberRow", "showSuggestions", "simpleTelex", "templatesEnabled",
+            "userTemplates", "kbLastSeen", "kbFullAccess", "keyboardTheme", "showSpaceLogo",
+            "splitKeyboard", "keyPreviewEnabled", "hapticFeedback", "swipeTyping", "uiLanguage",
+        ]
     }
 
     /// Số đo stock iOS 26/27 (xem đầu file) — tâm phím tính từ ĐÁY MÀN HÌNH, pt.

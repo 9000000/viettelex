@@ -231,6 +231,7 @@
 		C2D650DE8BC245DCC6E1A61A /* vnlexicon.bin in Resources */ = {isa = PBXBuildFile; fileRef = 915FC9A836F82E797FA0AEA1 /* vnlexicon.bin */; };
 		C31A1027B7B30D20C5429A3E /* ThemeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BD0E4DE3C769A2EDE19180 /* ThemeSettingsView.swift */; };
 		C369B25A2E4F67F28AA9088B /* ShortcutsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BFF48078EDB3236A1B9C795 /* ShortcutsView.swift */; };
+		C432D76ABEF98EE7C97F3A48 /* StockSizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 939D0D4BB91E134BA501CBFF /* StockSizeTests.swift */; };
 		C503CFFEFC1A127BE3B99F82 /* SyncMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E2E27B46842AE6F5EB0A74 /* SyncMerge.swift */; };
 		C5CBA64509EDCDA0318FC6BF /* WordDelete.swift in Sources */ = {isa = PBXBuildFile; fileRef = 451B2112B13ABD917EEE3D9A /* WordDelete.swift */; };
 		C618DE16B7A564F8E5BD4DA2 /* TouchGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359BC071F163E8255C943DA7 /* TouchGeometry.swift */; };
@@ -443,6 +444,7 @@
 		8FA4464DCB74D34A8A55E14B /* FutoSwipeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutoSwipeTests.swift; sourceTree = "<group>"; };
 		906FFAA7A51DC0B6F109763A /* futoswipe-LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "futoswipe-LICENSE.md"; sourceTree = "<group>"; };
 		915FC9A836F82E797FA0AEA1 /* vnlexicon.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; path = vnlexicon.bin; sourceTree = "<group>"; };
+		939D0D4BB91E134BA501CBFF /* StockSizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StockSizeTests.swift; sourceTree = "<group>"; };
 		941319FB73DCEB18DDE2E232 /* KeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardView.swift; sourceTree = "<group>"; };
 		95F2B6D4AD796E9D33B623BA /* DomainPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainPopup.swift; sourceTree = "<group>"; };
 		9A253A0432EF946B10B4E511 /* SyllableLM.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyllableLM.swift; sourceTree = "<group>"; };
@@ -714,6 +716,7 @@
 				DB94721D99CEB3A5D2CA8A8B /* SlowTests.swift */,
 				11DFA0E70EB963455C306748 /* SpaceFlickTests.swift */,
 				3EDBA5B57FBEDAF80717B58A /* SplitKeyboardTests.swift */,
+				939D0D4BB91E134BA501CBFF /* StockSizeTests.swift */,
 				BF6388E96DDD2233A554472A /* SuggestBigramTests.swift */,
 				BA0F7617C32E2C08352F2220 /* SuggestionSlotsTests.swift */,
 				D61FEE31733E89BE49DAF48E /* SuggestTrigramTests.swift */,
@@ -1278,6 +1281,7 @@
 				3D60F41E59C5877D893E1088 /* SpaceFlick.swift in Sources */,
 				8C36E56F67059CC68F98AA21 /* SpaceFlickTests.swift in Sources */,
 				44D94A4C599EF70E9F4228FD /* SplitKeyboardTests.swift in Sources */,
+				C432D76ABEF98EE7C97F3A48 /* StockSizeTests.swift in Sources */,
 				68638B723D1A630DC68B3727 /* SuggestBigramTests.swift in Sources */,
 				A5D63AF8B31BCC530FDD52B0 /* SuggestTrigramTests.swift in Sources */,
 				7535E3D6E42FAAF982A6BC34 /* SuggestionSlots.swift in Sources */,
