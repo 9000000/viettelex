@@ -1,3 +1,14 @@
+viettelex (1.0.12) UNRELEASED; urgency=medium
+
+  * Từ tiếng Anh lẻ chen trong câu tiếng Việt không làm từ sau mất dấu:
+    "suggestion been treen" → "suggestion bên trên"; "been" chỉ giữ tiếng Anh
+    sau have/has/had.
+  * ---
+  * A lone English word inside a Vietnamese sentence no longer turns the next
+    word English ("suggestion been treen" → "suggestion bên trên").
+
+ -- VietTelex Maintainers <maintainers@viettelex.invalid>  Mon, 12 Oct 2026 12:00:40 +0700
+
 viettelex (1.0.11) UNRELEASED; urgency=medium
 
   * Chế độ thử nghiệm "Bỏ gạch chân trong Chrome/Electron": GNOME 50
