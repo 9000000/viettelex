@@ -755,3 +755,17 @@ content, Spark, Outlook) vẫn in-place vì không có chuỗi ⌫→deactivate 
 Công cụ mang về cùng PR: `Scripts/ime-drive.swift` (bơm phím thật qua HID tap theo layout
 đang chọn, in mốc ms để khớp `log show`) + `Scripts/ax-read-text.swift` (đọc text/caret
 qua AX) — tái hiện bug gõ KHÔNG cần người ngồi gõ.
+
+## Cài bản Dev song song với stable — 2026-10-12
+
+`Scripts/dev-install-viettelex-dev.sh` dùng cấu hình Debug của scheme VietTelex nhưng
+đăng ký bằng bundle ID `com.viettelex.inputmethod.viettelexdev`, input source
+`com.viettelex.inputmethod.viettelexdev.vi`, IMK connection riêng và executable
+`VietTelexDev`. Settings ghi vào suite riêng; updater chỉ hoạt động trong bundle stable.
+Sau khi chạy test, script huỷ đăng ký bundle trong DerivedData rồi cài bản Dev vào
+`~/Library/Input Methods/VietTelex Dev.app`, nên Launch Services dùng đúng bản đã cài.
+Script không dừng process stable. Dev ký ad-hoc, có quyền Accessibility riêng và bị từ
+chối trên macOS 26 trở lên vì input method chưa notarize.
+
+Điều này thay hướng dẫn cũ “không chọn Debug làm input source”: không chạy trực tiếp
+bundle trong DerivedData hoặc dùng ⌘R để kiểm tra; cài và chọn bản Dev bằng script.

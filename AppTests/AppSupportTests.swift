@@ -511,13 +511,13 @@ final class AppSupportTests: XCTestCase {
         // Opt-out: returns without touching the throttle timestamp.
         s.autoUpdateCheck = false
         s.lastAutoUpdateCheckAt = 0
-        UpdateCheck.maybeAutoCheck()
+        UpdateCheck.maybeAutoCheck(bundleIdentifier: AppState.stableBundleIdentifier)
         XCTAssertEqual(s.lastAutoUpdateCheckAt, 0)
         // Opted in but checked recently: throttle holds.
         s.autoUpdateCheck = true
         let now = Date().timeIntervalSince1970
         s.lastAutoUpdateCheckAt = now
-        UpdateCheck.maybeAutoCheck()
+        UpdateCheck.maybeAutoCheck(bundleIdentifier: AppState.stableBundleIdentifier)
         XCTAssertEqual(s.lastAutoUpdateCheckAt, now)
     }
 
@@ -557,11 +557,25 @@ final class AppSupportTests: XCTestCase {
         s.autoUpdateCheck = true
         s.lastAutoUpdateCheckAt = 0
         s.lastAutoUpdateAttemptAt = 0
-        UpdateCheck.maybeAutoCheck()
+        UpdateCheck.maybeAutoCheck(bundleIdentifier: AppState.stableBundleIdentifier)
         XCTAssertGreaterThan(s.lastAutoUpdateAttemptAt, 0)          // back-off stamped
         // Let the detached check finish against the stub (both manifest URLs 500).
         for _ in 0..<50 { try? await Task.sleep(nanoseconds: 20_000_000) }
         XCTAssertEqual(s.lastAutoUpdateCheckAt, 0, "a failed check must not reset the weekly clock")
+    }
+
+    func testDevBuildDoesNotStartStableAutoCheck() {
+        let s = AppState.shared
+        let saved = (s.autoUpdateCheck, s.lastAutoUpdateCheckAt, s.lastAutoUpdateAttemptAt)
+        defer { (s.autoUpdateCheck, s.lastAutoUpdateCheckAt, s.lastAutoUpdateAttemptAt) = saved }
+        s.autoUpdateCheck = true
+        s.lastAutoUpdateCheckAt = 0
+        s.lastAutoUpdateAttemptAt = 0
+
+        UpdateCheck.maybeAutoCheck(bundleIdentifier: AppState.developmentBundleIdentifier)
+
+        XCTAssertEqual(s.lastAutoUpdateCheckAt, 0)
+        XCTAssertEqual(s.lastAutoUpdateAttemptAt, 0)
     }
 
     func testStableManifestFallsBackPastABrokenHost() async {

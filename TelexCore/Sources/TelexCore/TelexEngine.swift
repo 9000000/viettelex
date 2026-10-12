@@ -555,6 +555,14 @@ public struct TelexEngine {
         return action
     }
 
+    /// A standalone run of three or more `w` keys is literal `www` text, regardless
+    /// of the general auto-restore preference.
+    private func needsStandaloneWRunRestore() -> Bool {
+        guard rawCount >= 3, compositionDiffersFromRaw() else { return false }
+        for i in 0..<rawCount where raw[i] | 0x20 != UInt8(ascii: "w") { return false }
+        return true
+    }
+
     /// Word boundary reached. Optionally auto-restore the raw keystrokes when the
     /// composed word is not a valid Vietnamese syllable. Resets the engine.
     /// The caller inserts the boundary character itself afterwards.
@@ -572,7 +580,8 @@ public struct TelexEngine {
         // Validation runs on letter classes + tone (no String); Strings are built
         // only when a restore actually happens. shouldRestoreRaw() reads the PREVIOUS
         // word's context; previousWordEnglish is refreshed for the NEXT word after.
-        let wantsRestore = autoRestore && outCount > 0 && shouldRestoreRaw()
+        let wantsRestore = outCount > 0
+            && (needsStandaloneWRunRestore() || (autoRestore && shouldRestoreRaw()))
         var action: TelexAction = .none
         if wantsRestore, compositionDiffersFromRaw() {
             // Strip the shared leading run, exactly like diff() does per keystroke:
@@ -684,16 +693,6 @@ public struct TelexEngine {
         // English protection is also untouched where no cancel happened at all
         // ("his"→hís restores "his") and for accidental reach-back cancels
         // ("hosts", span > 1).
-        // Từ TOÀN chữ w từ 3 phím trở lên = "www" gõ URL, không phải escape:
-        // escape ww→w (user decision 22/07) giữ nguyên khi GÕ LIVE, nhưng ở boundary
-        // thì "www." mà chốt thành "ww." là mất chữ thật (field case 19/08,
-        // "www.wise.com"→"ww.wise.com"). Restore về raw trả lại đủ w; từ 2 phím (ww)
-        // vẫn là escape đúng nghĩa, không đụng.
-        if rawCount >= 3 {
-            var allW = true
-            for i in 0..<rawCount where raw[i] | 0x20 != UInt8(ascii: "w") { allW = false; break }
-            if allW { return true }
-        }
         if markCancelled {
             if composedIsValidSyllable() { return false }
             // A TONE-key cancel that REACHED BACK over letters (span > 1): the tone key
@@ -985,7 +984,8 @@ public struct TelexEngine {
         }
         // Decide with the PREVIOUS word's context, then refresh it for the NEXT word
         // (reusing the restore decision — no repeated checks).
-        let wantsRestore = autoRestore && outCount > 0 && shouldRestoreRaw()
+        let wantsRestore = outCount > 0
+            && (needsStandaloneWRunRestore() || (autoRestore && shouldRestoreRaw()))
         captureReopen(restored: wantsRestore)
         updateContext(restored: wantsRestore)
         return wantsRestore ? rawKeystrokes : composed
@@ -999,6 +999,9 @@ public struct TelexEngine {
     public func peekCommitText(autoRestore: Bool) -> String {
         // Overflowed: mirror commitText — composed prefix, không bao giờ restore.
         if overflowed { return composed }
+        if outCount > 0, needsStandaloneWRunRestore() {
+            return rawKeystrokes
+        }
         if autoRestore, outCount > 0, shouldRestoreRaw() {
             return rawKeystrokes
         }

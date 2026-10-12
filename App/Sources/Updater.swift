@@ -49,8 +49,9 @@ enum UpdateCheck {
     /// refused by ATS), so the weekly check silently did nothing, forever. Now only a
     /// check that actually reached the manifest (`.update`/`.upToDate`) resets the weekly
     /// clock; a failure just backs off `autoCheckRetryInterval` and is logged.
-    static func maybeAutoCheck() {
-        guard AppState.shared.autoUpdateCheck else { return }
+    static func maybeAutoCheck(bundleIdentifier: String? = Bundle.main.bundleIdentifier) {
+        guard bundleIdentifier == AppState.stableBundleIdentifier,
+              AppState.shared.autoUpdateCheck else { return }
         let now = Date().timeIntervalSince1970
         guard shouldAutoCheck(now: now,
                               lastSuccessAt: AppState.shared.lastAutoUpdateCheckAt,
@@ -450,10 +451,19 @@ enum UpdateNotifier {
 /// next keystroke; already-open apps may need an input-source flip, same as
 /// any IME restart).
 enum SelfUpdater {
+    static func canInstallUpdate(bundleIdentifier: String?) -> Bool {
+        bundleIdentifier == AppState.stableBundleIdentifier
+    }
+
     /// `onFailure` runs on the main thread when the install did NOT happen (network,
     /// signature gate, unzip, swap). There is no success callback on purpose: a
     /// successful install ends in `exit(0)`.
     static func run(version: String, onFailure: (() -> Void)? = nil) {
+        guard canInstallUpdate(bundleIdentifier: Bundle.main.bundleIdentifier) else {
+            DebugLog.log("skip self-update: this is not the stable input method bundle")
+            DispatchQueue.main.async { onFailure?() }
+            return
+        }
         // Re-checked here, not just at parse time: `version` can also come from a value
         // persisted by an older build (pendingUpdateVersion), and it is about to be
         // spliced into a URL. Refuse rather than force-unwrap.
