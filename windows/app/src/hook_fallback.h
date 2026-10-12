@@ -4,9 +4,13 @@
 // while such an app is in the FOREGROUND, and the VietTelex keyboard (vi-VN) is its
 // active input method, and the app is in Vietnamese mode, a WH_KEYBOARD_LL hook runs
 // the same TypingSession (in-place) and types with SendInput(KEYEVENTF_UNICODE).
-// Everything else: no hook installed at all. Self-injected events carry a marker in
+// Everything else: no typing hook. (2026-10) With the Ctrl+Shift switch key the keyboard
+// hook also stays in, OBSERVE-ONLY, to see the chord while another keyboard is active
+// (input_switch.h); it never eats or sends a key. Self-injected events carry a marker in
 // dwExtraInfo and are ignored; a RateBreaker stops any synthetic-event cascade.
 #pragma once
+#include <windows.h>
+
 #include <string>
 
 #include "settings.h"
@@ -25,5 +29,8 @@ void hookDisableCurrentField();
 void hookSetElevationNotifier(void (*notify)(const std::wstring& exe));
 // Game / fullscreen / Chế độ game (game_mode.cpp): the hook types nothing while on.
 void hookSetSuspended(bool on);
+// Ctrl+Shift watcher (input_switch.h): post `msg` to `wnd` (UI thread) when the chord
+// completes, whatever input method is active. Call before hookConfigure.
+void hookSetChordTarget(HWND wnd, UINT msg);
 
 }  // namespace vtx::app

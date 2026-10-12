@@ -572,6 +572,112 @@ TEST(chromium_shaped_store_stays_in_place) {
     CHECK(!r.s.contextFellBack());
 }
 
+namespace {
+// Chromium's native address bar as the TIP really sees it (2026-10 field report, Edge:
+// "theêz"). OmniboxViewViews selects the inline suggestion REVERSED (cursor at the end of
+// the user text, anchor at the end of the suggestion), and TSFTextStore commits an
+// in-place SetText as ExtendSelectionAndDelete(n, 0) + InsertText.
+// Textfield::ExtendSelectionAndDelete extends the reversed range — [hi - n, lo] — so it
+// deletes inside the suggestion and keeps the n characters we meant to replace. The TSF
+// call itself succeeds: only the screen afterwards shows what happened.
+struct ChromiumOmniboxDoc : FakeDocument {
+    bool replaceBeforeCaret(const std::u16string& expect, const std::u16string& ins) override {
+        const size_t lo_ = lo(), hi_ = hi(), n = expect.size();
+        if (comp || n > lo_ || text.compare(lo_ - n, n, expect) != 0) return false;
+        if (hi_ == lo_) return FakeDocument::replaceBeforeCaret(expect, ins);  // no suggestion: fine
+        if (hi_ - lo_ >= n) text.erase(lo_, hi_ - lo_ - n);  // deletes [lo, hi - n)
+        text.insert(lo_, ins);                               // InsertText at the cursor
+        caret = anchor = lo_ + ins.size();
+        ++edits;
+        return true;
+    }
+};
+}  // namespace
+
+TEST(chromium_omnibox_dropped_deletion_moves_field_to_composition) {
+    Settings st;
+    TypingSession s;
+    s.setOutputMode(OutputMode::InPlace);
+    SessionOptions o;
+    o.engineFlags = st.engineFlags();
+    s.configure(o);
+    ChromiumOmniboxDoc doc;
+    auto key = [&](char c) {
+        KeyInput k;
+        k.kind = KeyKind::Char;
+        k.ch = static_cast<unsigned char>(c);
+        if (!(s.wantsKey(k) && s.handleKey(k, doc))) doc.appInsert(static_cast<char16_t>(c));
+        s.verifyScreen(doc);  // OnEndEdit after the app processed the key
+    };
+    for (char c : std::string("the")) key(c);
+    doc.text += u"verge.com";  // inline autocomplete, selected after the caret
+    doc.anchor = doc.text.size();
+    key('e');  // engine: replace "e" by "ê" -> the app keeps the "e"
+    CHECK_EQ(utf16ToUtf8(doc.text.substr(0, doc.lo())), std::string("theê"));  // the reported damage, once
+    CHECK(s.prefersComposition());  // ... and this field now composes
+    CHECK(!s.contextFellBack());    // never handed to the hook (Direct races autocomplete)
+    CHECK(!s.wordActive());         // the damaged word is dropped, not edited blindly
+    // The user clears the bar and types again: composition, suggestion or not.
+    doc.setText(u"");
+    for (char c : std::string("thees")) {
+        key(c);
+        if (!doc.comp) {  // the omnibox only suggests outside a composition
+            doc.text += u"verge.com";
+            doc.anchor = doc.text.size();
+        }
+    }
+    CHECK(s.wordMode() == OutputMode::Composition);
+    CHECK_EQ(utf16ToUtf8(doc.text.substr(doc.compStart, doc.compEnd - doc.compStart)), std::string("thế"));
+    key(' ');
+    CHECK_EQ(utf16ToUtf8(doc.text), std::string("thế "));
+    s.resetContext();  // another field: in-place again
+    CHECK(!s.prefersComposition());
+}
+
+TEST(stale_screen_without_dropped_deletion_keeps_in_place) {
+    // A click / app rewrite is not the dropped-deletion signature: forget the word only.
+    Rig r(OutputMode::InPlace);
+    r.type("vieet");
+    r.doc.setText(u"something else");
+    r.s.verifyScreen(r.doc);
+    CHECK(!r.s.wordActive());
+    CHECK(!r.s.prefersComposition());
+    r.type(" thees ");
+    CHECK_EQ(r.text(), std::string("something else thế "));
+    CHECK(r.s.wordMode() == OutputMode::InPlace);
+}
+
+TEST(omnibox_field_prefers_composition_through_selected_suggestion) {
+    // The TIP's rule for the address bar: composition from the first letter. A suggestion
+    // already selected when a word starts is replaced by the composition (= typing over it).
+    Rig r(OutputMode::InPlace);
+    r.s.setPreferComposition(true);
+    r.type("thees ");
+    r.doc.text += u"giới thiệu";  // suggestion after "thế "
+    r.doc.anchor = r.doc.text.size();
+    r.type("gioiws ");
+    CHECK_EQ(r.text(), std::string("thế giới "));
+    CHECK(!r.s.contextFellBack());
+}
+
+TEST(field_prefers_composition_only_for_chromium_address_bars) {
+    const int url[] = {1};
+    const int urlAndDefault[] = {0, 1};
+    const int plain[] = {0};
+    const int search[] = {50};
+    CHECK(fieldPrefersComposition("msedge.exe", url, 1));
+    CHECK(fieldPrefersComposition("chrome.exe", urlAndDefault, 2));
+    CHECK(fieldPrefersComposition("brave.exe", url, 1));
+    CHECK(fieldPrefersComposition("browser.exe", url, 1));      // Cốc Cốc
+    CHECK(!fieldPrefersComposition("msedge.exe", plain, 1));    // web page text fields stay in-place
+    CHECK(!fieldPrefersComposition("msedge.exe", search, 1));
+    CHECK(!fieldPrefersComposition("msedge.exe", nullptr, 0));  // scopes unknown
+    CHECK(!fieldPrefersComposition("vivaldi.exe", url, 1));     // web-UI address bar: fine per report
+    CHECK(!fieldPrefersComposition("firefox.exe", url, 1));
+    CHECK(!fieldPrefersComposition("notepad.exe", url, 1));
+    CHECK(!fieldPrefersComposition("msedgewebview2.exe", url, 1));  // WebView2 has no omnibox
+}
+
 TEST(search_box_rewriting_its_text_each_key_stays_in_sync) {
     // Explorer / Settings / Start search boxes re-set their own text on every keystroke
     // (same text, caret at the end). That is not a change of OUR word: keep composing.

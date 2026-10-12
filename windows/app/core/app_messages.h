@@ -17,6 +17,9 @@ constexpr unsigned kMsgUpdateDownloaded = kWmApp + 0x62;  // lParam: wchar_t* pa
 constexpr unsigned kMsgTextToolWork = kWmApp + 0x71;      // selection from the TIP: transform + answer
 constexpr unsigned kMsgTextToolClipDone = kWmApp + 0x72;  // clipboard worker finished (wParam 1 = ok)
 constexpr unsigned kMsgHintWork = kWmApp + 0x73;          // caret-hint job from a TIP: answer it
+// hook_fallback.cpp (hook thread) -> main window: the Ctrl+Shift chord completed (decide
+// there whether another keyboard is active and VietTelex must be brought in)
+constexpr unsigned kMsgSwitchChord = kWmApp + 0x74;
 // (ime/src/globals.h kAppCommandMsg = WM_APP + 0x56 and main.cpp kTrayMsg = WM_APP + 0x57
 // are the other two on this window.)
 constexpr unsigned kAppCommand = kWmApp + 0x56;
@@ -24,6 +27,6 @@ constexpr unsigned kTrayCallback = kWmApp + 0x57;
 
 constexpr unsigned kMainWindowMessages[] = {kMsgUpdateChecked,   kMsgUpdateDownloaded, kMsgTextToolWork,
                                             kMsgTextToolClipDone, kMsgHintWork,        kAppCommand,
-                                            kTrayCallback};
+                                            kTrayCallback,       kMsgSwitchChord};
 
 }  // namespace vtx::app

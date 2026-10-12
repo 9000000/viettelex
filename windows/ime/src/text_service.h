@@ -104,7 +104,7 @@ private:
     void onModifierEvent(uint32_t vk, bool down);
     void flushAsync(ITfContext* ctx);
     void endCompositionAsync();
-    bool fieldIsLiteral(ITfContext* ctx, TfEditCookie ec);
+    bool fieldPolicyAtWordStart(ITfContext* ctx, TfEditCookie ec);
     UINT inputScopesAtSelection(ITfContext* ctx, TfEditCookie ec, int* buf, UINT cap);
 
     // Công cụ văn bản (text_tool_ipc.h): a message-only window per thread manager that

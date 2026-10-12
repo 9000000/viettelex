@@ -557,6 +557,50 @@ TEST(windows_per_app_input_option) {
     CHECK(parseSwitchHotkey("win-space") == SwitchHotkey::WinSpace);
 }
 
+// 2026-10 field report: Ctrl+Shift (UniKey habit) did nothing in a newly opened app until
+// Win+Space brought VietTelex back — the chord lives in the TIP, inactive on ENG.
+TEST(ctrl_shift_from_another_keyboard_activates_viettelex) {
+    // Chord bookkeeping from low-level events (L/R variants, as WH_KEYBOARD_LL reports them).
+    uint8_t held = chordHeldAfter(0, 0xA2, true);  // LCtrl down
+    CHECK(held == kModCtrl);
+    held = chordHeldAfter(held, 0xA1, true);       // RShift down
+    CHECK(held == (kModCtrl | kModShift));
+    ModifierChord chord;
+    CHECK(!chord.note(kModCtrl));
+    CHECK(!chord.note(held));                      // armed
+    CHECK(chord.note(chordHeldAfter(held, 0xA1, false)));  // release -> fires once
+    CHECK(isChordModifierVk(0x5B) && !isChordModifierVk('A'));
+
+    // Decision at fire time.
+    const unsigned enUS = 0x0409;
+    CHECK(foreignChordAction(SwitchHotkey::CtrlShift, 0, enUS, false) == ForeignChord::ActivateVietTelex);
+    CHECK(foreignChordAction(SwitchHotkey::CtrlShift, 0, 0, false) == ForeignChord::ActivateVietTelex);  // unknown layout
+    CHECK(foreignChordAction(SwitchHotkey::CtrlShift, 1, enUS, false) == ForeignChord::Ignore);  // TIP active (V)
+    CHECK(foreignChordAction(SwitchHotkey::CtrlShift, 2, enUS, false) == ForeignChord::Ignore);  // TIP active (E)
+    CHECK(foreignChordAction(SwitchHotkey::CtrlShift, 0, 0x042A, false) == ForeignChord::Ignore);  // vi-VN already
+    CHECK(foreignChordAction(SwitchHotkey::CtrlShift, 0, enUS, true) == ForeignChord::Ignore);   // game / fullscreen
+    CHECK(foreignChordAction(SwitchHotkey::WinSpace, 0, enUS, false) == ForeignChord::Ignore);
+    CHECK(foreignChordAction(SwitchHotkey::AltZ, 0, enUS, false) == ForeignChord::Ignore);
+    CHECK(foreignChordAction(SwitchHotkey::Off, 0, enUS, false) == ForeignChord::Ignore);
+    CHECK(chordWatcherWanted(SwitchHotkey::CtrlShift));
+    CHECK(!chordWatcherWanted(SwitchHotkey::AltZ) && !chordWatcherWanted(SwitchHotkey::WinSpace));
+
+    // Which input locale to request.
+    const uintptr_t list[] = {0x04090409, 0x042A042A, 0xF0C1042A};
+    CHECK(pickVietnameseHkl(list, 3) == 0x042A042A);
+    const uintptr_t noVi[] = {0x04090409, 0x04110411};
+    CHECK(pickVietnameseHkl(noVi, 2) == 0);
+    CHECK(pickVietnameseHkl(nullptr, 0) == 0);
+
+    // Root cause: another keyboard is Windows' default input method.
+    CHECK(defaultInputAdvice(SwitchHotkey::CtrlShift, enUS) == DefaultInputAdvice::MakeVietTelexDefault);
+    CHECK(defaultInputAdvice(SwitchHotkey::AltZ, enUS) == DefaultInputAdvice::MakeVietTelexDefault);
+    CHECK(defaultInputAdvice(SwitchHotkey::CtrlShift, 0x042A) == DefaultInputAdvice::None);
+    CHECK(defaultInputAdvice(SwitchHotkey::CtrlShift, 0) == DefaultInputAdvice::None);  // unreadable
+    CHECK(defaultInputAdvice(SwitchHotkey::WinSpace, enUS) == DefaultInputAdvice::None);
+    CHECK_EQ(defaultLayoutOrTipSpec(0x042A, "{A}", "{B}"), std::string("0x042A:{A}{B}"));
+}
+
 // ---- Công cụ văn bản (text_action_logic.h) ----------------------------------------------
 
 namespace {

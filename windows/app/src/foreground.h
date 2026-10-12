@@ -6,6 +6,8 @@
 
 #include <string>
 
+#include "hotkey.h"
+
 namespace vtx::app {
 
 struct FgApp {
@@ -25,6 +27,11 @@ bool storedVietnamese(const std::wstring& identity);
 void storeVietnamese(const std::wstring& identity, bool on);
 // Rewrites %LOCALAPPDATA%\VietTelex\applang.txt from HKCU (AppContainers read it).
 void mirrorAppLanguage();
+
+// The Ctrl+Shift chord completed (hook_fallback.cpp watcher). When the foreground window
+// is on ANOTHER keyboard (input_switch.h foreignChordAction): store Việt for that app and
+// ask the window for the Vietnamese input language. True = requested (show "V").
+bool activateVietTelexForChord(SwitchHotkey hotkey, bool suspended);
 
 // debug.log (component = "app", "hook", "direct", "verify"); gated on settings.debugLogging.
 void appSetLogging(bool on);

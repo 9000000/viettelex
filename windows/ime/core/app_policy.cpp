@@ -142,4 +142,26 @@ FieldPolicy classifyInputScopes(const int* scopes, size_t count) {
     return FieldPolicy::Normal;
 }
 
+bool isChromiumNativeOmniboxBrowser(const std::string& exe) {
+    static const char* const kBrowsers[] = {
+        "msedge.exe",    // Microsoft Edge (field report 2026-10)
+        "chrome.exe",    // Google Chrome (same OmniboxViewViews code)
+        "brave.exe",
+        "chromium.exe",
+        "browser.exe",   // Cốc Cốc, Yandex Browser (Chromium shells, native omnibox)
+        "opera.exe",
+        "thorium.exe",
+    };
+    for (const char* b : kBrowsers)
+        if (exe == b) return true;
+    return false;
+}
+
+bool fieldPrefersComposition(const std::string& exe, const int* scopes, size_t count) {
+    if (!isChromiumNativeOmniboxBrowser(exe)) return false;
+    for (size_t i = 0; i < count; ++i)
+        if (scopes[i] == 1) return true;  // IS_URL
+    return false;
+}
+
 }  // namespace vtx

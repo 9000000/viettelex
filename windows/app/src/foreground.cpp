@@ -7,6 +7,7 @@
 #include "app_policy.h"
 #include "debug_file.h"
 #include "direct_policy.h"
+#include "input_switch.h"
 
 namespace vtx::app {
 
@@ -100,6 +101,42 @@ void mirrorAppLanguage() {
     CloseHandle(f);
     if (ok) MoveFileExW(tmp.c_str(), dst.c_str(), MOVEFILE_REPLACE_EXISTING);
     else DeleteFileW(tmp.c_str());
+}
+
+bool activateVietTelexForChord(SwitchHotkey hotkey, bool suspended) {
+    HWND fg = GetForegroundWindow();
+    if (!fg) return false;
+    HWND root = GetAncestor(fg, GA_ROOT);
+    const int prop = root ? static_cast<int>(reinterpret_cast<INT_PTR>(GetPropW(root, kTipLangProp))) : 0;
+    const FgApp app = describeWindow(fg);
+    const unsigned lang = LOWORD(reinterpret_cast<ULONG_PTR>(GetKeyboardLayout(app.tid)));
+    if (foreignChordAction(hotkey, prop, lang, suspended) != ForeignChord::ActivateVietTelex) return false;
+    HKL list[64];
+    const int n = GetKeyboardLayoutList(64, list);
+    uintptr_t raw[64];
+    for (int i = 0; i < n; ++i) raw[i] = reinterpret_cast<uintptr_t>(list[i]);
+    const uintptr_t vi = pickVietnameseHkl(raw, n > 0 ? static_cast<size_t>(n) : 0);
+    if (!vi) {
+        appLog("app", "Ctrl+Shift on another keyboard: no Vietnamese input language in the list");
+        return false;
+    }
+    // The TIP reads the per-app Việt/Anh memory when it activates: the user pressed the
+    // switch key to TYPE VIETNAMESE, so land in Việt (not a stale "Anh" for this app).
+    storeVietnamese(app.identity, true);
+    mirrorAppLanguage();
+    // What the taskbar language indicator does: ask the focused window to change its input
+    // language; DefWindowProc activates it (WM_INPUTLANGCHANGEREQUEST, learn.microsoft.com
+    // winmsg/wm-inputlangchangerequest). Per thread, so "different input method for each
+    // app window" keeps working. UIPI drops it for an elevated app (nothing happens).
+    GUITHREADINFO gi = {};
+    gi.cbSize = sizeof gi;
+    HWND target = (app.tid && GetGUIThreadInfo(app.tid, &gi) && gi.hwndFocus) ? gi.hwndFocus : fg;
+    const bool posted = PostMessageW(target, WM_INPUTLANGCHANGEREQUEST, 0, static_cast<LPARAM>(vi)) != FALSE;
+    if (appLogging())
+        appLog("app", "Ctrl+Shift on another keyboard (lang " + std::to_string(lang) + ") in " +
+                          narrowAscii(app.identity) + ": requested the Vietnamese input language" +
+                          (posted ? "" : " (post failed)"));
+    return posted;
 }
 
 void appSetLogging(bool on) { g_logging.store(on); }
