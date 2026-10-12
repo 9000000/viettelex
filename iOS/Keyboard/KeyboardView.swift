@@ -1632,14 +1632,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             b.setImage(UIImage(systemName: symbol), for: .normal)
             // Shift ON/CAPS = phím đảo màu (nền trắng, glyph đen) như stock —
             // cả dark mode, nếu không ON và OFF trông y hệt nhau.
-            if shift != .off {
-                b.backgroundColor = shiftOnFill
-                b.tintColor = shiftOnInk
-            } else {
-                b.backgroundColor = plainFill
-                b.tintColor = ink
-            }
-            b.normalBackground = b.backgroundColor
+            let fill = shift != .off ? shiftOnFill : plainFill
+            b.tintColor = shift != .off ? shiftOnInk : ink
+            b.normalBackground = fill
+            // ⇧ đổi trạng thái ở touchDown — ngón còn đè thì giữ nền sẫm, nhả tay mới về nền mới.
+            if !((b as? KeyButton)?.pressShown ?? false) { b.backgroundColor = fill }
         }
         capsKey?.setImage(UIImage(systemName: shift == .caps ? "capslock.fill" : "capslock"),
                           for: .normal)
@@ -3105,9 +3102,41 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         /// cho action), còn begin/commit tường minh ngoài transaction ngầm lại ép commit đồng bộ
         /// lên render server — đo 12/10/2026 (KeyboardBench): sync_p50 +~0.1ms/phím.
         func showPressed(_ on: Bool) {
-            guard let c = on ? pressedBackground : (pressedBackground != nil ? normalBackground : nil),
-                  backgroundColor != c else { return }
-            backgroundColor = c
+            guard let c = on ? pressedBackground : (pressedBackground != nil ? normalBackground : nil) else { return }
+            pressShown = on
+            if backgroundColor != c { backgroundColor = c }
+        }
+        /// Đang hiện nền đè (applyShiftAppearance không ghi đè nền khi ngón còn trên ⇧).
+        private(set) var pressShown = false
+        private var pressedAt: CFTimeInterval = 0
+        private(set) var releasePending = false
+        /// Chạm xuống: sẫm + ghi giờ. pressedBackground nil (công tắc TẮT) ⇒ thoát ngay.
+        func press() {
+            guard pressedBackground != nil else { return }
+            if releasePending {
+                releasePending = false
+                NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(releaseDeferred),
+                                                       object: nil)
+            }
+            pressedAt = CACurrentMediaTime()
+            showPressed(true)
+        }
+        /// Nhấc / huỷ: thôi sẫm — nhưng nếu mới sẫm chưa tới BalloonGeometry.minVisible thì
+        /// thôi TRỄ. Phím sát mép màn hình (q/a/1, p/l/0, ⇧, ⌫, 123, return): iOS giữ touch để
+        /// phân xử cử chỉ hệ thống rồi giao began + ended CÙNG một vòng runloop ⇒ sẫm rồi
+        /// thôi sẫm trước khi kịp lên màn hình (bug tester 1.2.10 — ô phóng to đã có cùng cách
+        /// chữa, hideBalloonAfterTap). Đường thường: một phép trừ, không hẹn giờ.
+        func release() {
+            guard pressedBackground != nil, pressShown, !releasePending else { return }
+            let d = BalloonGeometry.hideDelay(shownFor: CACurrentMediaTime() - pressedAt)
+            guard d > 0 else { showPressed(false); return }
+            releasePending = true
+            perform(#selector(releaseDeferred), with: nil, afterDelay: d, inModes: [.common])
+        }
+        @objc private func releaseDeferred() {
+            guard releasePending else { return }
+            releasePending = false
+            showPressed(false)
         }
         /// Hit-area tuỳ biến (âm = nở rộng). Slot trên bar 20pt cần nở XUỐNG
         /// 16pt phủ hết strip 36 — tâm ngón tay hay rơi dưới đáy bar là vùng
@@ -3335,8 +3364,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if special { b.pressedBackground = specialFill }
         // Phím chữ / số / ký hiệu: pressedBackground chỉ gán khi công tắc "Phím sẫm khi bấm"
         // BẬT (lúc dựng plane) — TẮT ⇒ nil ⇒ hai closure này thoát ngay như trước.
-        b.addAction(UIAction { [weak b] _ in b?.showPressed(true) }, for: .touchDown)
-        b.addAction(UIAction { [weak b] _ in b?.showPressed(false) },
+        b.addAction(UIAction { [weak b] _ in b?.press() }, for: .touchDown)
+        b.addAction(UIAction { [weak b] _ in b?.release() },
                     for: [.touchUpInside, .touchUpOutside, .touchCancel])
         return b
     }
@@ -3674,8 +3703,47 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let b = baseButton(title: title, special: true)
         b.addAction(UIAction { _ in Self.clickModifier() }, for: .touchDown)
         if armed { armCommit(b, fire: action) }
+        else if case .down = fire {
+            // Phím đổi plane (123/ABC/#+=) đổi ở touchDown ⇒ phím vừa chạm bị gỡ ngay; phím
+            // plane mới nằm đúng chỗ ngón tay sẫm thay (như stock) tới khi nhấc.
+            b.addAction(UIAction { [weak self] a in
+                guard let self, let v = a.sender as? KeyButton else { action(); return }
+                let slot = self.controlSlot(of: v)
+                action()
+                self.carryPress(from: v, slot: slot)
+            }, for: .touchDown)
+            b.addAction(UIAction { [weak self] _ in self?.releaseCarriedPress() },
+                        for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        }
         else { b.addAction(UIAction { _ in action() }, for: fire.events) }
         return b
+    }
+    /// Phím mới (sau đổi plane) đang sẫm thay cho phím cũ còn giữ touch.
+    private weak var carriedPress: KeyButton?
+    /// (hàng tính TỪ ĐÁY — hàng số làm plane chữ nhiều hàng hơn, thứ tự nút thật trong hàng) — plane mới đặt phím đổi plane cùng chỗ (123 ↔ ABC,
+    /// #+= ↔ 123). Theo cấu trúc, không theo frame: plane mới chưa layout lúc touchDown.
+    private func controlSlot(of c: UIControl) -> (row: Int, index: Int)? {
+        let rows = rowsContainer.arrangedSubviews
+        for (r, row) in rows.enumerated() {
+            if let i = rowControls(row).firstIndex(where: { $0 === c }) { return (rows.count - 1 - r, i) }
+        }
+        return nil
+    }
+    private func carryPress(from old: KeyButton, slot: (row: Int, index: Int)?) {
+        releaseCarriedPress()
+        guard let slot, !old.isDescendant(of: self) else { return }
+        old.showPressed(false)   // nằm cache plane cũ — đừng để sẫm treo lúc quay lại
+        let rows = rowsContainer.arrangedSubviews
+        guard slot.row < rows.count else { return }
+        let cs = rowControls(rows[rows.count - 1 - slot.row])
+        guard slot.index < cs.count, let nb = cs[slot.index] as? KeyButton,
+              nb.isSpecial, nb.pressedBackground != nil else { return }
+        nb.press()
+        carriedPress = nb
+    }
+    private func releaseCarriedPress() {
+        carriedPress?.release()
+        carriedPress = nil
     }
     enum ControlFire {
         case up, upOrCancel, down
@@ -3790,24 +3858,24 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private weak var wordSwipeKey: UIView?
     private var wordSwipePill: UILabel?
 
-    @objc private func backspaceDown(_ sender: UIControl, event: UIEvent) {
+    @objc private func backspaceDown(_ sender: UIControl, event: UIEvent?) {
         Self.clickDelete()
         // Ô tìm emoji: ⌫ chỉ xoá trong ô tìm — không chụp context / vuốt xoá từ ô nhập.
         if plane == .emojiSearch { tapped(.backspace); return }
         onBackspaceTouchDown?()
-        let x = event.allTouches?.first(where: { $0.view === sender })?.location(in: self).x
+        let x = event?.allTouches?.first(where: { $0.view === sender })?.location(in: self).x
         wordSwipeKey = sender
         backspaceSwipeBegan(x: x ?? 0)
         tapped(.backspace)
     }
 
-    @objc private func backspaceDrag(_ sender: UIControl, event: UIEvent) {
-        guard let x = event.allTouches?.first(where: { $0.view === sender })?.location(in: self).x
+    @objc private func backspaceDrag(_ sender: UIControl, event: UIEvent?) {
+        guard let x = event?.allTouches?.first(where: { $0.view === sender })?.location(in: self).x
         else { return }
         backspaceSwipeMoved(x: x)
     }
 
-    @objc private func backspaceUp(_ sender: UIControl, event: UIEvent) {
+    @objc private func backspaceUp(_ sender: UIControl, event: UIEvent?) {
         backspaceSwipeEnded()
     }
 
@@ -4320,7 +4388,16 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             if best == nil || d < best!.1 { best = (i, d) }
         }
         // chỉ nhận khi thật sự gần hàng phím chữ (~nửa chiều cao phím)
-        if let (i, d) = best, d <= 21 * 21 { return letterKeys[i].button }
+        guard let (i, d) = best else { return nil }
+        if d <= 21 * 21 { return letterKeys[i].button }
+        // Lề hàng thụt (a…l): từ mép màn hình tới a / sau l (~26pt) là của a / l như stock —
+        // trước đây quá tầm 21pt ⇒ chạm sát mép hàng a/l mất phím. Chỉ khi điểm nằm TRONG dải
+        // cao của hàng và ở ngoài phím đầu / cuối hàng (hiếm — đường thường đã return ở trên).
+        let rects = letterGeometry().rects, f = rects[i]
+        guard point.y >= f.minY, point.y <= f.maxY else { return nil }
+        let first = i == 0 || rects[i - 1].midY != f.midY
+        let last = i == rects.count - 1 || rects[i + 1].midY != f.midY
+        if (first && point.x < f.minX) || (last && point.x > f.maxX) { return letterKeys[i].button }
         return nil
     }
 
@@ -5176,6 +5253,18 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let k = b as? KeyButton
         return (b.backgroundColor, k?.normalBackground, k?.pressedBackground)
     }
+    /// Test hook: các phím đang hiện nền đè (sẫm), theo thứ tự cây view.
+    func debugPressedKeys() -> [UIButton] {
+        var out: [UIButton] = []
+        func walk(_ v: UIView) {
+            if let b = v as? KeyButton, b.pressShown, b.backgroundColor == b.pressedBackground { out.append(b) }
+            v.subviews.forEach(walk)
+        }
+        walk(rowsContainer)
+        return out
+    }
+    /// Test hook: phím đang chờ thôi sẫm trễ (touch sát mép giao began + ended một lượt).
+    func debugReleasePending(_ b: UIButton) -> Bool { (b as? KeyButton)?.releasePending ?? false }
     /// Test hook: nút phím chữ `s` (router điều phối, không nhận touch trực tiếp).
     func debugLetterButton(_ s: String) -> UIButton? { letterKeys.first { $0.base == s }?.button }
     /// Test hook: frame balloon đang hiện (toạ độ self), nil nếu ẩn.

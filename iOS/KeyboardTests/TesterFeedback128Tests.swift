@@ -230,11 +230,15 @@ final class TesterFeedback128Tests: XCTestCase {
                 XCTAssertEqual(kb.debugKeyColors(a).current, pressed, "đè ⇒ sẫm")
                 XCTAssertFalse(kb.debugBalloonVisible, "phóng to tắt ⇒ không balloon")
                 a.sendActions(for: end)
+                // Nhả ngay sau đè (< minVisible, như touch sát mép giao một lượt) ⇒ thôi sẫm trễ.
+                XCTAssertEqual(kb.debugKeyColors(a).current, pressed, "vẫn sẫm đủ minVisible")
+                RunLoop.main.run(until: Date().addingTimeInterval(BalloonGeometry.minVisible + 0.05))
                 XCTAssertEqual(kb.debugKeyColors(a).current, c.normal, "nhả/huỷ ⇒ về màu thường")
             }
             // Đường router thật (chạm tâm phím rồi nhấc).
             let f = try XCTUnwrap(kb.debugLetterFrame("a"))
             kb.debugTouch(from: CGPoint(x: f.midX, y: f.midY), through: [], start: 1)
+            RunLoop.main.run(until: Date().addingTimeInterval(BalloonGeometry.minVisible + 0.05))
             XCTAssertEqual(kb.debugKeyColors(a).current, c.normal)
             // Phím số hàng số / plane số cũng sẫm.
             kb.debugSetPlane(numbers: true); kb.layoutIfNeeded()
@@ -242,6 +246,7 @@ final class TesterFeedback128Tests: XCTestCase {
             seven.sendActions(for: .touchDown)
             XCTAssertEqual(kb.debugKeyColors(seven).current, kb.debugKeyColors(seven).pressed)
             seven.sendActions(for: .touchCancel)
+            RunLoop.main.run(until: Date().addingTimeInterval(BalloonGeometry.minVisible + 0.05))
             XCTAssertEqual(kb.debugKeyColors(seven).current, kb.debugKeyColors(seven).normal)
         }
     }
