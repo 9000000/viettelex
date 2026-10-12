@@ -3,10 +3,10 @@
   "url": "https://github.com/ptrinh/viettelex/releases/tag/v1.8.16",
   "build": 125,
   "windows": {
-    "version": "1.1.5",
-    "x64": "https://github.com/ptrinh/viettelex/releases/download/windows-v1.1.5/VietTelex-1.1.5-x64.msi",
-    "arm64": "https://github.com/ptrinh/viettelex/releases/download/windows-v1.1.5/VietTelex-1.1.5-arm64.msi",
-    "notes": "Sửa gõ trong Command Prompt; nhớ Việt/Anh theo từng ứng dụng."
+    "version": "1.2.0",
+    "x64": "https://github.com/ptrinh/viettelex/releases/download/windows-v1.2.0/VietTelex-1.2.0-x64.msi",
+    "arm64": "https://github.com/ptrinh/viettelex/releases/download/windows-v1.2.0/VietTelex-1.2.0-arm64.msi",
+    "notes": "Sửa mất chữ trên Messenger/Facebook, thanh địa chỉ Edge, Ctrl+Shift tự chuyển về VietTelex, lỗi hàng số (#121)."
   },
   "linux": {
     "version": "1.0.12",
