@@ -123,6 +123,21 @@ final class ScreenSimulationTests: XCTestCase {
         for w in Self.corpus { assertScreenTracks(w) }
     }
 
+    func testStandaloneWRunCommitsAllTypedLettersWhenAutoRestoreIsOff() {
+        for keys in ["www", "wwww"] {
+            var engine = TelexEngine()
+            var screen = Screen()
+            for ch in keys {
+                let action = engine.feed(ch)
+                screen.apply(action, feedChar: ch)
+            }
+
+            let boundary = engine.commitBoundary(autoRestore: false)
+            screen.apply(boundary, feedChar: nil)
+            XCTAssertEqual(screen.text, keys, "boundary lost a literal w in \(keys)")
+        }
+    }
+
     // Same corpus but under each setting flag — the diff must stay consistent
     // regardless of composition policy.
     func testScreenTracksUnderEverySetting() {

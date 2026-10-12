@@ -1256,7 +1256,7 @@ struct AboutTab: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: 128, height: 128)
-            Text("VietTelex").font(.title2).bold()
+            Text(AppState.isDevelopmentBuild ? "VietTelex Dev" : "VietTelex").font(.title2).bold()
             Text(String(format: model.loc("Version %@ · %@"), appVersion, buildDate))
                 .foregroundStyle(.secondary)
             Link("Website", destination: URL(string: "https://ptrinh.github.io/viettelex/")!)
@@ -1323,6 +1323,8 @@ struct AboutTab: View {
             // minHeight, not a fixed height: a long localized status line (or a wrapped
             // error) used to be clipped by the 66pt box.
             .frame(minHeight: 66)
+            // The release updater always installs into the stable app path.
+            .disabled(!AppState.isStableBuild)
 
             Text("© \(String(currentYear)) Phil Trinh").foregroundStyle(.secondary)
             Spacer()
@@ -1422,6 +1424,7 @@ struct AboutTab: View {
     }
 
     private func runCheck() {
+        guard AppState.isStableBuild else { return }
         checking = true; status = nil; updateVersion = nil; noteBlocks = []
         UpdateCheck.pendingUpdateVersion = nil   // the user is looking; this is now live state
         UpdateCheck.pendingUpdateNotes = nil

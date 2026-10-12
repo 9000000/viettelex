@@ -36,12 +36,15 @@ Build tay như trên thì bundle nằm trong DerivedData mặc định của Xco
 `$TMPDIR/viettelex-derived/Build/Products/Release/VietTelex.app` (tránh vụ nhiều
 DerivedData tồn đọng làm cài nhầm bản cũ). `TelexCore` link tĩnh, bundle tự chứa.
 
-**Debug và Release có định danh IMK khác nhau.** Xcode Debug dùng
-`com.viettelex.inputmethod.telex.debug`, mode `…debug.vi` và connection
-`…debug_Connection`; Release giữ nguyên `com.viettelex.inputmethod.telex`, mode
-`…telex.vi` và connection `…telex_Connection`. Debug được ký ad-hoc, nên không
-thể dùng quyền Accessibility của Release và không hiện hộp nhắc quyền. Chạy app
-Release đã ký/notarized để kiểm tra hành vi thật; không mở app bằng ⌘R.
+**Debug và Release có định danh IMK khác nhau.** Xcode Debug dùng bundle ID
+`com.viettelex.inputmethod.viettelexdev`, input source `…viettelexdev.vi`, connection
+`…viettelexdev_Connection` và executable `VietTelexDev`; Release giữ nguyên các ID
+stable. Để thử song song mà không thay bản đang dùng, chạy
+`Scripts/dev-install-viettelex-dev.sh`: script chạy test app, kiểm tra metadata chữ ký,
+cài riêng vào `~/Library/Input Methods/VietTelex Dev.app` và bỏ đăng ký bản test trong
+DerivedData. Script chỉ dừng process `VietTelexDev`, không dừng hay ghi vào bản stable.
+Debug được ký ad-hoc, nên quyền Accessibility phải cấp riêng. macOS 26 trở lên từ chối
+bản Dev chưa notarize; khi đó dùng bản stable đã notarize để thử input source.
 
 ### Cài để test tay
 
@@ -52,6 +55,9 @@ vào `~/Library/Input Methods` đăng ký được sau một lần logout, trong
 Developer ID (chưa notarize), Apple Development, sandbox on/off, `~/Library` lẫn
 `/Library`. Không có log; login scanner lặng lẽ bỏ qua bundle chưa notarize.
 `spctl -a -t exec` phân biệt được: notarized = "accepted", chưa = "rejected".
+
+Để kiểm tra riêng engine trên các macOS cũ hơn, dùng `Scripts/dev-install-viettelex-dev.sh`;
+script từ chối cài bản ad-hoc trên macOS 26 trở lên trước khi thay bundle nào.
 
 Cài bằng **`Scripts/notarize-install.sh`** (build → ký Developer ID + hardened
 runtime → notarize → staple → install). Vòng lặp dev nhanh hơn:

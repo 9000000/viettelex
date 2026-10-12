@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import Carbon.HIToolbox
 @testable import VietTelex
 
 // Shortcut word + Enter (WhatsApp, 2026-08-06): "ko"⏎ expanded to "không" but the
@@ -142,5 +143,25 @@ final class BoundaryRepostTests: XCTestCase {
         }
         XCTAssertEqual(down.type, .keyDown)
         XCTAssertEqual(up.type, .keyUp)
+    }
+
+    func testArrowRepostPreservesNavigationKeyAndModifiers() {
+        let rightArrow = CGKeyCode(kVK_RightArrow)
+        guard let (down, up) = SyntheticKeyboard.makeBoundaryRepost(key: rightArrow, flags: .maskShift) else {
+            return XCTFail("arrow pair must be constructible")
+        }
+        XCTAssertEqual(down.getIntegerValueField(.keyboardEventKeycode), Int64(rightArrow))
+        XCTAssertEqual(up.getIntegerValueField(.keyboardEventKeycode), Int64(rightArrow))
+        XCTAssertTrue(down.flags.contains(.maskShift))
+        XCTAssertTrue(up.flags.contains(.maskShift))
+    }
+
+    func testNavigationBoundaryRepostsWhenAnEditMayBePending() {
+        XCTAssertFalse(TerminalTapController.navigationBoundaryNeedsRepost(
+            rewrote: false, queueDrained: true))
+        XCTAssertTrue(TerminalTapController.navigationBoundaryNeedsRepost(
+            rewrote: true, queueDrained: true))
+        XCTAssertTrue(TerminalTapController.navigationBoundaryNeedsRepost(
+            rewrote: false, queueDrained: false))
     }
 }

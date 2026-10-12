@@ -14,6 +14,9 @@ cd TelexCore && swift test
 # Sinh Xcode project và build app
 xcodegen generate
 xcodebuild -project VietTelex.xcodeproj -scheme VietTelex -configuration Release build
+
+# Chạy test và cài bản Dev riêng cạnh bản stable (macOS dưới 26)
+Scripts/dev-install-viettelex-dev.sh
 ```
 
 macOS yêu cầu input method phải **notarized** mới đăng ký được — cài bản tự build
@@ -26,7 +29,7 @@ bằng `Scripts/notarize-install.sh` (cần Apple Developer ID; xem chi tiết t
 TelexCore/          Engine Telex + SyllableValidator (Swift package thuần, test độc lập)
 App/Sources/        IMKit controller, CGEventTap (tap-mode), AppState, Settings UI
 AppTests/           Test app target: routing per-app, import plist, Updater, DebugLog
-Scripts/            notarize-install, dev-install, make-release, đo latency, stress test
+Scripts/            notarize-install, dev-install, dev-install-viettelex-dev, make-release, đo latency, stress test
 typing-modes.yml  Rule cơ chế gõ mặc định theo app (bundle vào app + đính release)
 ```
 

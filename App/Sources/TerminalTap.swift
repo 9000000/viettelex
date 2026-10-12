@@ -3205,9 +3205,15 @@ final class TerminalTapController {
         // (re-emitting arrows as 0x1C killed arrow-key navigation).
         if unit < 0x20 || (unit >= 0xF700 && unit <= 0xF8FF) {
             lastTapKeyWasBoundary = true
-            emitBoundary(suppressAutoRestore: false, allowShortcuts: false)
+            let rewrote = emitBoundary(suppressAutoRestore: false, allowShortcuts: false)
             engine.forgetLastCommit()      // navigation: the caret left the word behind
             shortcutTail.caretMoved()
+            if Self.navigationBoundaryNeedsRepost(
+                rewrote: rewrote, queueDrained: SyntheticKeyboard.queueDrained()
+            ) {
+                reemit(keyCode: keyCode, string: nil, original: event)
+                return nil
+            }
             return pass
         }
         // Layout remap: the tap is handed the character macOS produced with ITS
@@ -3653,6 +3659,10 @@ final class TerminalTapController {
         return ShortcutScreen.insertedText(s)
     }
 
+    static func navigationBoundaryNeedsRepost(rewrote: Bool, queueDrained: Bool) -> Bool {
+        rewrote || !queueDrained
+    }
+
     private func reemit(keyCode: Int, string: String?, original: CGEvent? = nil) {
         switch keyCode {
         case kReturn, kEnter, kTab, kEscape:
@@ -3668,7 +3678,12 @@ final class TerminalTapController {
             } else {
                 SyntheticKeyboard.postKey(CGKeyCode(kVK_Return))
             }
-        default:              if let s = string { SyntheticKeyboard.apply(backspaces: 0, insert: s, mode: emitMode) }
+        default:
+            if let original {
+                SyntheticKeyboard.postBoundaryCopy(of: original)
+            } else if let string {
+                SyntheticKeyboard.apply(backspaces: 0, insert: string, mode: emitMode)
+            }
         }
     }
 }

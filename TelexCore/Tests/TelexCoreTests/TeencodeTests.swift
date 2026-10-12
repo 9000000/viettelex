@@ -154,6 +154,21 @@ final class TeencodeTests: XCTestCase {
         XCTAssertEqual(commit("ww"), "w")             // escape 2 phím giữ nguyên hành vi cũ
     }
 
+    func testAllWWordRestoresWhenAutoRestoreIsDisabled() {
+        for keys in ["www", "wwww"] {
+            var engine = TelexEngine()
+            for ch in keys { _ = engine.feed(ch) }
+
+            XCTAssertNotEqual(engine.composed, keys, "fixture must exercise the w cancel ladder")
+            XCTAssertEqual(engine.peekCommitText(autoRestore: false), keys)
+            XCTAssertEqual(engine.commitText(autoRestore: false), keys)
+        }
+
+        var twoKeyEscape = TelexEngine()
+        for ch in "ww" { _ = twoKeyEscape.feed(ch) }
+        XCTAssertEqual(twoKeyEscape.commitText(autoRestore: false), "w")
+    }
+
     private func screen(_ keys: String) -> String {
         var e = engine()
         for ch in keys { _ = e.feed(ch) }

@@ -16,16 +16,34 @@ extension Notification.Name {
 final class AppState: @unchecked Sendable {
     static let shared = AppState()
 
-    /// Real settings suite — EXCEPT under XCTest, where a separate suite isolates the
-    /// test host: the host runs the real AppState, and tests that flip toggles
-    /// (debugLogging, engine settings) were writing straight into the dev machine's
-    /// live settings — every `xcodebuild test` silently reconfigured the installed
-    /// IME (bitten 2026-07-30: debugLogging kept turning itself off mid-debugging).
-    /// Same detection as main.swift's IMK/TCC guard.
-    static let settingsSuiteName: String =
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            ? "com.viettelex.settings.tests"
-            : "com.viettelex.settings"
+    static let stableBundleIdentifier = "com.viettelex.inputmethod.telex"
+    static let developmentBundleIdentifier = "com.viettelex.inputmethod.viettelexdev"
+    static let developmentInputSourceIdentifier = "com.viettelex.inputmethod.viettelexdev.vi"
+    static let developmentConnectionName = "com.viettelex.inputmethod.viettelexdev_Connection"
+    static let stableSettingsSuiteName = "com.viettelex.settings"
+    static let developmentSettingsSuiteName = "com.viettelex.settings.dev"
+    static let testSettingsSuiteName = "com.viettelex.settings.tests"
+
+    static var isDevelopmentBuild: Bool {
+        Bundle.main.bundleIdentifier == developmentBundleIdentifier
+    }
+
+    static var isStableBuild: Bool {
+        Bundle.main.bundleIdentifier == stableBundleIdentifier
+    }
+
+    /// Keep the installed Dev input method and XCTest host out of the stable user's
+    /// settings. XCTest takes precedence because its host runs the real AppState.
+    static let settingsSuiteName = resolveSettingsSuiteName(
+        isTestHost: ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil,
+        bundleIdentifier: Bundle.main.bundleIdentifier
+    )
+
+    static func resolveSettingsSuiteName(isTestHost: Bool, bundleIdentifier: String?) -> String {
+        if isTestHost { return testSettingsSuiteName }
+        if bundleIdentifier == developmentBundleIdentifier { return developmentSettingsSuiteName }
+        return stableSettingsSuiteName
+    }
 
     let defaults = UserDefaults(suiteName: AppState.settingsSuiteName) ?? .standard
 

@@ -2,8 +2,8 @@ import XCTest
 @testable import VietTelex
 
 // The app must recognize its OWN input source, whatever bundle id this build was
-// installed under. `Scripts/dev-register.sh` remaps every id to a separate dev
-// namespace (rule #4, docs/MACOS_IME_NOTES.md), and while the ship id was hardcoded
+// installed under. The Debug configuration uses a separate development namespace
+// (docs/MACOS_IME_NOTES.md), and while the ship id was hardcoded
 // in isVietTelexSelected() the dev build answered "VietTelex is not selected" about
 // itself — so the TIS notification, deactivateServer and the per-key reconcile all
 // put the tap DORMANT mid-word. Tester log 2026-08-13: "biết" in Terminal came out
@@ -17,7 +17,7 @@ import XCTest
 final class OwnBundleIdentityTests: XCTestCase {
 
     private let ship = "com.viettelex.inputmethod.telex"
-    private let dev = "com.viettelex.inputmethod.telex.debug"
+    private let dev = "com.viettelex.inputmethod.viettelexdev"
 
     /// The regression itself: a dev build asking the SHIP prefix disowns its own input
     /// source; asking its own id recognizes it. The ship build is unaffected.
@@ -56,7 +56,7 @@ final class OwnBundleIdentityTests: XCTestCase {
         XCTAssertEqual(appBundle.bundleIdentifier, expected)
         #if DEBUG
         XCTAssertEqual(appBundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
-                       "VietTelex (Debug)")
+                       "VietTelex Dev")
         #else
         XCTAssertEqual(appBundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
                        "VietTelex")
@@ -79,7 +79,7 @@ final class OwnBundleIdentityTests: XCTestCase {
         XCTAssertTrue(TelexInputController.inputSourceIsOurs(ship, own: ship))
         XCTAssertTrue(TelexInputController.inputSourceIsOurs(ship + ".vi", own: ship))
         XCTAssertFalse(TelexInputController.inputSourceIsOurs(ship, own: dev))
-        XCTAssertFalse(TelexInputController.inputSourceIsOurs(ship + ".debug.vi", own: ship))
+        XCTAssertFalse(TelexInputController.inputSourceIsOurs(dev + ".vi", own: ship))
     }
 
     func testForeignInputSourceDoesNotMatch() {
@@ -106,10 +106,10 @@ final class OwnBundleIdentityTests: XCTestCase {
     /// Debug-Info.plist is a hand-kept copy of Info.plist: Xcode expands build
     /// variables in plist VALUES but not KEYS, and tsInputModeListKey is keyed by the
     /// mode id — so one shared plist can't carry both identities (measured 24/09/2026).
-    /// Pin that the copy never drifts: after mapping the Debug identity back onto the
+    /// Pin that the copy never drifts: after mapping the development identity back onto the
     /// shipping one, the two files must be identical except for version numbers
-    /// (bumped on Info.plist only) and the Debug display name.
-    func testDebugPlistStaysInSyncWithReleasePlist() throws {
+    /// (bumped on Info.plist only) and the development display name.
+    func testDevPlistStaysInSyncWithReleasePlist() throws {
         let res = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("App/Resources")
@@ -117,7 +117,7 @@ final class OwnBundleIdentityTests: XCTestCase {
             try String(contentsOf: res.appendingPathComponent(name), encoding: .utf8)
         }
         func normalize(_ xml: String) throws -> NSDictionary {
-            let data = Data(xml.replacingOccurrences(of: "com.viettelex.inputmethod.telex.debug",
+            let data = Data(xml.replacingOccurrences(of: dev,
                                                      with: "com.viettelex.inputmethod.telex").utf8)
             let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
             let d = try XCTUnwrap(plist as? [String: Any])
@@ -126,7 +126,7 @@ final class OwnBundleIdentityTests: XCTestCase {
                       "CFBundleDisplayName"] { out.removeValue(forKey: k) }
             return try XCTUnwrap(stripNames(out) as? [String: Any]) as NSDictionary
         }
-        // Display titles differ by design ("VietTelex (Debug)"): bundle name and the
+        // Display titles differ by design ("VietTelex Dev"): bundle name and the
         // input mode's menu title. Everything else — ids, connection, icons, modes —
         // must match.
         let titleKeys: Set<String> = ["tsInputModeAlternateMenuTitleStringKey"]
@@ -142,8 +142,8 @@ final class OwnBundleIdentityTests: XCTestCase {
             return v
         }
         let release = try normalize(load("Info.plist"))
-        let debug = try normalize(load("Debug-Info.plist"))
-        XCTAssertEqual(release, debug,
+        let development = try normalize(load("Debug-Info.plist"))
+        XCTAssertEqual(release, development,
                        "Debug-Info.plist drifted from Info.plist — mirror the change (only ids/name/version may differ)")
     }
 }

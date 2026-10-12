@@ -39,6 +39,20 @@ final class BoundaryTests: XCTestCase {
         XCTAssertEqual(commitFM("class"), "class")
     }
 
+    func testKeyboardUsesTheEnglishProtectionSettings() {
+        let spellChecked = feed("keyboard") { $0.liveSpellCheck = true }
+        XCTAssertEqual(spellChecked.composed, "keyboard")
+
+        var restoreEnabled = feed("keyboard")
+        XCTAssertNotEqual(restoreEnabled.composed, "keyboard")
+        XCTAssertEqual(restoreEnabled.commitText(autoRestore: true), "keyboard")
+
+        var restoreDisabled = feed("keyboard")
+        let composed = restoreDisabled.composed
+        XCTAssertNotEqual(composed, "keyboard")
+        XCTAssertEqual(restoreDisabled.commitText(autoRestore: false), composed)
+    }
+
     // commitBoundary's .replace(backspaces:insert:) must delete exactly the composed
     // characters currently on screen and insert the raw keystrokes — applying it to a
     // simulated screen showing `composed` must yield exactly commitText's result.

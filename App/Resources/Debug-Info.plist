@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>VietTelex (Debug)</string>
+	<string>VietTelex Dev</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconFile</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>VietTelex (Debug)</string>
+	<string>VietTelex Dev</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -26,16 +26,16 @@
 	<dict>
 		<key>tsInputModeListKey</key>
 		<dict>
-			<key>com.viettelex.inputmethod.telex.debug.vi</key>
+			<key>com.viettelex.inputmethod.viettelexdev.vi</key>
 			<dict>
 				<key>TISInputSourceID</key>
-				<string>com.viettelex.inputmethod.telex.debug.vi</string>
+				<string>com.viettelex.inputmethod.viettelexdev.vi</string>
 				<key>TISIntendedLanguage</key>
 				<string>vi</string>
 				<key>tsInputModeAlternateMenuIconFileKey</key>
 				<string>MenuIcon.pdf</string>
 				<key>tsInputModeAlternateMenuTitleStringKey</key>
-				<string>ViệtTelex (Debug)</string>
+				<string>ViệtTelex Dev</string>
 				<key>tsInputModeCharacterRepertoireKey</key>
 				<array>
 					<string>Latn</string>
@@ -58,11 +58,11 @@
 		</dict>
 		<key>tsVisibleInputModeOrderedArrayKey</key>
 		<array>
-			<string>com.viettelex.inputmethod.telex.debug.vi</string>
+			<string>com.viettelex.inputmethod.viettelexdev.vi</string>
 		</array>
 	</dict>
 	<key>InputMethodConnectionName</key>
-	<string>com.viettelex.inputmethod.telex.debug_Connection</string>
+	<string>com.viettelex.inputmethod.viettelexdev_Connection</string>
 	<key>InputMethodServerControllerClass</key>
 	<string>VietTelex.TelexInputController</string>
 	<key>InputMethodServerDelegateClass</key>
@@ -80,6 +80,6 @@
 	<key>TICapsLockLanguageSwitchCapable</key>
 	<true/>
 	<key>TISInputSourceID</key>
-	<string>com.viettelex.inputmethod.telex.debug</string>
+	<string>com.viettelex.inputmethod.viettelexdev</string>
 </dict>
 </plist>

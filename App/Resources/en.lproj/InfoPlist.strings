@@ -1,5 +1,4 @@
-"CFBundleName" = "VietTelex";
-"CFBundleDisplayName" = "VietTelex";
 "com.viettelex.inputmethod.telex" = "ViệtTelex";
 "com.viettelex.inputmethod.telex.vi" = "ViệtTelex";
-"com.viettelex.inputmethod.telex.debug.vi" = "ViệtTelex (Debug)";
+"com.viettelex.inputmethod.viettelexdev" = "VietTelex Dev";
+"com.viettelex.inputmethod.viettelexdev.vi" = "Vietnamese (VietTelex Dev)";
