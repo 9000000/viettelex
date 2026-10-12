@@ -80,6 +80,14 @@ void TypingSession::setOutputMode(OutputMode m) {
 }
 
 void TypingSession::fallBack(const char* why) {
+    if (asyncStore_) {
+        // Chromium & co: the store is readable, only late. Its failures are lag, not an
+        // unreadable field: compose (the IME-native path), never hand the field to the
+        // hook — blind backspace+retype into a web editor is what loses letters there.
+        if (!preferComposition_ && opt_.log) opt_.log(why);
+        preferComposition_ = true;
+        return;
+    }
     if (!contextFallback_ && opt_.log) opt_.log(why);
     contextFallback_ = true;
 }
@@ -145,7 +153,15 @@ bool TypingSession::screenStale(const std::u16string& before) {
 void TypingSession::verifyScreen(TextSink& sink) {
     if (!wordActive() || wordMode_ != OutputMode::InPlace || sink.blind()) return;
     const size_t want = shown_.size() > droppedSig_.size() ? shown_.size() : droppedSig_.size();
-    if (screenStale(sink.textBeforeCaret(static_cast<int>(want)))) reset();
+    const bool preferred = preferComposition_;
+    if (!screenStale(sink.textBeforeCaret(static_cast<int>(want)))) return;
+    // An async store (Chromium) reports the page renderer round trips late, often with a
+    // state OLDER than our own last edit: not a change of the word. Keep it; the next key
+    // re-checks and, if the store is still behind, stops editing in place (handleWordKey).
+    // Forgetting the word here made the next key start a "word" in the middle of one,
+    // edited against the stale view (model: "trinhf" -> "triìn", the h lost).
+    if (asyncStore_ && preferred == preferComposition_) return;
+    reset();
 }
 
 void TypingSession::resetContext() {
@@ -153,6 +169,7 @@ void TypingSession::resetContext() {
     contextFallback_ = false;
     compositionOnly_ = false;
     preferComposition_ = false;
+    asyncStore_ = false;
     if (engine_) vtx_reset_context(engine_);
 }
 
@@ -224,6 +241,38 @@ bool TypingSession::handleWordKey(char32_t c, TextSink& sink) {
             const size_t want = shown_.size() > droppedSig_.size() ? shown_.size() : droppedSig_.size();
             const std::u16string before = sink.textBeforeCaret(static_cast<int>(want));
             stale = screenStale(before);
+            if (stale && asyncStore_) {
+                // The store has not caught up with the page (or the page changed): an edit
+                // computed from it lands at the PAGE's caret, not where we checked — letters
+                // lost in Messenger/Facebook. The field composes from the next word on
+                // (Chromium keeps its cache in step with a composition itself). A key that
+                // only appends needs no edit: let it through and keep the word.
+                fallBack("in-place: the store lags the page -> composition for this field");
+                const bool dropped = !droppedSig_.empty() && before.size() >= droppedSig_.size() &&
+                                     before.compare(before.size() - droppedSig_.size(), droppedSig_.size(),
+                                                    droppedSig_) == 0;  // real damage (omnibox), not lag
+                if (vtx_engine* t = dropped ? nullptr : vtx_clone(engine_)) {
+                    vtx_action pa;
+                    vtx_feed(t, c, &pa);
+                    const std::u16string next = composedOf(t);
+                    const bool append = pa.kind == VTX_PASSTHROUGH && !vtx_is_overflowed(t) &&
+                                        next.size() == shown_.size() + 1 &&
+                                        next.compare(0, shown_.size(), shown_) == 0 &&
+                                        next.back() == static_cast<char16_t>(c);
+                    if (append) {
+                        swapEngine(t);
+                        shown_ = next;
+                        droppedSig_.clear();
+                        return false;
+                    }
+                    vtx_destroy(t);
+                }
+                // A key that needs an edit goes to the page as typed (in order, after the
+                // keys still in flight): at worst one word without its accent, never a
+                // letter deleted or misplaced.
+                reset();
+                return false;
+            }
             // NOTHING before the caret although we just let letters through: the store
             // does not show the app's text (IMM/CUAS hosts like mintty, xterm.js'
             // hidden textarea, consoles not flagged as such). In-place can never work
@@ -242,7 +291,7 @@ bool TypingSession::handleWordKey(char32_t c, TextSink& sink) {
         }
     }
     const bool comp = wordMode_ == OutputMode::Composition;
-    if (vtx_is_empty(engine_) && mayReadBack() && !sink.hasSelection() &&
+    if (vtx_is_empty(engine_) && mayReEdit() && !sink.hasSelection() &&
         (!comp || !sink.compositionActive())) {
         if (tryReEdit(c, sink)) return true;
     }

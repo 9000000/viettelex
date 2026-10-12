@@ -491,8 +491,12 @@ void TextService::flushAsync(ITfContext* ctx) {
     }
     Ref<TextService> self(this);
     Ref<ITfContext> c(ctx);
+    Ref<ITfComposition> comp(composition_);
     HRESULT hr = RunEditSession(ctx, clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE,
-                                [self, c](TfEditCookie ec) -> HRESULT {
+                                [self, c, comp](TfEditCookie ec) -> HRESULT {
+                                    // An async session may run after later keys: if a NEW
+                                    // word composes by now, it is not ours to flush.
+                                    if (self->composition() != comp.get()) return S_OK;
                                     TsfTextSink sink(self.get(), c.get(), ec);
                                     self->session_.flush(sink);
                                     return S_OK;
@@ -504,8 +508,13 @@ void TextService::endCompositionAsync() {
     if (!composition_ || !compositionContext_) return;
     Ref<TextService> self(this);
     Ref<ITfContext> c(compositionContext_);
+    Ref<ITfComposition> comp(composition_);
     HRESULT hr = RunEditSession(compositionContext_, clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE,
-                                [self, c](TfEditCookie ec) -> HRESULT {
+                                [self, c, comp](TfEditCookie ec) -> HRESULT {
+                                    // Only the composition this was asked for: by the time an
+                                    // async session runs, the next key may have started a new
+                                    // word, and ending THAT one cut it short.
+                                    if (self->composition() != comp.get()) return S_OK;
                                     TsfTextSink sink(self.get(), c.get(), ec);
                                     sink.endCompositionAsIs();
                                     return S_OK;
@@ -602,6 +611,9 @@ void TextService::evaluateHost(ITfContext* ctx) {
     if (dm) dm->Release();
     host_ = classifyContext(c);
     if (host_ != HostText::NormalViaParent) SafeRelease(targetCtx_);
+    // Chromium & co (transitory, readable): the store mirrors the page asynchronously
+    // (session.h setAsyncStore — 2026-10 Messenger/Facebook "mất chữ" report).
+    session_.setAsyncStore(c.transitory && host_ == HostText::Normal);
     // No usable text store: prefer Direct (the hook types, no underline) over composition.
     if (host_ == HostText::CompositionOnly && requestDirect("context without surrounding text -> direct (hook)")) return;
     session_.setCompositionOnlyContext(host_ == HostText::CompositionOnly);
@@ -999,7 +1011,10 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL* ea
     }
     // In-place just proved impossible in this field (nothing readable, e.g. xterm.js):
     // hand it to the hook rather than composing with an underline.
-    if (session_.contextFellBack() && !result) requestDirect("in-place failed in this field -> direct (hook)");
+    // Never in a browser / Electron field (async store): there a "failure" is the store
+    // lagging the page, and the hook's blind backspace+retype loses letters in web editors.
+    if (session_.contextFellBack() && !result && !session_.asyncStore())
+        requestDirect("in-place failed in this field -> direct (hook)");
     // A digit / punctuation that ended the word goes to the app: in US, not via the layout (#121).
     if (!result && retypeAsUs(ctx, wp, true)) result = TRUE;
     *eaten = result;

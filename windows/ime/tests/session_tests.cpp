@@ -595,12 +595,15 @@ struct ChromiumOmniboxDoc : FakeDocument {
 }  // namespace
 
 TEST(chromium_omnibox_dropped_deletion_moves_field_to_composition) {
+  // async: how the TIP flags a Chromium context since the 2026-10 Messenger report.
+  for (bool async : {false, true}) {
     Settings st;
     TypingSession s;
     s.setOutputMode(OutputMode::InPlace);
     SessionOptions o;
     o.engineFlags = st.engineFlags();
     s.configure(o);
+    s.setAsyncStore(async);
     ChromiumOmniboxDoc doc;
     auto key = [&](char c) {
         KeyInput k;
@@ -632,6 +635,7 @@ TEST(chromium_omnibox_dropped_deletion_moves_field_to_composition) {
     CHECK_EQ(utf16ToUtf8(doc.text), std::string("thế "));
     s.resetContext();  // another field: in-place again
     CHECK(!s.prefersComposition());
+  }
 }
 
 TEST(stale_screen_without_dropped_deletion_keeps_in_place) {
