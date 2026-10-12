@@ -39,6 +39,29 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
 
     override fun onTouchEvent(event: android.view.MotionEvent?) = false
 
+    // MARK: phím sẫm khi bấm (Keys.KEY_PRESS_HIGHLIGHT)
+    // Lớp ink 12% trên khung phím đang đè — cùng màu theme.pressed(keyFill) của phím space/chức
+    // năng, nhãn ink không đổi. Vẽ ở overlay này (display list vài lệnh, vốn đã vẽ lại mỗi chạm
+    // vì balloon) thay vì KeyboardView ⇒ chạm phím chữ không ghi lại ~40 phím. Toạ độ view gốc.
+    /** Trạng thái theo ngón — KeyboardView ghi (chỉ khi công tắc BẬT). */
+    val press = KeyPressHighlight()
+    private val pressPaint = theme.fill(theme.withAlpha(theme.ink, 0.12f))
+    private val pressRadius = theme.dp(KeyLayout.KEY_RADIUS)
+
+    @Suppress("DEPRECATION")
+    fun invalidatePress(pid: Int) {
+        invalidate(press.left(pid).toInt() - 1, press.top(pid).toInt() - 1,
+            press.right(pid).toInt() + 1, press.bottom(pid).toInt() + 1)
+    }
+
+    fun clearPress() { if (press.clearAll()) invalidate() }
+
+    private fun drawPress(c: Canvas) {
+        val p = press
+        for (i in 0 until p.capacity) if (p.isPressed(i))
+            c.drawRoundRect(p.left(i), p.top(i), p.right(i), p.bottom(i), pressRadius, pressRadius, pressPaint)
+    }
+
     /**
      * keyRect theo toạ độ view gốc. Preview kiểu Gboard/Material: thẻ bo góc nổi NGAY
      * TRÊN phím (không cổ nối như iOS), rộng hơn phím chút, chữ lớn.
@@ -163,6 +186,7 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
     }
 
     override fun onDraw(c: Canvas) {
+        if (press.count > 0) drawPress(c)      // dưới popup / bubble (bubble hàng dưới đè phím hàng trên)
         if (popVisible) pop?.let { drawPopup(c, it) }
         if (!visible) return
         c.save()

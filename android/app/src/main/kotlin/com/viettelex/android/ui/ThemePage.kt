@@ -358,11 +358,13 @@ fun ThemePage(onBack: () -> Unit) {
     // Tính Năng → Giao diện gộp luôn chiều cao hàng + logo (không thuộc "Khôi phục giao diện gốc").
     VTSection(header = tr("Bàn phím")) {
         var adj by rememberIntPref(Keys.ROW_HEIGHT_ADJUST, Prefs.D.rowHeightAdjust)
+        val numberRow by rememberBoolPref(Keys.NUMBER_ROW, Prefs.D.numberRow)
         VTRow {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(tr("Chiều cao hàng phím"), style = VTType.body, color = c.label)
                 Text(
-                    if (adj == 0) tr("Chuẩn") else String.format(java.util.Locale.ROOT, tr("%+d dp mỗi hàng (%+d dp cả bàn phím)"), adj, adj * 4),
+                    if (adj == 0) tr("Chuẩn") else String.format(java.util.Locale.ROOT, tr("%+d dp mỗi hàng (%+d dp cả bàn phím)"), adj,
+                        com.viettelex.android.ime.KeyLayout.adjustTotalDp(adj, numberRow)),
                     style = VTType.footnote, color = c.secondary,
                 )
             }

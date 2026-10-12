@@ -41,7 +41,7 @@ import com.viettelex.keyboard.tr
  * view anh em riêng ([StripView], [BalloonView]) để gõ chữ KHÔNG ghi lại display
  * list của ~40 phím: phím chữ không đổi hình khi bấm (balloon lo), nên chỉ overlay
  * balloon bị invalidate — lớp phím chỉ vẽ lại khi shift / plane / pressed phím chức
- * năng đổi.
+ * năng đổi. "Phím sẫm khi bấm" cũng vẽ ở overlay balloon ([keyPressHighlight]).
  *
  * Không Handler/timer nào chạy khi không có ngón trên phím (0% CPU idle).
  */
@@ -133,6 +133,32 @@ class KeyboardView(
     private var showLogo = true
     /** Ô phóng to chữ khi bấm (Keys.KEY_PREVIEW); tắt ⇒ không show balloon phím chữ/ký tự. */
     var keyPreview = true
+
+    /**
+     * "Phím sẫm khi bấm" (Keys.KEY_PRESS_HIGHLIGHT, IME đặt mỗi lần hiện — đọc 1 lần): phím chữ /
+     * số / ký hiệu (LETTER, CHAR) sẫm khi đè; "," "." bàn số đã sẫm sẵn (k.pressed). Trạng thái
+     * + vẽ ở [BalloonView.press] ⇒ không ghi lại display list phím. TẮT ⇒ [pressHL] null, đường
+     * chạm chỉ còn một phép so null.
+     */
+    var keyPressHighlight: Boolean
+        get() = pressHL != null
+        set(v) {
+            if (v == (pressHL != null)) return
+            if (!v) balloon.clearPress()
+            pressHL = if (v) balloon.press else null
+        }
+    private var pressHL: KeyPressHighlight? = null
+
+    private fun pressDown(pid: Int, k: LaidKey) {
+        val p = pressHL ?: return
+        val y = top.toFloat()
+        if (p.down(pid, k.left, k.top + y, k.right, k.bottom + y)) balloon.invalidatePress(pid)
+    }
+
+    private fun pressUp(pid: Int) {
+        val p = pressHL ?: return
+        if (p.up(pid)) balloon.invalidatePress(pid)
+    }
 
     // --- giữ phím chữ ra ký tự phụ (KeyAlternates, issue #98) ---
     /** Bảng đang dùng (IME đặt theo cài đặt + hàng số + TalkBack). Rỗng ⇒ không nhãn, không hẹn giờ. */
@@ -531,6 +557,7 @@ class KeyboardView(
         if (width == 0) return
         dropAlt()                         // phím có thể dời / đổi plane
         dropPopover()
+        balloon.clearPress()              // khung phím sẫm cũ không còn đúng
         val sig = signature()
         if (sig != builtSig) { planeCache.clear(); builtSig = sig }
         keys = planeCache.getOrPut(plane) {
@@ -544,7 +571,7 @@ class KeyboardView(
             val sz = theme.dp(22f)
             logoRect.set(it.right - theme.dp(10f) - sz, it.centerY - sz / 2, it.right - theme.dp(10f), it.centerY + sz / 2)
         }
-        val paneBottom = if (plane == Plane.TEMPLATES) keyAreaPx - KeyLayout.rowUnit(keyAreaPx, numberRow) else keyAreaPx
+        val paneBottom = if (plane == Plane.TEMPLATES) keyAreaPx - KeyLayout.rowUnit(keyAreaPx, numberRow, d) else keyAreaPx
         templatesPane.layout(width.toFloat(), paneBottom)
         emojiPane.layout(width.toFloat(), keyAreaPx)
         searchBar.layout(width.toFloat(), KeyLayout.searchHeaderPx(keyAreaPx))
@@ -967,6 +994,7 @@ class KeyboardView(
         when (k.kind) {
             KeyKind.LETTER -> {
                 feedback.click(Feedback.LETTER, this)
+                pressDown(pid, k)
                 if (keyPreview) showBalloon(k, if (shift == Shift.OFF) k.label else k.upper)
                 val ch = (if (shift == Shift.OFF) k.label else k.upper)[0]
                 val shiftWas = shift
@@ -983,6 +1011,7 @@ class KeyboardView(
             }
             KeyKind.CHAR -> {
                 feedback.click(Feedback.LETTER, this)
+                pressDown(pid, k)
                 if (keyPreview) showBalloon(k, k.label)
                 commits.arm(k, textFire(k.insert))
                 armPopover(pid, k, x, y)
@@ -1080,6 +1109,8 @@ class KeyboardView(
             }
             return
         }
+        // Trôi khỏi phím chữ / số (sang phím khác) ⇒ bỏ sẫm.
+        pressHL?.let { if (it.drift(pid, x, y + top, slop)) balloon.invalidatePress(pid) }
         if (pid == popPid) popoverMove(x, y)
         if (pid == globePtr) { menuX = x; menuY = y; emojiMenuMove(x, y) }
         val k = ptrKey[pid] ?: return
@@ -1122,6 +1153,7 @@ class KeyboardView(
             }
             return
         }
+        pressUp(pid)
         if (pid == swipePid) {
             val wasSwiping = swiping
             stopSwipeTracking()
@@ -1256,6 +1288,7 @@ class KeyboardView(
         editPtr = -1; editRepeatKey = null; railPtr = -1; railPressed = -1
         if (trackpad) endTrackpad()
         balloon.hide(); balloonOwner = null
+        balloon.clearPress()
         invalidate()
     }
 
@@ -1317,6 +1350,7 @@ class KeyboardView(
         if (listener?.onSwipeTypingStart() != true) { stopSwipeTracking(); return }
         swiping = true
         dropAlt()
+        pressUp(swipePid)
         swipeKey?.let { hideBalloon(it) }
         // Chữ đầu đã huỷ ⇒ shift một-lần bị nhả lúc chạm phải bật lại (từ vuốt viết hoa).
         if (swipeShift == Shift.ON && shift == Shift.OFF) { shift = Shift.ON; invalidate() }
