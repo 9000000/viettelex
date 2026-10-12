@@ -12,8 +12,8 @@ class KeyLayoutTest {
     private val H = 218f
 
     private fun build(plane: Plane, kind: InputKind = InputKind.NORMAL, globe: Boolean = false, tablet: Boolean = false,
-                      ret: String = "return", period: Boolean = false) =
-        KeyLayout.build(LayoutConfig(plane, W, H, d, kind, globe, tablet, ret, periodKey = period))
+                      ret: String = "return") =
+        KeyLayout.build(LayoutConfig(plane, W, H, d, kind, globe, tablet, ret))
 
     private fun near(a: Float, b: Float, eps: Float = 0.01f) = assertEquals(b, a, eps)
 
@@ -78,22 +78,19 @@ class KeyLayoutTest {
         near(back.right, W - 3f)
     }
 
-    @Test fun noPeriodKeyByDefault() {
-        // #113: bàn chữ ô thường không có "." cạnh space — space nhận phần 0.10 W + 1 khe;
-        // "," ở PHẢI space như iOS: [?123][😊][space][,][enter].
+    @Test fun noPeriodKeyOnPhoneLetters() {
+        // Bố cục DUY NHẤT kiểu iPhone (12/10/2026, không công tắc): [?123][😊][space][,][enter];
+        // "." = giữ "," (chọn sẵn ".") / space đôi / plane 123.
         val bottom = build(Plane.LETTERS).filter { it.top > 3 * H / 4 - 1 }
         assertEquals(listOf(KeyKind.PLANE, KeyKind.EMOJI, KeyKind.SPACE, KeyKind.PUNCT, KeyKind.RETURN),
             bottom.map { it.kind })
         assertEquals(listOf(","), bottom.filter { it.kind == KeyKind.PUNCT }.map { it.insert })
-        val withPeriod = build(Plane.LETTERS, period = true).first { it.kind == KeyKind.SPACE }
-        val space = bottom.first { it.kind == KeyKind.SPACE }
-        near(space.width, withPeriod.width + 0.10f * W + KeyLayout.KEY_SPACING)
         near(bottom.last().right, W - 3f, 0.05f)
         // Plane tìm emoji = plane chữ ⇒ cũng không có "."; plane số / mẫu câu giữ ".".
         assertTrue(build(Plane.EMOJI_SEARCH).none { it.kind == KeyKind.PUNCT && it.insert == "." })
         assertTrue(build(Plane.NUMBERS).any { it.kind == KeyKind.PUNCT && it.insert == "." })
         assertTrue(build(Plane.TEMPLATES).any { it.kind == KeyKind.PUNCT && it.insert == "." })
-        // Tablet (không có space đôi → ". ") giữ phím ".".
+        // Tablet (dư chỗ) giữ phím ".".
         assertTrue(build(Plane.LETTERS, tablet = true).any { it.kind == KeyKind.PUNCT && it.insert == "." })
         // Một tay: cùng quy tắc.
         val one = KeyLayout.build(LayoutConfig(Plane.LETTERS, W, H, d, oneHand = OneHandSide.LEFT))
@@ -101,38 +98,74 @@ class KeyLayoutTest {
     }
 
     @Test fun bottomRowProportions() {
-        val keys = build(Plane.LETTERS, ret = "go", period = true)
+        val keys = build(Plane.LETTERS, ret = "go")
         val bottom = keys.filter { it.top > 3 * H / 4 - 1 }
-        // Công tắc "." bật: ?123 😊 space , . enter ("," cạnh space như iOS, "." sau nó)
-        assertEquals(listOf(KeyKind.PLANE, KeyKind.EMOJI, KeyKind.SPACE, KeyKind.PUNCT, KeyKind.PUNCT, KeyKind.RETURN),
-            bottom.map { it.kind })
         assertEquals("?123", bottom[0].label)
-        assertEquals(listOf(",", "."), bottom.filter { it.kind == KeyKind.PUNCT }.map { it.insert })
         near(bottom[0].width, 0.15f * W)
         near(bottom[1].width, 0.10f * W)
         near(bottom[3].width, KeyLayout.PHONE_LETTERS_COMMA * W)   // "," hẹp (06/10/2026)
-        near(bottom[4].width, 0.10f * W)
-        assertTrue(bottom[3].width < bottom[4].width)
-        near(bottom[5].width, 0.15f * W)
+        near(bottom[4].width, 0.15f * W)
+        // space nhận phần còn lại: rộng hơn hàng 5 phím ", ." cũ đúng 0.10 W + 1 khe.
+        val gap = KeyLayout.KEY_SPACING
+        near(bottom[2].width, W - 2 * KeyLayout.ROW_MARGIN_H - (0.15f + 0.10f + KeyLayout.PHONE_LETTERS_COMMA + 0.15f) * W - 4 * gap)
+        assertTrue(bottom[2].width > 0.44f * W)   // Gboard ≈ 0.40 W (có ".")
         near(bottom.last().right, W - 3f, 0.05f)
         // cùng margin như mọi hàng
         near(bottom[0].top, 3 * H / 4 + KeyLayout.ROW_MARGIN_V)
         near(bottom[0].bottom, H - KeyLayout.ROW_MARGIN_V)
         near(bottom[0].height, keys.first { it.label == "q" }.height)
-        assertEquals("go", bottom[5].label)
+        assertEquals("go", bottom[4].label)
+    }
+
+    /**
+     * Ma trận loại ô × khổ (dọc / ngang / tablet / một tay): thứ tự phím hàng đáy plane chữ, "."
+     * luôn hiện ở ô URL / email, "," ở PHẢI space ở ô thường, space là phím rộng nhất.
+     */
+    @Test fun bottomRowMatrix() {
+        data class Shape(val name: String, val w: Float, val h: Float, val tablet: Boolean, val one: OneHandSide)
+        val shapes = listOf(
+            Shape("dọc", 390f, 218f, false, OneHandSide.OFF),
+            Shape("ngang", 840f, 168f, false, OneHandSide.OFF),
+            Shape("tablet", 800f, 256f, true, OneHandSide.OFF),
+            Shape("một tay", 390f, 218f, false, OneHandSide.RIGHT),
+        )
+        for (sh in shapes) for (kind in listOf(InputKind.NORMAL, InputKind.URL, InputKind.EMAIL)) {
+            val keys = KeyLayout.build(LayoutConfig(Plane.LETTERS, sh.w, sh.h, d, kind, tablet = sh.tablet, oneHand = sh.one))
+            val bottom = keys.filter { it.top > 3 * sh.h / 4 - 1 }.sortedBy { it.left }
+            val tag = "${sh.name}/$kind"
+            val punct = bottom.filter { it.kind == KeyKind.PUNCT }.map { it.insert }
+            val expectPunct = when (kind) {
+                InputKind.URL -> listOf("/", ".")
+                InputKind.EMAIL -> listOf("@", ".")
+                else -> if (sh.tablet) listOf(",", ".") else listOf(",")
+            }
+            assertEquals(tag, expectPunct, punct)
+            val si = bottom.indexOfFirst { it.kind == KeyKind.SPACE }
+            if (kind == InputKind.NORMAL) {
+                // [?123][😊][space][,(.)][↵]: không phím nào bên trái space ngoài ?123 / 😊.
+                assertEquals(tag, listOf(KeyKind.PLANE, KeyKind.EMOJI), bottom.take(si).map { it.kind })
+                assertEquals(tag, ",", bottom[si + 1].insert)
+            } else {
+                assertEquals(tag, listOf(KeyKind.PLANE, KeyKind.PUNCT, KeyKind.EMOJI), bottom.take(si).map { it.kind })
+                assertEquals(tag, ".", bottom[si + 1].insert)
+            }
+            val space = bottom[si]
+            assertTrue(tag, bottom.all { it === space || it.width < space.width })
+            // Không chồng nhau, cùng hàng.
+            for (i in 1 until bottom.size) assertTrue(tag, bottom[i].left >= bottom[i - 1].right)
+        }
     }
 
     @Test fun emailAndUrlVariants() {
         val email = build(Plane.LETTERS, InputKind.EMAIL).filter { it.kind == KeyKind.PUNCT }
         assertEquals(listOf("@", "."), email.map { it.insert })
         val url = build(Plane.LETTERS, InputKind.URL).filter { it.kind == KeyKind.PUNCT }
-        // Issue #113: không phím ".com" — đuôi tên miền ở giữ "."; space rộng bằng ô thường.
+        // Issue #113: không phím ".com" — đuôi tên miền ở giữ "."; ô URL / email luôn có ".".
         assertEquals(listOf("/", "."), url.map { it.insert })
-        // Ô URL / email luôn có "." (giữ ra đuôi tên miền) dù công tắc tắt.
         val urlSpace = build(Plane.LETTERS, InputKind.URL).first { it.kind == KeyKind.SPACE }
-        val normalSpace = build(Plane.LETTERS, period = true).first { it.kind == KeyKind.SPACE }
-        // Ô thường: "," hẹp (PHONE_LETTERS_COMMA, 06/10/2026) ⇒ space rộng hơn ô URL đúng phần cắt.
-        near(urlSpace.width + (0.10f - KeyLayout.PHONE_LETTERS_COMMA) * W, normalSpace.width)
+        val normalSpace = build(Plane.LETTERS).first { it.kind == KeyKind.SPACE }
+        // Ô thường: 1 phím "," hẹp thay "/"+"." ⇒ space rộng hơn ô URL đúng 0.10 W + phần cắt + 1 khe.
+        near(urlSpace.width + (0.20f - KeyLayout.PHONE_LETTERS_COMMA) * W + KeyLayout.KEY_SPACING, normalSpace.width)
         // plane số không đổi theo kind
         val num = build(Plane.NUMBERS, InputKind.EMAIL).filter { it.kind == KeyKind.PUNCT }
         assertEquals(listOf(",", "."), num.map { it.insert })

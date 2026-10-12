@@ -345,7 +345,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         kb.configure(field.returnLabel, field.kind, needsGlobe(), settings.showSpaceLogo,
             settings.templatesEnabled, templates,
             th.dp(KeyLayout.keyAreaDp(th.tablet, th.landscape, settings.rowHeightAdjust, settings.numberRow)),
-            field.numberSigned, field.numberDecimal, settings.numberRow, settings.showPeriodKey)
+            field.numberSigned, field.numberDecimal, settings.numberRow)
         kb.keyPreview = settings.keyPreview
         kb.configureSpaceFlick(settings.spaceSwipeLanguage, session.language)
         if (session.language == com.viettelex.keyboard.KeyboardLanguage.EN) warmEnglish()
