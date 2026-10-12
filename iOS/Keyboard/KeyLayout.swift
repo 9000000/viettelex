@@ -25,15 +25,27 @@ enum KeyLayout {
         [Key(id: "-", units: 1.31)] + letters("1234567890") + [Key(id: "=", units: nil)]
     static let digits = "1234567890".map { String($0) }
 
-    /// Hàng số thấp hơn hàng chữ như Gboard — tổng bàn phím tăng ít.
-    static let numberRowRatio: CGFloat = 0.75
+    /// Hàng số thấp hơn hàng chữ như Gboard — tổng bàn phím tăng ít. Tỉ lệ tính trên PHÍM
+    /// (không tính khe rowGap phía trên mỗi hàng). Trước 12/10/2026: 0.75 × cả HÀNG (khe
+    /// 10 + phím) ⇒ phím số chỉ 30.5pt cạnh phím chữ 44 dọc (69%), 20pt cạnh 30 ngang —
+    /// tester Plus 1.2.8: "phím số nhỏ quá so với phím chữ, nhìn không cân đối".
+    static let numberKeyRatio: CGFloat = KeyGeometry.numberKeyRatio
+    /// Cao hàng số (khe + phím) khi hàng chữ cao `unit` (khe + phím).
+    static func numberRowHeight(unit: CGFloat) -> CGFloat { KeyGeometry.numberRowHeight(unit: unit) }
+    /// Hàng số = `numberRowMultiplier` × hàng chữ + `numberRowConstant` (constraint Auto Layout).
+    static let numberRowMultiplier: CGFloat = numberKeyRatio
+    static var numberRowConstant: CGFloat { (1 - numberKeyRatio) * KeyGeometry.rowGap }
 
     /// Tổng chiều cao vùng phím. `base` = 4 hàng chuẩn, `adjust` = ±pt MỖI hàng
-    /// (Settings). Hàng số bật → thêm 0.75 hàng, cho MỌI plane (bàn phím không đổi
-    /// chiều cao khi chuyển 123/emoji — host relayout dở dang, xem updateSuggestionChrome).
+    /// (Settings). Hàng số bật → thêm một hàng số (numberRowHeight), cho MỌI plane (bàn phím
+    /// không đổi chiều cao khi chuyển 123/emoji — host relayout dở dang, xem updateSuggestionChrome).
     static func keyAreaHeight(base: CGFloat, adjust: CGFloat, numberRow: Bool) -> CGFloat {
         let unit = (base + adjust * 4) / 4
-        return unit * (numberRow ? 4 + numberRowRatio : 4)
+        return unit * 4 + (numberRow ? numberRowHeight(unit: unit) : 0)
+    }
+    /// Ngược của keyAreaHeight: cao một hàng chữ chuẩn từ tổng vùng phím.
+    static func rowUnit(keyArea: CGFloat, numberRow: Bool) -> CGFloat {
+        numberRow ? (keyArea - numberRowConstant) / (4 + numberRowMultiplier) : keyArea / 4
     }
 
     // MARK: Chiều cao bàn phím (bug tester 1.2.x: phím co lại ở Notes/Facebook, lúc

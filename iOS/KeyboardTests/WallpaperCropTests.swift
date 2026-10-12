@@ -200,10 +200,12 @@ final class WallpaperCropTests: XCTestCase {
         let s = Wallpaper.keyboardSize(screenSize: CGSize(width: 402, height: 874), pad: false, landscape: false,
                                        rowHeightAdjust: 0, numberRow: false, suggestions: true)
         XCTAssertEqual(s, CGSize(width: 402, height: 246))
-        // Hàng số (+0.75 hàng) + mỗi hàng +2pt, tắt gợi ý: (216+8)/4·4.75 − 4 = 262.
+        // Hàng số (khe 10 + phím 0.8×46) + mỗi hàng +2pt, tắt gợi ý: 224 + 46.8 − 4 = 266.8.
         let n = Wallpaper.keyboardSize(screenSize: CGSize(width: 874, height: 402), pad: false, landscape: false,
                                        rowHeightAdjust: 2, numberRow: true, suggestions: false)
-        XCTAssertEqual(n.width, 402); XCTAssertEqual(n.height, 262, accuracy: 1e-9)
+        XCTAssertEqual(n.width, 402); XCTAssertEqual(n.height, 266.8, accuracy: 1e-9)
+        // Khớp đúng chiều cao bàn phím thật (KeyLayout.keyAreaHeight) — ảnh nền không lệch.
+        XCTAssertEqual(n.height, KeyLayout.keyAreaHeight(base: 216, adjust: 2, numberRow: true) - 4, accuracy: 1e-9)
         let l = Wallpaper.keyboardSize(screenSize: CGSize(width: 402, height: 874), pad: false, landscape: true,
                                        rowHeightAdjust: 0, numberRow: false, suggestions: true)
         XCTAssertEqual(l, CGSize(width: 874, height: 196))

@@ -23,6 +23,12 @@ enum KeyGeometry {
     static func sideMargin(pad: Bool) -> CGFloat { pad ? 3 : 6.5 }
     /// Khe giữa 2 hàng phím (lề trên mỗi hàng).
     static let rowGap: CGFloat = 10
+    /// Hàng phím số: PHÍM số = 0.8× phím chữ (không tính khe) — KeyLayout.numberRowHeight.
+    static let numberKeyRatio: CGFloat = 0.8
+    /// Cao hàng số (khe + phím) khi hàng chữ cao `unit` (khe + phím). Dùng chung app (Wallpaper).
+    static func numberRowHeight(unit: CGFloat) -> CGFloat {
+        rowGap + numberKeyRatio * max(unit - rowGap, 0)
+    }
     /// Vùng phím chuẩn 4 hàng × 54 trước khi trừ phần cắt ở hàng đáy (iPhone dọc).
     static let phonePortraitBase: CGFloat = 216
     /// iPhone dọc: hàng đáy thấp hơn các hàng khác chừng này (khe trên nó hẹp lại).
@@ -205,5 +211,35 @@ enum KeyGeometry {
                  max(m.iconBottomInset - 0.09 * m.iconPointSize, 0))
             }
         }
+    }
+}
+
+/// Khung ô phóng to chữ (balloon) quanh phím — THUẦN để unit-test (tester 1.2.8: "bấm q, p, -
+/// sát viền không có hiệu ứng phóng to"). Như stock: bubble đặt giữa phím, nhưng sát mép màn
+/// hình thì DỜI VÀO TRONG (bubble lệch, cổ lệch về phía phím) thay vì tràn ra ngoài bị cắt.
+/// Đỉnh không vượt `topLimit` (extension không vẽ được trên bounds của nó).
+enum BalloonGeometry {
+    /// Bubble rộng hơn phím 24pt, tối thiểu 52; cao trên phím tối đa 52.
+    static let extraWidth: CGFloat = 24, minWidth: CGFloat = 52, rise: CGFloat = 52
+    /// Ô phóng to tối thiểu hiện chừng này (giây) sau khi chạm: iOS có thể giữ touch ở sát mép
+    /// màn hình (phân xử cử chỉ hệ thống) rồi giao began + ended CÙNG lúc ⇒ balloon hiện rồi ẩn
+    /// trong cùng một vòng runloop, không bao giờ lên màn hình. Gõ thường (≥ 70ms/chạm) không
+    /// bị ảnh hưởng; chạm phím mới luôn dời balloon sang phím mới ngay.
+    static let minVisible: Double = 0.07
+
+    static func frame(keyRect k: CGRect, containerWidth W: CGFloat, topLimit: CGFloat) -> CGRect {
+        let w = max(k.width + extraWidth, minWidth)
+        let top = max(k.minY - rise, topLimit)
+        var x = k.midX - w / 2
+        if W >= w { x = min(max(x, 0), W - w) }
+        // Phím luôn nằm trọn dưới bubble (cổ nối được xuống footprint phím).
+        x = min(x, k.minX)
+        x = max(x, k.maxX - w)
+        return CGRect(x: x, y: top, width: w, height: max(k.maxY - top, 0))
+    }
+
+    /// Ẩn balloon ngay (0) hay đợi thêm (giây) — `shownFor` = thời gian đã hiện.
+    static func hideDelay(shownFor: Double) -> Double {
+        shownFor >= minVisible ? 0 : minVisible - shownFor
     }
 }

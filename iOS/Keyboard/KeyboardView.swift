@@ -418,8 +418,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// được lúc bar đang ẩn (user 2026-07-24).
     private lazy var floatingBurger: UIButton = {
         let b = UIButton(type: .custom)
-        b.addAction(UIAction { [weak self] _ in self?.toggleTemplates() },
+        b.addAction(UIAction { [weak self] _ in self?.leftZoneTapped() },
                     for: .touchUpInside)
+        let hold = UILongPressGestureRecognizer(target: self, action: #selector(burgerHold(_:)))
+        hold.minimumPressDuration = 0.45
+        b.addGestureRecognizer(hold)
         addSubview(b)
         b.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -449,15 +452,58 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// Burger: chạm = mẫu câu; giữ lâu = bật/tắt chế độ một tay (iPhone). Bảng sửa văn
     /// bản (icon con trỏ) đã bỏ 27/09/2026 — ưu tiên gọn/nhẹ; một tay vẫn bật được ở đây
     /// hoặc trong app (Cài đặt → Chế độ một tay).
+    /// Tắt "Mẫu câu" (iPhone): ô mép trái KHÔNG biến mất mà thành nút MỘT TAY (icon bàn phím
+    /// một tay, chạm hoặc giữ = bật/tắt) — tester Plus 1.2.8: tắt mẫu câu thì ☰ mất, không còn
+    /// lối bật một tay trên bàn phím. Ô này vốn đã chừa chỗ (bar thụt stripZoneWidth) nên
+    /// không thêm gì vào thanh gợi ý. iPad / bàn tách đôi: không có một tay ⇒ ẩn như cũ.
     private lazy var burgerZone: UIButton = {
         let b = UIButton(type: .custom)
-        b.addAction(UIAction { [weak self] _ in self?.toggleTemplates() }, for: .touchUpInside)
+        b.addAction(UIAction { [weak self] _ in self?.leftZoneTapped() }, for: .touchUpInside)
         let hold = UILongPressGestureRecognizer(target: self, action: #selector(burgerHold(_:)))
         hold.minimumPressDuration = 0.45
         b.addGestureRecognizer(hold)
         addSubview(b)
         return b
     }()
+    /// Ô mép trái thanh gợi ý đang làm gì (thuần theo cài đặt — OneHandTests).
+    enum LeftZone: Equatable { case templates, oneHand, none }
+    static func leftZone(templatesEnabled: Bool, pad: Bool, split: Bool) -> LeftZone {
+        if templatesEnabled { return .templates }
+        return pad || split ? .none : .oneHand
+    }
+    private var leftZone: LeftZone {
+        Self.leftZone(templatesEnabled: templatesEnabled, pad: Self.isPad, split: splitMode)
+    }
+    private func leftZoneTapped() {
+        switch leftZone {
+        case .templates: toggleTemplates()
+        case .oneHand: toggleOneHandFromKeyboard()
+        case .none: break
+        }
+    }
+    /// Icon ô mép trái: ☰ (mẫu câu) hoặc bàn phím một tay (theo bên sẽ bật / đang bật).
+    private func leftZoneImage(pointSize: CGFloat) -> UIImage? {
+        let name: String
+        switch leftZone {
+        case .oneHand:
+            let side = oneHand == .off ? lastOneHandSide : oneHand
+            name = side == .left ? "keyboard.onehanded.left" : "keyboard.onehanded.right"
+        default: name = "line.3.horizontal"
+        }
+        return UIImage(systemName: name,
+                       withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold))
+    }
+    private func applyLeftZoneAccessibility(_ b: UIButton) {
+        switch leftZone {
+        case .oneHand:
+            b.accessibilityLabel = oneHand == .off ? L("Bật chế độ một tay") : L("Thoát chế độ một tay")
+            b.accessibilityHint = nil
+        default:
+            b.accessibilityLabel = templatesActive ? L("Đóng mẫu câu") : L("Mẫu câu")
+            b.accessibilityHint = Self.isPad ? nil : L("Giữ lâu để bật hoặc tắt chế độ một tay")
+        }
+    }
+
     @objc private func burgerHold(_ g: UILongPressGestureRecognizer) {
         guard g.state == .began else { return }
         toggleOneHandFromKeyboard()
@@ -496,14 +542,16 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// frame — frame có thể chưa kịp cập nhật trong cùng pass → strip=0 → tịt.
     private func layoutStripZones() {
         let open = suggestionsEnabled && !barCollapsed && plane != .emoji && plane != .emojiSearch
-        burgerZone.isHidden = !open || !templatesEnabled
+        let zone = leftZone
+        burgerZone.isHidden = !open || zone == .none
         chevronZone.isHidden = !open
         layoutClipboardExtras(stripOpen: open)
         guard open, bounds.width > 0 else { stripZonesKey = nil; return }
         let strip = max(rowsTopConstraint?.constant ?? Self.openStrip, Self.openStrip)
         // layoutSubviews chạy cả khi gõ (shift/balloon) — trạng thái không đổi thì khỏi
         // dựng lại ảnh SF Symbol + insets mỗi lượt.
-        let key = StripZonesKey(width: bounds.width, strip: strip, templates: templatesActive, ink: palette.barInk)
+        let key = StripZonesKey(width: bounds.width, strip: strip, templates: templatesActive, ink: palette.barInk,
+                                zone: zone, oneHand: oneHand, lastSide: lastOneHandSide)
         defer { bringSubviewToFront(burgerZone); bringSubviewToFront(chevronZone) }
         guard key != stripZonesKey else { return }
         stripZonesKey = key
@@ -511,11 +559,10 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         burgerZone.frame = CGRect(x: 0, y: 0, width: w, height: strip)
         chevronZone.frame = CGRect(x: bounds.width - w, y: 0, width: w, height: strip)
         let ink = palette.barInk.ui
-        burgerZone.setImage(UIImage(systemName: "line.3.horizontal",
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)), for: .normal)
-        burgerZone.tintColor = ink.withAlphaComponent(templatesActive ? 0.9 : 0.45)
-        burgerZone.accessibilityLabel = templatesActive ? L("Đóng mẫu câu") : L("Mẫu câu")
-        burgerZone.accessibilityHint = Self.isPad ? nil : L("Giữ lâu để bật hoặc tắt chế độ một tay")
+        burgerZone.setImage(leftZoneImage(pointSize: 13), for: .normal)
+        let lit = zone == .oneHand ? oneHand != .off : templatesActive
+        burgerZone.tintColor = ink.withAlphaComponent(lit ? 0.9 : 0.45)
+        applyLeftZoneAccessibility(burgerZone)
         chevronZone.setImage(UIImage(systemName: "chevron.down",
             withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)), for: .normal)
         chevronZone.tintColor = ink.withAlphaComponent(0.45)
@@ -529,6 +576,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
     private struct StripZonesKey: Equatable {
         let width: CGFloat, strip: CGFloat, templates: Bool, ink: RGBA
+        let zone: LeftZone, oneHand: OneHandSide, lastSide: OneHandSide
     }
     private var stripZonesKey: StripZonesKey?
 
@@ -536,12 +584,12 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // Nút nổi chỉ hiện khi THU GỌN; bar mở dùng slot trong bar.
         let floating = visible && barCollapsed
         collapseButton.isHidden = !floating
-        floatingBurger.isHidden = !floating || !templatesEnabled
+        floatingBurger.isHidden = !floating || leftZone == .none
         if floating {
-            floatingBurgerIcon?.image = UIImage(systemName: "line.3.horizontal",
-                withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))
-            floatingBurgerIcon?.tintColor = palette.barInk.ui.withAlphaComponent(0.45)
-            floatingBurger.accessibilityLabel = L("Mẫu câu")
+            floatingBurgerIcon?.image = leftZoneImage(pointSize: 12)
+            let lit = leftZone == .oneHand && oneHand != .off
+            floatingBurgerIcon?.tintColor = palette.barInk.ui.withAlphaComponent(lit ? 0.9 : 0.45)
+            applyLeftZoneAccessibility(floatingBurger)
         }
         let chevImg = UIImage(systemName: "chevron.down",
             withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))
@@ -672,9 +720,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         return KeyLayout.keyAreaHeight(base: base, adjust: rowHeightAdjust,
                                        numberRow: numberRowEnabled) - bottomTrim
     }
-    /// Chiều cao một hàng phím chuẩn (hàng số = 0.75× cái này).
+    /// Chiều cao một hàng phím chuẩn (hàng số: KeyLayout.numberRowHeight).
     private func rowUnitHeight() -> CGFloat {
-        (keyAreaHeight() + bottomTrim) / (numberRowEnabled ? 4 + KeyLayout.numberRowRatio : 4)
+        KeyLayout.rowUnit(keyArea: keyAreaHeight() + bottomTrim, numberRow: numberRowEnabled)
     }
 
     // Gắn vào window mới biết interfaceOrientation thật — ép layout lại để
@@ -997,6 +1045,10 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     #if DEBUG
     var debugTemplatesLoaded: Bool { userTemplatesCache != nil }
     var debugBurgerVisible: Bool { burgerZone.superview != nil && !burgerZone.isHidden }
+    var debugLeftZone: LeftZone { leftZone }
+    /// Test hook: chạm ô mép trái thanh gợi ý (☰ hoặc nút một tay) — đúng action của nút.
+    func debugTapLeftZone() { burgerZone.sendActions(for: .touchUpInside) }
+    var debugLeftZoneSymbol: String? { burgerZone.accessibilityLabel }
     var debugInTemplates: Bool { plane == .templates }
     #endif
     private var templatesEnabled = true
@@ -1459,6 +1511,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         splitSetting = UserDefaultsProvider.shared?.bool(forKey: SplitLayout.settingKey) ?? false
         keyPreviewEnabled = Self.keyPreviewSetting(UserDefaultsProvider.shared)
         if !keyPreviewEnabled { hideBalloon() }
+        keyPressHighlightEnabled = Self.keyPressHighlightSetting(UserDefaultsProvider.shared)
         // Mẫu câu: danh sách user tự quản trong app + toggle bật/tắt.
         let d = UserDefaultsProvider.shared
         templatesEnabled = d?.object(forKey: "templatesEnabled") == nil
@@ -1557,6 +1610,12 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if s != .off { lastOneHandSide = s }
         applyOneHand()
         setNeedsLayout()
+        // Thanh thu gọn: nút một tay nổi (ô mép trái) đổi icon/độ đậm theo trạng thái mới.
+        if let icon = floatingBurgerIcon, !floatingBurger.isHidden, leftZone == .oneHand {
+            icon.image = leftZoneImage(pointSize: 12)
+            icon.tintColor = palette.barInk.ui.withAlphaComponent(oneHand != .off ? 0.9 : 0.45)
+            applyLeftZoneAccessibility(floatingBurger)
+        }
     }
 
     /// Người dùng đổi trên bàn phím.
@@ -1636,6 +1695,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private var builtGlobe = false
     private var builtKind: InputKind = .normal
     private var builtNumberRow = false
+    private var builtPressHighlight = KeyboardView.keyPressHighlightDefault
 
     // Cache view theo plane: bấm 123/#+=/ABC chỉ tráo arrangedSubviews thay vì
     // xé/dựng lại ~40 button + constraints mỗi lần. Emoji KHÔNG cache (recents
@@ -1679,6 +1739,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             || builtPalette != palette
             || builtGlobe != needsGlobe || builtKind != inputKind
             || builtNumberRow != numberRowEnabled
+            || builtPressHighlight != keyPressHighlightEnabled
             || builtAlts != activeAlts
             || builtSplit != split
         let widthChanged = builtWidth != bounds.width
@@ -1716,6 +1777,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         builtDark = dark; builtPalette = palette; builtWidth = bounds.width
         builtGlobe = needsGlobe; builtKind = inputKind
         builtNumberRow = numberRowEnabled
+        builtPressHighlight = keyPressHighlightEnabled
         builtAlts = activeAlts
         builtSplit = split
         dropAltHold()                            // phím cũ sắp bị gỡ
@@ -1964,7 +2026,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
 
     /// Có hàng số / iPhone (hàng đáy cắt bớt): rowsContainer thôi fillEqually — hàng số =
-    /// 0.75× hàng chữ, hàng đáy = hàng chữ − bottomTrim, còn lại bằng nhau. Ràng buộc GIỮA
+    /// KeyLayout.numberRowHeight (phím số 0.8× phím chữ), hàng đáy = hàng chữ − bottomTrim, còn lại bằng nhau. Ràng buộc GIỮA
     /// các hàng → crossRow (sống qua planeCache). iPad không số: fillEqually như cũ.
     private func applyRowHeights() {
         let rows = rowsContainer.arrangedSubviews
@@ -1974,7 +2036,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let ref = rows[numberRow ? 1 : 0]
         if numberRow {
             crossRow(rows[0].heightAnchor.constraint(equalTo: ref.heightAnchor,
-                                                     multiplier: KeyLayout.numberRowRatio))
+                                                     multiplier: KeyLayout.numberRowMultiplier,
+                                                     constant: KeyLayout.numberRowConstant))
         }
         for r in rows[(numberRow ? 2 : 1)..<(rows.count - 1)] {
             crossRow(r.heightAnchor.constraint(equalTo: ref.heightAnchor))
@@ -2175,6 +2238,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         }
         b.padRole = .punct
         b.accessibilityLabel = lower
+        b.addAction(UIAction { _ in Self.clickLetter() }, for: .touchDown)   // âm/rung như phím ký tự
         armPadAlternate(b, alt: upper)          // vuốt xuống / giữ → ký tự trên như stock
         armCommit(b) { [weak self, weak b] in
             guard let self else { return }
@@ -2526,6 +2590,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         globe.tintColor = ink
         globe.accessibilityLabel = L("Bàn phím tiếp theo")
         if Self.isPad { globe.padRole = .icon }
+        globe.addAction(UIAction { _ in Self.clickModifier() }, for: .touchDown)
         if let c = inputController {
             // hợp đồng Apple: event thật + allTouchEvents để long-press
             // mở keyboard picker hoạt động
@@ -2612,6 +2677,15 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             let b = baseButton(title: p.title, special: false)
             b.pressedBackground = specialFill
             if Self.isPad { b.padRole = .digit }
+            // Âm / rung + balloon lúc chạm như mọi phím ký tự (tester 1.2.8: "rung chưa áp dụng
+            // với dấu chấm" — "," / "." / "@" / "/" hàng đáy trước đây im lặng hoàn toàn).
+            let shown = p.title
+            b.addAction(UIAction { [weak self, weak b] _ in
+                Self.clickLetter()
+                if let self, let b { self.showBalloon(over: b, text: shown) }
+            }, for: .touchDown)
+            b.addAction(UIAction { [weak self] _ in self?.hideBalloonAfterTap() },
+                        for: [.touchUpInside, .touchUpOutside, .touchCancel])
             armCommit(b) { [weak self] in self?.tapped(.text(p.insert)) }
             // Bàn chữ iPhone: giữ "," ra "." (KeyAlternates.commaHold — bảng ký tự phụ không
             // rỗng; VoiceOver đã rỗng sẵn; iPad có phím ",/." 2 tầng riêng).
@@ -2818,7 +2892,18 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         var payload: String?    // suggestion slot: nội dung sẽ chèn khi bấm
         var downPayload: String? // payload chốt lúc chạm xuống (slot gợi ý)
         var normalBackground: UIColor?
-        var pressedBackground: UIColor?   // nil = không đổi màu khi đè (phím chữ dùng balloon)
+        /// nil = không đổi màu khi đè. Phím chữ/số/ký hiệu: chỉ có khi bật "Phím sẫm khi bấm".
+        var pressedBackground: UIColor?
+        /// Đổi nền phím (đè / nhả): một phép gán màu trên layer sẵn có — không view/layer mới,
+        /// không alloc. pressedBackground nil ⇒ no-op. KHÔNG bọc CATransaction riêng: layer của
+        /// UIView vốn không có implicit animation ngoài khối UIView.animate (UIView trả NSNull
+        /// cho action), còn begin/commit tường minh ngoài transaction ngầm lại ép commit đồng bộ
+        /// lên render server — đo 12/10/2026 (KeyboardBench): sync_p50 +~0.1ms/phím.
+        func showPressed(_ on: Bool) {
+            guard let c = on ? pressedBackground : (pressedBackground != nil ? normalBackground : nil),
+                  backgroundColor != c else { return }
+            backgroundColor = c
+        }
         /// Hit-area tuỳ biến (âm = nở rộng). Slot trên bar 20pt cần nở XUỐNG
         /// 16pt phủ hết strip 36 — tâm ngón tay hay rơi dưới đáy bar là vùng
         /// chết, nguồn của "chevron/burger bấm mãi không ăn".
@@ -3043,12 +3128,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // UIView.animate — animation per-touch trên main thread là latency
         // thấy được trên bàn phím (lý do dùng .custom ở trên). Đè = sẫm lại.
         if special { b.pressedBackground = specialFill }
-        b.addAction(UIAction { [weak b] _ in
-            if let c = b?.pressedBackground { b?.backgroundColor = c }
-        }, for: .touchDown)
-        b.addAction(UIAction { [weak b] _ in
-            if b?.pressedBackground != nil, let c = b?.normalBackground { b?.backgroundColor = c }
-        }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        // Phím chữ / số / ký hiệu: pressedBackground chỉ gán khi công tắc "Phím sẫm khi bấm"
+        // BẬT (lúc dựng plane) — TẮT ⇒ nil ⇒ hai closure này thoát ngay như trước.
+        b.addAction(UIAction { [weak b] _ in b?.showPressed(true) }, for: .touchDown)
+        b.addAction(UIAction { [weak b] _ in b?.showPressed(false) },
+                    for: [.touchUpInside, .touchUpOutside, .touchCancel])
         return b
     }
 
@@ -3108,6 +3192,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // điều phối — nearest-key, không thể miss. Button chỉ còn là visual +
         // hộp action được sendActions() kích.
         b.isUserInteractionEnabled = false
+        if keyPressHighlightEnabled { b.pressedBackground = specialFill }
         letterKeys.append((b, s))
         if Self.isPad {
             // Chữ + ký tự phụ căn theo tâm phím như stock (KeyGeometry.Typography.Pad).
@@ -3141,7 +3226,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             if self.shift == .on { self.shift = .off; self.applyShiftAppearance() }
         }, for: .touchDown)
         b.addAction(UIAction { [weak self] _ in
-            self?.hideBalloon()
+            self?.hideBalloonAfterTap()
         }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
         return b
     }
@@ -3171,11 +3256,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
 
         /// keyRect trong toạ độ superview. Path cache theo hình dạng — gõ cùng
         /// một hàng phím thì không dựng lại path (không alloc trên hot path).
-        func present(keyRect: CGRect, text: String, fill: UIColor, ink: UIColor, topLimit: CGFloat) {
-            let bubbleW = max(keyRect.width + 24, 52)
-            let top = max(keyRect.minY - 52, topLimit)
-            frame = CGRect(x: keyRect.midX - bubbleW / 2, y: top,
-                           width: bubbleW, height: keyRect.maxY - top)
+        func present(keyRect: CGRect, text: String, fill: UIColor, ink: UIColor, topLimit: CGFloat,
+                     containerWidth: CGFloat) {
+            // Sát mép màn hình: bubble dời vào trong (BalloonGeometry), không tràn ra bị cắt.
+            frame = BalloonGeometry.frame(keyRect: keyRect, containerWidth: containerWidth, topLimit: topLimit)
+            let bubbleW = frame.width, top = frame.minY
             let kx0 = keyRect.minX - frame.minX, kx1 = keyRect.maxX - frame.minX
             let bubbleH = max(keyRect.minY - top - 6, 22)
             let H = frame.height
@@ -3229,6 +3314,19 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     static func keyPreviewSetting(_ d: UserDefaults?) -> Bool {
         d?.object(forKey: keyPreviewKey) == nil || d?.bool(forKey: keyPreviewKey) == true
     }
+    /// "Phím sẫm khi bấm" (Tính năng → Phím & cử chỉ, App Group "keyPressHighlight"): phím
+    /// chữ/số/ký hiệu đổi nền như stock khi đè, độc lập với ô phóng to. Đọc MỘT lần lúc hiện
+    /// (applyAppearance), nằm trong chữ ký rebuild — TẮT ⇒ phím không có pressedBackground,
+    /// đường chạm không làm thêm gì.
+    static let keyPressHighlightKey = "keyPressHighlight"
+    static let keyPressHighlightDefault = true
+    var keyPressHighlightEnabled = KeyboardView.keyPressHighlightDefault {
+        didSet { if keyPressHighlightEnabled != oldValue { rebuild() } }
+    }
+    static func keyPressHighlightSetting(_ d: UserDefaults?) -> Bool {
+        guard let d, d.object(forKey: keyPressHighlightKey) != nil else { return keyPressHighlightDefault }
+        return d.bool(forKey: keyPressHighlightKey)
+    }
     private var balloonMade = false
     private lazy var balloon: BalloonView = { balloonMade = true; return BalloonView() }()
     var debugBalloonMade: Bool { balloonMade }
@@ -3239,12 +3337,39 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // (KeyLayout.balloonHeadroom); bubble thấp thì chữ co cho vừa.
         let topLimit: CGFloat = 0
         if balloon.superview == nil { addSubview(balloon) }
-        balloon.present(keyRect: f, text: text, fill: palette.balloon.ui, ink: palette.ink.ui, topLimit: topLimit)
+        if balloonHidePending {               // balloon chạm trước đang chờ ẩn trễ — huỷ
+            balloonHidePending = false
+            NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(hideBalloonDeferred), object: nil)
+        }
+        balloon.present(keyRect: f, text: text, fill: palette.balloon.ui, ink: palette.ink.ui, topLimit: topLimit,
+                        containerWidth: bounds.width)
+        balloonShownAt = CACurrentMediaTime()
     }
     private func hideBalloon() { if balloonMade { balloon.isHidden = true } }
+    /// Nhấc tay khỏi phím ký tự: ẩn balloon, nhưng nếu nó mới hiện chưa tới
+    /// BalloonGeometry.minVisible (touch sát mép bị iOS giao began+ended một lượt) thì
+    /// ẩn trễ cho kịp lên màn hình. Đường thường: một phép trừ, không hẹn giờ.
+    private func hideBalloonAfterTap() {
+        guard balloonMade, !balloon.isHidden else { return }
+        let d = BalloonGeometry.hideDelay(shownFor: CACurrentMediaTime() - balloonShownAt)
+        guard d > 0 else { balloon.isHidden = true; return }
+        balloonHidePending = true
+        perform(#selector(hideBalloonDeferred), with: nil, afterDelay: d, inModes: [.common])
+    }
+    @objc private func hideBalloonDeferred() {
+        guard balloonHidePending else { return }
+        balloonHidePending = false
+        hideBalloon()
+    }
+    private var balloonShownAt: CFTimeInterval = 0
+    private var balloonHidePending = false
+    #if DEBUG
+    var debugBalloonHidePending: Bool { balloonHidePending }
+    #endif
 
     private func textButton(_ s: String, hint: String? = nil) -> UIView {
         let b = baseButton(title: s, special: false)
+        if keyPressHighlightEnabled { b.pressedBackground = specialFill }
         if Self.isPad { b.padRole = .digit }   // số/ký hiệu: cỡ chữ iPad, căn giữa như stock
         if let hint {
             // Plane số iPad: ký tự phụ xám phía trên như stock, khối chữ theo tâm phím.
@@ -3256,7 +3381,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             Self.clickLetter()
             if let self, let b { self.showBalloon(over: b, text: s) }
         }, for: .touchDown)
-        b.addAction(UIAction { [weak self] _ in self?.hideBalloon() },
+        b.addAction(UIAction { [weak self] _ in self?.hideBalloonAfterTap() },
                     for: [.touchUpInside, .touchUpOutside, .touchCancel])
         armCommit(b) { [weak self, weak b] in
             self?.typedInSymbolPlane = true
@@ -3376,6 +3501,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // touch-up thì chữ đã kịp chốt trước khi shift bật.
         b.addAction(UIAction { [weak self] _ in
             guard let self else { return }
+            Self.clickModifier()
             let now = CACurrentMediaTime()
             if now - self.lastShiftTap < 0.3 { self.shift = .caps }
             else { self.shift = (self.shift == .off) ? .on : .off }
@@ -4449,6 +4575,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         classifier = nil
         dropAltHold()
         hideBalloon()
+        for b in routedTouches.values { (b as? KeyButton)?.showPressed(false) }   // vuốt: phím đầu thôi sẫm
         // Phím chữ đầu đã nhả shift một lần — trả lại để từ vuốt viết hoa đúng.
         if shiftBeforeLastLetter == .on, shift == .off { shift = .on; applyShiftAppearance() }
         swipeCase = shift == .caps ? .upper : (shift == .on ? .capitalized : .lower)
@@ -4829,6 +4956,25 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         }
         return rowsContainer.arrangedSubviews.lazy.compactMap(find).first
     }
+    /// Test hook: mọi nút phím (KeyButton) đang dựng trong plane hiện tại, theo thứ tự cây view.
+    func debugAllKeyButtons() -> [UIButton] {
+        var out: [UIButton] = []
+        func walk(_ v: UIView) {
+            if let b = v as? KeyButton { out.append(b); return }
+            v.subviews.forEach(walk)
+        }
+        walk(rowsContainer)
+        return out
+    }
+    /// Test hook: nền hiện tại / nền thường / nền khi đè của một nút phím.
+    func debugKeyColors(_ b: UIButton) -> (current: UIColor?, normal: UIColor?, pressed: UIColor?) {
+        let k = b as? KeyButton
+        return (b.backgroundColor, k?.normalBackground, k?.pressedBackground)
+    }
+    /// Test hook: nút phím chữ `s` (router điều phối, không nhận touch trực tiếp).
+    func debugLetterButton(_ s: String) -> UIButton? { letterKeys.first { $0.base == s }?.button }
+    /// Test hook: frame balloon đang hiện (toạ độ self), nil nếu ẩn.
+    var debugBalloonFrame: CGRect? { debugBalloonVisible ? balloon.frame : nil }
     /// Test hook: frame nút rail một tay đang hiện (toạ độ self).
     func debugRailFrames() -> [CGRect] {
         railButtons.filter { !$0.isHidden }.map { $0.frame }

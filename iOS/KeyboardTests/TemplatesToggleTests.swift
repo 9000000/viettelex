@@ -40,7 +40,9 @@ final class TemplatesToggleTests: XCTestCase {
     @MainActor func testOffHidesBurgerAndCostsNothing() {
         withKeyboard(["templatesEnabled": false,
                       "userTemplates": [["label": "👋", "text": "Chào"]]]) { kb in
-            XCTAssertFalse(kb.debugBurgerVisible, "tắt: ẩn nút ☰")
+            // iPhone: ô ☰ thành nút MỘT TAY (tester 1.2.8) — không còn là ☰ mẫu câu.
+            XCTAssertEqual(kb.debugLeftZone, UIDevice.current.userInterfaceIdiom == .pad ? .none : .oneHand)
+            XCTAssertEqual(kb.debugBurgerVisible, UIDevice.current.userInterfaceIdiom != .pad)
             kb.debugTapBurger()
             XCTAssertFalse(kb.debugInTemplates, "tắt: không mở plane mẫu câu")
             XCTAssertFalse(kb.debugTemplatesLoaded, "tắt: không đọc danh sách mẫu")

@@ -120,7 +120,8 @@ enum Wallpaper {
         let base: CGFloat = pad ? (landscape ? 300 : 240) : (landscape ? 162 : KeyGeometry.phonePortraitBase)
         let adj = CGFloat(max(-10, min(10, rowHeightAdjust)))
         let unit = (base + adj * 4) / 4
-        let keyArea = unit * (numberRow ? 4.75 : 4) - KeyGeometry.bottomRowTrim(pad: pad, landscape: landscape)
+        let keyArea = unit * 4 + (numberRow ? KeyGeometry.numberRowHeight(unit: unit) : 0)
+            - KeyGeometry.bottomRowTrim(pad: pad, landscape: landscape)
         return CGSize(width: width, height: keyArea + (suggestions ? suggestionStrip : 0))
     }
 
