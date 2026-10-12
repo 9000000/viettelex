@@ -95,8 +95,6 @@ data class LayoutConfig(
     val oneHand: OneHandSide = OneHandSide.OFF,
     /** Bảng sửa văn bản có hàng công cụ văn bản cuối (PlusGate TEXT_TOOLS). */
     val editTools: Boolean = false,
-    /** "Hiện phím dấu chấm cạnh phím cách" (Settings, mặc định TẮT) — xem [KeyLayout.hasPeriodKey]. */
-    val periodKey: Boolean = false,
 )
 
 object KeyLayout {
@@ -164,13 +162,14 @@ object KeyLayout {
         if (!suggestionsEnabled) 0f else if (collapsed) COLLAPSED_STRIP else OPEN_STRIP
 
     /**
-     * Hàng đáy có phím "." cạnh space? Plane chữ ô thường: KHÔNG (issue #113 — space rộng
-     * hơn; "." = space đôi → ". " hoặc plane 123), trừ khi bật [LayoutConfig.periodKey].
-     * Luôn có: ô URL / email (giữ "." ra đuôi tên miền), tablet (không có space đôi → ". "),
-     * plane số / ký hiệu / mẫu câu.
+     * Hàng đáy có phím "." cạnh space? Plane chữ ô thường ĐIỆN THOẠI: KHÔNG — một bố cục duy
+     * nhất kiểu iPhone [?123][😊][space rộng][, hẹp][↵] (issue #113; Phil 12/10/2026 bỏ công tắc
+     * "Hiện phím dấu chấm" — bật nó ra hàng ", ." dồn góc, space bé). "." = giữ "," (chọn sẵn
+     * ".", CommaPopup), space đôi → ". ", hoặc plane 123. Luôn có: ô URL / email (giữ "." ra
+     * đuôi tên miền), tablet (dư chỗ), plane số / ký hiệu / mẫu câu.
      */
     fun hasPeriodKey(c: LayoutConfig): Boolean =
-        c.plane != Plane.LETTERS || c.periodKey || c.tablet ||
+        c.plane != Plane.LETTERS || c.tablet ||
             c.kind == InputKind.URL || c.kind == InputKind.EMAIL
 
     private val ROW1 = "qwertyuiop"
@@ -297,7 +296,8 @@ object KeyLayout {
     /**
      * Hàng đáy kiểu Gboard: [?123|ABC 0.15][, 0.10][🌐 0.10?][😊|🗑 0.10][space còn lại][. 0.10?]
      * [enter 0.15] ("." theo [hasPeriodKey]). Bàn chữ ô thường: "," sang phải space như iOS —
-     * [?123][🌐?][😊][space][,][.?][enter][ẩn 0.07 tablet]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
+     * điện thoại [?123][🌐?][😊][space][, 0.085][enter] (bố cục DUY NHẤT, không tuỳ chọn);
+     * tablet [?123][🌐?][😊][space][,][.][enter][ẩn 0.07]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
      * phím ".com" riêng — space rộng như stock, đuôi tên miền ở giữ "." — DomainPopup).
      * Hệ số nhân với bề ngang CẢ hàng.
      */

@@ -280,7 +280,6 @@ private fun FeatureHome(onOpen: (FeaturePage) -> Unit) {
     val templatesOn by rememberBoolPref(Keys.TEMPLATES_ENABLED, Prefs.D.templatesEnabled)
     val numberRow by rememberBoolPref(Keys.NUMBER_ROW, Prefs.D.numberRow)
     val spaceSwipe by rememberBoolPref(Keys.SPACE_SWIPE_LANGUAGE, Prefs.D.spaceSwipeLanguage)
-    val periodKey by rememberBoolPref(Keys.SHOW_PERIOD_KEY, Prefs.D.showPeriodKey)
     val autoSpace by rememberBoolPref(Keys.AUTO_SPACE_AFTER_PUNCT, Prefs.D.autoSpaceAfterPunct)
     val haptic by rememberBoolPref(Keys.HAPTIC_FEEDBACK, Prefs.D.hapticFeedback)
     val keySound by rememberBoolPref(Keys.KEY_SOUND, Prefs.D.keySound)
@@ -304,7 +303,7 @@ private fun FeatureHome(onOpen: (FeaturePage) -> Unit) {
         FeaturePage.GoVuot -> if (!swipe) tr("Đang tắt") else join(true to tr("Bật"), swipeEn to tr("Tiếng Anh"), swipeFuto to "Neural", none = "")
         FeaturePage.GoTat -> (if (!shortcutsOn) tr("Gõ tắt tắt") else if (shortcutCount == 0) tr("Gõ tắt bật") else tr("Gõ tắt: %d mục", shortcutCount)) +
             " · " + if (templatesOn) tr("Mẫu câu bật") else tr("Mẫu câu tắt")
-        FeaturePage.Phim -> join(numberRow to tr("Hàng số"), periodKey to tr("Phím dấu chấm"), spaceSwipe to tr("Vuốt phím cách"),
+        FeaturePage.Phim -> join(numberRow to tr("Hàng số"), spaceSwipe to tr("Vuốt phím cách"),
             autoSpace to tr("Cách sau dấu câu"), haptic to tr("Rung"), keySound to tr("Âm"),
             (oneHand != "off") to tr("Một tay"), floating to tr("Thả nổi"), hardware to tr("Bàn phím cứng"), none = tr("Mặc định"))
         FeaturePage.GiaoDien -> theme.effectiveTheme.title + (if (wallpaperOn) " · " + tr("Ảnh nền") else "") +
@@ -482,9 +481,6 @@ private fun PhimPage(onBack: () -> Unit) {
         }
         BoolToggle(Keys.LONG_PRESS_SYMBOLS, Prefs.D.longPressSymbols, tr("Giữ phím hàng 2, 3 để ra ký tự đặc biệt"),
             tr("Giữ a … l, z … m để gõ @ # \$ _ & - + ( ) … Giữ , để chọn dấu câu (. ? ! : ; …); giữ 😊 để đổi bàn phím, gõ giọng nói, một tay, thả nổi."))
-        RowDivider()
-        BoolToggle(Keys.SHOW_PERIOD_KEY, Prefs.D.showPeriodKey, tr("Hiện phím dấu chấm cạnh phím cách"),
-            tr("Tắt: phím cách rộng hơn — gõ dấu cách hai lần để ra \". \", hoặc dùng bàn ?123. Ô địa chỉ web, email và máy tính bảng luôn có phím dấu chấm."))
         RowDivider()
         BoolToggle(Keys.AUTO_SPACE_AFTER_PUNCT, Prefs.D.autoSpaceAfterPunct, tr("Tự thêm dấu cách sau dấu câu"),
             tr("Gõ . , ? ! ; : tự có dấu cách phía sau. Không thêm trong số (3.5, 1,000), email, đường dẫn. Gõ dấu cách ngay sau không thành hai dấu cách; ⌫ ngay sau chỉ xoá dấu cách đó."))

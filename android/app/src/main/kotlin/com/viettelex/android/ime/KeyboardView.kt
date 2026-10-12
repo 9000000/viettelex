@@ -464,10 +464,8 @@ class KeyboardView(
 
     fun configure(returnLabel: String, kind: InputKind, needsGlobe: Boolean, showLogo: Boolean,
                   templatesEnabled: Boolean, templates: List<TemplateItem>, keyAreaPx: Float,
-                  numberSigned: Boolean = false, numberDecimal: Boolean = false, numberRow: Boolean = false,
-                  periodKey: Boolean = false) {
+                  numberSigned: Boolean = false, numberDecimal: Boolean = false, numberRow: Boolean = false) {
         this.numberRow = numberRow
-        this.periodKey = periodKey
         this.numberSigned = numberSigned
         this.numberDecimal = numberDecimal
         this.returnLabel = returnLabel
@@ -548,10 +546,9 @@ class KeyboardView(
     private var numberSigned = false
     private var numberDecimal = false
     private var numberRow = false
-    private var periodKey = false
     /** Chế độ một tay (IME chỉ đặt khác OFF trên điện thoại). */
     var oneHand = OneHandSide.OFF; private set
-    private fun signature() = "$returnLabel|$inputKind|$needsGlobe|$width|$keyAreaPx|$numberSigned|$numberDecimal|$numberRow|$periodKey|$oneHand|$textToolsEnabled"
+    private fun signature() = "$returnLabel|$inputKind|$needsGlobe|$width|$keyAreaPx|$numberSigned|$numberDecimal|$numberRow|$oneHand|$textToolsEnabled"
 
     private fun rebuild() {
         if (width == 0) return
@@ -563,7 +560,7 @@ class KeyboardView(
         keys = planeCache.getOrPut(plane) {
             KeyLayout.build(LayoutConfig(plane, width.toFloat(), keyAreaPx, d, inputKind, needsGlobe,
                 theme.tablet, returnLabel, numberSigned, numberDecimal, numberRow, oneHand,
-                editTools = textToolsEnabled, periodKey = periodKey))
+                editTools = textToolsEnabled))
         }
         railSpan = if (OneHand.appliesTo(plane)) OneHand.rail(width.toFloat(), oneHand) else null
         spaceKey = keys.firstOrNull { it.kind == KeyKind.SPACE }

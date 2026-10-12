@@ -18,8 +18,8 @@ class HitBiasTest {
     private val H = 218f
     private val slow = Long.MAX_VALUE
 
-    private fun build(plane: Plane = Plane.LETTERS, period: Boolean = false) =
-        KeyLayout.build(LayoutConfig(plane, W, H, d, periodKey = period))
+    private fun build(plane: Plane = Plane.LETTERS, tablet: Boolean = false) =
+        KeyLayout.build(LayoutConfig(plane, W, H, d, tablet = tablet))
 
     private fun hit(keys: List<LaidKey>, x: Float, y: Float, since: Long = slow, plane: Plane = Plane.LETTERS) =
         KeyLayout.hit(keys, plane, x, y, 0f, d, since)
@@ -34,17 +34,18 @@ class HitBiasTest {
     }
 
     @Test fun keyCentersUnchanged() {
-        for (period in listOf(false, true)) {
-            val keys = build(period = period)
+        for (tablet in listOf(false, true)) {
+            val keys = build(tablet = tablet)
             for (k in keys) assertSame(k.label + k.kind, k, hit(keys, k.centerX, k.centerY, since = 50))
         }
     }
 
     @Test fun spaceWinsNearCommaBoundary() {
-        val keys = build(period = true)
+        // Bố cục duy nhất (12/10/2026): [?123][😊][space][,][↵] — "," kề space bên phải, ↵ sau nó.
+        val keys = build()
         val space = keys.first { it.kind == KeyKind.SPACE }
         val comma = keys.first { it.kind == KeyKind.PUNCT && it.label == "," }
-        val dot = keys.first { it.kind == KeyKind.PUNCT && it.label == "." }
+        val ret = keys.first { it.kind == KeyKind.RETURN }
         val y = comma.centerY
         val w = comma.width
         // (x, since, mong đợi)
@@ -57,9 +58,21 @@ class HitBiasTest {
             Triple(comma.left + 0.38f * w, 300L, comma),
             Triple(comma.left + 0.42f * w, 100L, comma),
             Triple(comma.right - 1f, 50L, comma),
-            Triple(dot.left + 1f, 50L, dot),                               // "." không kề space
+            Triple(ret.left + 1f, 50L, ret),                               // ↵ không nhường ai
+            Triple(ret.centerX, 50L, ret),
         )
         for ((x, since, want) in table) assertSame("x=$x since=$since", want, hit(keys, x, y, since))
+    }
+
+    @Test fun tabletPeriodAfterCommaNotStolen() {
+        // Tablet giữ "." sau ",": "." không kề space ⇒ không bị space lấn; "," vẫn có dải.
+        val keys = build(tablet = true)
+        val space = keys.first { it.kind == KeyKind.SPACE }
+        val comma = keys.first { it.kind == KeyKind.PUNCT && it.label == "," }
+        val dot = keys.first { it.kind == KeyKind.PUNCT && it.label == "." }
+        assertTrue(dot.left > comma.right)
+        assertSame(dot, hit(keys, dot.left + 1f, dot.centerY, 50L))
+        assertSame(space, hit(keys, comma.left + 0.2f * comma.width, comma.centerY))
     }
 
     @Test fun spaceWinsOverPeriodLeftOrRight() {
