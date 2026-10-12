@@ -96,6 +96,10 @@ private:
     void notifyAppState(bool on);
     void applyConfig(bool force);
     bool prepareKey(WPARAM wp, bool down, KeyInput& out);
+    // (#121) A key we are about to let through that the thread's (Vietnamese) layout would
+    // NOT type like US (1 -> ă): true = eat it; with `inject`, also type the US character
+    // (SendInput, Unicode) — false if that failed, so the key goes to the app as before.
+    bool retypeAsUs(ITfContext* ctx, WPARAM wp, bool inject);
     uint8_t heldModifiers(uint32_t vk, bool down) const;
     void onModifierEvent(uint32_t vk, bool down);
     void flushAsync(ITfContext* ctx);
@@ -163,6 +167,8 @@ private:
     bool directWanted_ = false;         // this field asked the app's hook to type (1.1.5)
     HWND langPropWnd_ = nullptr;        // where kTipLangProp is set
     uint32_t suspendPosted_ = 0;        // game_ipc.h kSuspendFullscreen (from VietTelex.exe)
+    LayoutMatchCache layoutMatch_;      // retypeAsUs: what the thread's layout types per key
+    uintptr_t layoutLogged_ = 0;        // HKL already logged as "not like US"
 
     ITfComposition* composition_ = nullptr;
     ITfContext* compositionContext_ = nullptr;

@@ -61,4 +61,38 @@ KeyInput classifyKey(uint32_t v, const Modifiers& m) {
     return k;
 }
 
+bool layoutTypesUs(char32_t us, int count, const char16_t* units) {
+    if (count <= 0 || !units) return false;  // dead key or nothing: not what US types
+    char32_t c = units[0];
+    int used = 1;
+    if (c >= 0xD800 && c <= 0xDBFF && count >= 2 && units[1] >= 0xDC00 && units[1] <= 0xDFFF) {
+        c = 0x10000 + ((c - 0xD800) << 10) + (units[1] - 0xDC00);
+        used = 2;
+    }
+    return count == used && c == us;
+}
+
+namespace {
+int cacheRow(bool shift, bool capsLock) { return (shift ? 1 : 0) | (capsLock ? 2 : 0); }
+}  // namespace
+
+LayoutMatch LayoutMatchCache::get(uintptr_t hkl, uint32_t v, bool shift, bool capsLock) const {
+    if (hkl != hkl_ || v > 0xFF) return LayoutMatch::Unknown;
+    return m_[cacheRow(shift, capsLock)][v];
+}
+
+void LayoutMatchCache::put(uintptr_t hkl, uint32_t v, bool shift, bool capsLock, LayoutMatch m) {
+    if (v > 0xFF) return;
+    if (hkl != hkl_) {
+        for (auto& row : m_)
+            for (auto& x : row) x = LayoutMatch::Unknown;
+        hkl_ = hkl;
+    }
+    m_[cacheRow(shift, capsLock)][v] = m;
+}
+
+bool shouldRetypeAsUs(const KeyInput& k, uintptr_t hkl, LayoutMatch m) {
+    return k.kind == KeyKind::Char && k.ch != 0 && isVietnameseHkl(hkl) && m == LayoutMatch::Differs;
+}
+
 }  // namespace vtx
