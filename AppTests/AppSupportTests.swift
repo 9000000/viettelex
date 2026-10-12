@@ -521,6 +521,126 @@ final class AppSupportTests: XCTestCase {
         XCTAssertEqual(s.lastAutoUpdateCheckAt, now)
     }
 
+    // MARK: Updater — issue #120 (weekly check never notified a 1.7.8 user)
+
+    func testAutoCheckScheduleRetriesAfterFailure() {
+        let day: TimeInterval = 24 * 3600
+        let now: TimeInterval = 1_800_000_000
+        // Never checked → due.
+        XCTAssertTrue(UpdateCheck.shouldAutoCheck(now: now, lastSuccessAt: 0, lastAttemptAt: 0))
+        // Succeeded 3 days ago → not due, whatever the attempt stamp says.
+        XCTAssertFalse(UpdateCheck.shouldAutoCheck(now: now, lastSuccessAt: now - 3 * day,
+                                                   lastAttemptAt: now - 3 * day))
+        // Succeeded 8 days ago → due.
+        XCTAssertTrue(UpdateCheck.shouldAutoCheck(now: now, lastSuccessAt: now - 8 * day,
+                                                  lastAttemptAt: now - 8 * day))
+        // THE BUG: a failed attempt 1 hour ago used to count as "checked this week".
+        // Now it only holds off for the retry interval…
+        XCTAssertFalse(UpdateCheck.shouldAutoCheck(now: now, lastSuccessAt: now - 30 * day,
+                                                   lastAttemptAt: now - 3600))
+        // …and the next activateServer after that retries, instead of waiting a week.
+        XCTAssertTrue(UpdateCheck.shouldAutoCheck(now: now, lastSuccessAt: now - 30 * day,
+                                                  lastAttemptAt: now - UpdateCheck.autoCheckRetryInterval))
+        XCTAssertLessThan(UpdateCheck.autoCheckRetryInterval, UpdateCheck.autoCheckInterval)
+        // A stamp in the future (clock moved back) must not block for good.
+        XCTAssertTrue(UpdateCheck.shouldAutoCheck(now: now, lastSuccessAt: now + 365 * day,
+                                                  lastAttemptAt: now + 365 * day))
+    }
+
+    func testAutoCheckFailureDoesNotConsumeTheWeek() async {
+        URLProtocol.registerClass(StubURLProtocol.self)
+        defer { URLProtocol.unregisterClass(StubURLProtocol.self) }
+        let s = AppState.shared
+        let saved = (s.autoUpdateCheck, s.lastAutoUpdateCheckAt, s.lastAutoUpdateAttemptAt)
+        defer { (s.autoUpdateCheck, s.lastAutoUpdateCheckAt, s.lastAutoUpdateAttemptAt) = saved }
+        StubURLProtocol.responder = { _ in (500, "down") }
+        s.autoUpdateCheck = true
+        s.lastAutoUpdateCheckAt = 0
+        s.lastAutoUpdateAttemptAt = 0
+        UpdateCheck.maybeAutoCheck()
+        XCTAssertGreaterThan(s.lastAutoUpdateAttemptAt, 0)          // back-off stamped
+        // Let the detached check finish against the stub (both manifest URLs 500).
+        for _ in 0..<50 { try? await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(s.lastAutoUpdateCheckAt, 0, "a failed check must not reset the weekly clock")
+    }
+
+    func testStableManifestFallsBackPastABrokenHost() async {
+        URLProtocol.registerClass(StubURLProtocol.self)
+        defer { URLProtocol.unregisterClass(StubURLProtocol.self) }
+        // Every manifest URL is https (ATS refuses http, redirects included) and none is
+        // the github.io address whose 301 goes through http:// — the 1.7.8 failure.
+        XCTAssertGreaterThanOrEqual(UpdateCheck.stableManifestURLs.count, 2)
+        for u in UpdateCheck.stableManifestURLs {
+            XCTAssertTrue(u.hasPrefix("https://"), u)
+            XCTAssertFalse(u.contains("github.io"), u)
+        }
+        let primary = UpdateCheck.stableManifestURLs[0]
+        StubURLProtocol.responder = { url in
+            if url.absoluteString == primary { return (503, "cdn down") }
+            if url.absoluteString.contains("stable.json") {
+                return (200, #"{"version":"99.0.0","url":"https://example.com/rel"}"#)
+            }
+            return (404, "{}")
+        }
+        if case let .update(latest, _, _) = await UpdateCheck.checkStable() {
+            XCTAssertEqual(latest, "99.0.0")
+        } else { XCTFail("fallback manifest must be used when the primary host fails") }
+    }
+
+    func testLiveManifestShapeIsNewerThan178() {
+        // Today's stable.json carries windows/linux/android objects next to the macOS
+        // keys; the decode reads only "version"/"url" and must not care. 1.8.15 is newer
+        // than 1.7.8 numerically (not lexically: "1.10" > "1.9").
+        let json = #"{"version":"1.8.15","url":"https://github.com/ptrinh/viettelex/releases/tag/v1.8.15","build":124,"windows":{"version":"1.1.5"},"linux":{"version":"1.0.11","series":["noble"]},"android":{"version":"1.5.3"}}"#
+        let obj = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        let v = obj?["version"] as? String
+        XCTAssertEqual(v, "1.8.15")
+        XCTAssertTrue(UpdateCheck.isValidVersion(v ?? ""))
+        XCTAssertTrue(UpdateCheck.isNewer("1.8.15", than: "1.7.8"))
+        XCTAssertTrue(UpdateCheck.isNewer("1.10.0", than: "1.9.9"))
+        XCTAssertFalse(UpdateCheck.isNewer("1.8.15", than: "1.8.15"))
+    }
+
+    func testOutstandingUpdateHidesOnceInstalled() {
+        XCTAssertEqual(UpdateCheck.outstandingUpdate(pending: "1.8.15", current: "1.7.8"), "1.8.15")
+        // Installed manually (pkg/brew) — the stale pending value must not keep nagging.
+        XCTAssertNil(UpdateCheck.outstandingUpdate(pending: "1.8.15", current: "1.8.15"))
+        XCTAssertNil(UpdateCheck.outstandingUpdate(pending: "1.8.15", current: "1.9.0"))
+        XCTAssertNil(UpdateCheck.outstandingUpdate(pending: nil, current: "1.7.8"))
+        XCTAssertNil(UpdateCheck.outstandingUpdate(pending: "9.0/../x", current: "1.7.8"))
+    }
+
+    func testReleaseNotesFencesAndInstallSection() {
+        // The v1.8.15 release body, abridged — the issue #120 screenshot showed the
+        // install section's fence printed literally.
+        let body = """
+        ## Sửa lỗi
+        - **Từ tiếng Anh chen trong câu** không còn làm mất dấu.
+        - "been" chỉ giữ nguyên sau have/has.
+
+        ## Cài đặt
+        Tải `VietTelex-1.8.15.pkg` và chạy, hoặc:
+        ```
+        brew install ptrinh/viettelex/viettelex
+        ```
+        """
+        let blocks = UpdateCheck.noteBlocks(UpdateCheck.sanitizeNotes(body)!)
+        XCTAssertEqual(blocks.map(\.kind), [.heading, .bullet, .bullet])
+        XCTAssertFalse(blocks.contains { $0.text.contains("```") })
+        XCTAssertFalse(blocks.contains { $0.text.contains("brew") })   // install section dropped
+
+        // A fence elsewhere: markers gone, content kept as inline code.
+        let code = UpdateCheck.noteBlocks("## Mẹo\n```\nviettelex --reset\n```\n- tiếp")
+        XCTAssertEqual(code.map(\.kind), [.heading, .paragraph, .bullet])
+        XCTAssertEqual(code[1].text, "`viettelex --reset`")
+        // A heading-looking line INSIDE a fence is code, not a section boundary.
+        let fencedHash = UpdateCheck.noteBlocks("```\n## Cài đặt\n```\n- vẫn hiện")
+        XCTAssertEqual(fencedHash.map(\.kind), [.paragraph, .bullet])
+        // The section after "Cài đặt" shows again.
+        let after = UpdateCheck.noteBlocks("## Cài đặt\nbrew …\n## Ghi chú\n- hiện")
+        XCTAssertEqual(after.map(\.text), ["Ghi chú", "hiện"])
+    }
+
     // MARK: Updater — bundle install (the "permission stuck after update" fix)
 
     // installBundle must swap in the new bundle WHOLESALE. The old `ditto newApp dest`

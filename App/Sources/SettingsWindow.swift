@@ -1340,7 +1340,8 @@ struct AboutTab: View {
             // focus mid-sentence. This is also the fallback when notification permission
             // was denied — the only place the news can still reach the user.
             if status == nil, updateVersion == nil,
-               let pending = UpdateCheck.pendingUpdateVersion {
+               let pending = UpdateCheck.outstandingUpdate(pending: UpdateCheck.pendingUpdateVersion,
+                                                           current: UpdateCheck.currentVersion()) {
                 updateVersion = pending
                 noteBlocks = UpdateCheck.pendingUpdateNotes.map(UpdateCheck.noteBlocks) ?? []
                 status = String(format: model.loc("Update available: %@"), pending)

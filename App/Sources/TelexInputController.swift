@@ -2277,6 +2277,18 @@ final class TelexInputController: IMKInputController {
             menu.addItem(status)
         }
 
+        // Weekly check found a newer version that isn't installed yet. The notification
+        // alone isn't enough: an IME's banner permission is often denied or never
+        // answered, and then the news sat in Settings → About where nobody looks
+        // (issue #120). One line here only while an update is actually outstanding.
+        if let v = UpdateCheck.outstandingUpdate(pending: UpdateCheck.pendingUpdateVersion,
+                                                 current: UpdateCheck.currentVersion()) {
+            let update = NSMenuItem(title: String(format: VTLocalized("Update available: %@"), v),
+                                    action: #selector(openAboutForUpdate(_:)), keyEquivalent: "")
+            update.target = self
+            menu.addItem(update)
+        }
+
 
         // Chế độ gõ đang áp dụng + click = copy snapshot giải thích VÌ SAO chọn nó
         // (maintainer 19/08/2026). Trả lời đúng câu hỏi hay gặp nhất trong bug report:
@@ -2583,6 +2595,10 @@ final class TelexInputController: IMKInputController {
 
     @objc private func openSettings(_ sender: Any?) {
         SettingsWindowController.shared.show(tab: .general)
+    }
+
+    @objc private func openAboutForUpdate(_ sender: Any?) {
+        SettingsWindowController.shared.show(tab: .about)
     }
 
     /// Trang giải thích các kiểu gõ (In-place/Tap/Marked…) — GitHub render sẵn

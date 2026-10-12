@@ -42,13 +42,29 @@ enum UpdateCheck {
     /// docs/stable.json on the website (deployed by GitHub Pages). The manual
     /// About-tab button still checks releases/latest — that's the "I want it now"
     /// path.
+    ///
+    /// Issue #120 (1.7.8 user, 3+ weeks, never notified): the throttle used to be stamped
+    /// BEFORE the fetch, so a failed check counted as "checked this week" and the failure
+    /// was invisible. In ≤1.8.1 every fetch failed (github.io 301 → http://viettelex.com,
+    /// refused by ATS), so the weekly check silently did nothing, forever. Now only a
+    /// check that actually reached the manifest (`.update`/`.upToDate`) resets the weekly
+    /// clock; a failure just backs off `autoCheckRetryInterval` and is logged.
     static func maybeAutoCheck() {
         guard AppState.shared.autoUpdateCheck else { return }
         let now = Date().timeIntervalSince1970
-        guard now - AppState.shared.lastAutoUpdateCheckAt > 7 * 24 * 3600 else { return }
-        AppState.shared.lastAutoUpdateCheckAt = now
+        guard shouldAutoCheck(now: now,
+                              lastSuccessAt: AppState.shared.lastAutoUpdateCheckAt,
+                              lastAttemptAt: AppState.shared.lastAutoUpdateAttemptAt) else { return }
+        // Stamped up front so a burst of activateServer calls can't start parallel fetches.
+        AppState.shared.lastAutoUpdateAttemptAt = now
         Task {
-            guard case let .update(latest, _, notes) = await checkStable() else { return }
+            let outcome = await checkStable()
+            if case let .failed(reason) = outcome {
+                DebugLog.log("update auto-check failed: \(reason) — retry in ≥\(Int(autoCheckRetryInterval / 3600))h")
+                return
+            }
+            await MainActor.run { AppState.shared.lastAutoUpdateCheckAt = now }
+            guard case let .update(latest, _, notes) = outcome else { return }
             await MainActor.run {
                 guard AppState.shared.lastNotifiedUpdateVersion != latest else { return }
                 AppState.shared.lastNotifiedUpdateVersion = latest
@@ -61,6 +77,31 @@ enum UpdateCheck {
             }
         }
     }
+    static let autoCheckInterval: TimeInterval = 7 * 24 * 3600
+    /// After a FAILED weekly check (offline at wake, captive portal, DNS, server down):
+    /// try again on a later activateServer, but not more often than this.
+    static let autoCheckRetryInterval: TimeInterval = 6 * 3600
+
+    /// Pure schedule decision for the weekly check. `lastSuccessAt` is the last check that
+    /// reached the manifest; `lastAttemptAt` the last one started (success or not).
+    /// A timestamp in the future (clock moved back, or a stale value) never blocks
+    /// forever — it counts as "due".
+    static func shouldAutoCheck(now: TimeInterval, lastSuccessAt: TimeInterval,
+                                lastAttemptAt: TimeInterval) -> Bool {
+        func due(_ last: TimeInterval, _ every: TimeInterval) -> Bool {
+            last > now || now - last >= every
+        }
+        return due(lastSuccessAt, autoCheckInterval) && due(lastAttemptAt, autoCheckRetryInterval)
+    }
+
+    /// The newer version still waiting for the user (weekly check found it, not installed
+    /// yet) — nil once the running build has caught up, e.g. after a manual .pkg install,
+    /// so nothing keeps advertising a version that is already here.
+    static func outstandingUpdate(pending: String?, current: String) -> String? {
+        guard let pending, isValidVersion(pending), isNewer(pending, than: current) else { return nil }
+        return pending
+    }
+
     /// Canonical repo (matches the git remote). GitHub redirects other casings.
     static let repo = "ptrinh/VietTelex"
 
@@ -80,11 +121,30 @@ enum UpdateCheck {
     /// (docs/stable.json → GitHub Pages). Newest release ≠ stable — a fresh
     /// release soaks first; promoting it to every opted-in user is the explicit
     /// one-line edit of this file.
+    /// Where the manifest lives, tried in order. The second is the SAME file (GitHub Pages
+    /// serves docs/ from main) without the custom domain in between: ≤1.8.1 read only
+    /// `ptrinh.github.io/viettelex/stable.json`, whose 301 goes through plain-http
+    /// `http://viettelex.com` and is refused by App Transport Security — one hard-coded
+    /// host was a single point of failure for every installed copy (issue #120).
+    /// Every entry must stay https end to end, redirects included.
+    static let stableManifestURLs = [
+        "https://viettelex.com/stable.json",
+        "https://raw.githubusercontent.com/ptrinh/viettelex/main/docs/stable.json",
+    ]
+
     static func checkStable() async -> Outcome {
-        let current = currentVersion()
-        guard let api = URL(string: "https://viettelex.com/stable.json") else {
-            return .failed("URL")
+        var lastFailure = Outcome.failed("URL")
+        for s in stableManifestURLs {
+            guard let api = URL(string: s) else { continue }
+            let outcome = await checkStable(at: api)
+            if case .failed = outcome { lastFailure = outcome; continue }
+            return outcome
         }
+        return lastFailure
+    }
+
+    static func checkStable(at api: URL) async -> Outcome {
+        let current = currentVersion()
         var req = URLRequest(url: api, timeoutInterval: 12)
         req.cachePolicy = .reloadIgnoringLocalCacheData
         do {
@@ -252,14 +312,34 @@ enum UpdateCheck {
 
     /// Split sanitized notes into renderable blocks. Blank lines are dropped: the view
     /// spaces blocks itself, so carrying them through would double the gaps.
+    ///
+    /// Fenced code blocks (```` ``` ````/`~~~`) are block syntax too: `Text` printed the
+    /// fence lines literally (issue #120 screenshot: "brew install …" then a bare "```").
+    /// Fence markers are dropped and each line inside becomes an inline code span. The
+    /// "## Cài đặt / Install" section is dropped whole: it tells website readers how to
+    /// download the .pkg or use brew — inside the app the "Update now" button IS that.
     static func noteBlocks(_ notes: String) -> [NoteBlock] {
         var out: [NoteBlock] = []
+        var inFence = false
+        var inInstallSection = false
         for line in notes.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                inFence.toggle()
+                continue
+            }
+            if !inFence, isHeading(trimmed) {
+                let title = trimmed.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces)
+                inInstallSection = isInstallHeading(title)
+            }
+            guard !trimmed.isEmpty, !inInstallSection else { continue }
             let kind: NoteBlock.Kind
             var text = trimmed
-            if isHeading(trimmed) {
+            if inFence {
+                kind = .paragraph
+                // A code span can't hold its own delimiter; such a line stays plain text.
+                text = trimmed.contains("`") ? trimmed : "`\(trimmed)`"
+            } else if isHeading(trimmed) {
                 kind = .heading
                 text = String(trimmed.drop(while: { $0 == "#" })).trimmingCharacters(in: .whitespaces)
             } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ")
@@ -275,6 +355,13 @@ enum UpdateCheck {
             out.append(NoteBlock(id: out.count, kind: kind, text: text))
         }
         return out
+    }
+
+    /// Headings of the release body's download/install section (release template:
+    /// "## Cài đặt"; English bodies "## Install"/"## Installation").
+    static func isInstallHeading(_ title: String) -> Bool {
+        let t = title.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: " :"))
+        return ["cài đặt", "install", "installation", "cài đặt / install"].contains(t)
     }
 
     /// A remote version string is only trusted as 1–4 dot-separated groups of ASCII

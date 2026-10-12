@@ -412,9 +412,16 @@ final class AppState: @unchecked Sendable {
         get { defaults.bool(forKey: "autoUpdateCheck") }
         set { defaults.set(newValue, forKey: "autoUpdateCheck") }
     }
+    /// Last weekly check that actually REACHED the manifest (key name kept from when it
+    /// was stamped before the fetch — an old value just means "checked then").
     var lastAutoUpdateCheckAt: Double {
         get { defaults.double(forKey: "lastAutoUpdateCheckAt") }
         set { defaults.set(newValue, forKey: "lastAutoUpdateCheckAt") }
+    }
+    /// Last weekly check STARTED, success or not — the retry back-off after a failure.
+    var lastAutoUpdateAttemptAt: Double {
+        get { defaults.double(forKey: "lastAutoUpdateAttemptAt") }
+        set { defaults.set(newValue, forKey: "lastAutoUpdateAttemptAt") }
     }
     /// Newest version the user has already been alerted about (never nag twice).
     var lastNotifiedUpdateVersion: String {
