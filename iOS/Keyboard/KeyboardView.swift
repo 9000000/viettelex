@@ -23,7 +23,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
 
     /// emojiSearch = hàng ô tìm emoji + plane chữ (phím chặn vào EmojiSearchSession).
-    private enum Plane { case letters, numbers, symbols, emoji, templates, emojiSearch }
+    /// keypad = bàn số lớn kiểu Apple (ô numberPad / decimalPad / OTP — NumericKeypad).
+    private enum Plane { case letters, numbers, symbols, emoji, templates, emojiSearch, keypad }
     /// Plane có phím chữ qua router (chữ thường + chế độ tìm emoji).
     private var lettersLike: Bool { plane == .letters || plane == .emojiSearch }
 
@@ -119,7 +120,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private func planeTarget(_ p: Plane) -> PlanePolicy.Target {
         switch p {
         case .letters: return .letters
-        case .numbers, .symbols: return .symbols
+        case .numbers, .symbols, .keypad: return .symbols
         case .emoji: return .emoji
         case .emojiSearch: return .emojiSearch
         case .templates: return .templates
@@ -798,6 +799,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             }
         }
         applyBottomTrim()
+        if plane == .keypad { applyKeypadMetrics() }
         layoutSuggestionBar()
         layoutStripZones()
         layoutOverlayPanel()
@@ -1392,9 +1394,10 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
     private var inputKind: InputKind = .normal
 
-    func configureInputKind(_ kind: InputKind) {
+    func configureInputKind(_ kind: InputKind, keypad: NumericKeypad.Style? = nil) {
         inputKind = kind
-        plane = (kind == .number) ? .numbers : .letters
+        keypadStyle = keypad
+        plane = keypad != nil ? .keypad : (kind == .number) ? .numbers : .letters
         let shiftDropped = plane == .letters && shift == .on
         if shiftDropped { shift = .off }
         // Kind nằm trong chữ ký của rebuild: đổi kind → cache vứt + dựng lại;
@@ -1742,6 +1745,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             || builtPressHighlight != keyPressHighlightEnabled
             || builtAlts != activeAlts
             || builtSplit != split
+            || builtKeypad != keypadStyle
         let widthChanged = builtWidth != bounds.width
         let sigChanged = styleChanged || widthChanged
         if builtPlane == plane, !sigChanged { return }
@@ -1780,6 +1784,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         builtPressHighlight = keyPressHighlightEnabled
         builtAlts = activeAlts
         builtSplit = split
+        builtKeypad = keypadStyle
         dropAltHold()                            // phím cũ sắp bị gỡ
         commaTimer?.cancel(); commaTimer = nil; commaFired = false
         letterKeys.removeAll()
@@ -1821,6 +1826,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         case .emoji: buildEmoji()
         case .templates: buildTemplates()
         case .emojiSearch: buildEmojiSearch()
+        case .keypad: buildKeypad()
         }
     }
 
@@ -2574,7 +2580,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let planeBtn = controlButton(title: planeKey, fire: .down) { [weak self] in
             guard let self else { return }
             // Từ ô tìm emoji: 123 ra plane số (thoát tìm).
-            self.plane = (self.plane == .letters || self.plane == .emojiSearch) ? .numbers : .letters
+            // Ô bàn số lớn: "123" ở bàn chữ quay lại bàn số lớn (NumericKeypad).
+            self.plane = (self.plane == .letters || self.plane == .emojiSearch)
+                ? (self.keypadStyle != nil ? .keypad : .numbers) : .letters
             if self.plane == .letters { self.reevaluateShiftForLetters() }
             self.rebuild()
         }
@@ -2883,6 +2891,136 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             }
         }
         return stack
+    }
+
+    // MARK: bàn số lớn (NumericKeypad — ô numberPad / decimalPad / OTP, iPhone)
+
+    /// Kiểu bàn số lớn của ô hiện tại (nil = ô thường). Đặt qua configureInputKind.
+    private var keypadStyle: NumericKeypad.Style?
+    private var builtKeypad: NumericKeypad.Style?
+    /// Nhãn số + chữ cái phụ của plane bàn số đã dựng (cỡ chữ đổi theo hướng tại chỗ).
+    private var keypadLabels: [(digit: UILabel, letters: UILabel)] = []
+    private var keypadLandscape: Bool?
+    /// Đang hiện bàn số lớn — controller chèn số THẲNG (không phím dấu VNI).
+    var keypadShown: Bool { plane == .keypad }
+
+    /// Lưới 3×4 như stock: 1 2 3 / 4 5 6 / 7 8 9 / [góc] 0 ⌫. Hàng phẳng (không lồng) ⇒
+    /// router khe (nearestControl) / một tay / bottomTrim dùng chung đường plane thường.
+    private func buildKeypad() {
+        guard let style = keypadStyle else { return buildPlane(rows: Self.numberRows, moreKey: "#+=", altKey: "ABC") }
+        indentedRow = nil
+        keypadLabels = []
+        keypadLandscape = nil
+        var firstDigit: UIView?
+        for digits in NumericKeypad.gridRows {
+            let keys = digits.map { keypadDigit($0, style: style) }
+            rowsContainer.addArrangedSubview(keypadRow(keys))      // cùng cha rồi mới ràng buộc
+            for k in keys.dropFirst() { k.widthAnchor.constraint(equalTo: keys[0].widthAnchor).isActive = true }
+            if firstDigit == nil { firstDigit = keys[0] }
+        }
+        var corner: [UIView] = []
+        for c in NumericKeypad.corner(style: style, needsGlobe: needsGlobe) {
+            switch c {
+            case .globe: corner.append(makeGlobeKey())
+            case .letters:
+                corner.append(makePlaneKey("ABC"))
+            case .text(let t): corner.append(keypadSymbol(t, style: style))
+            }
+        }
+        let zero = keypadDigit("0", style: style)
+        let back = backspaceButton()
+        rowsContainer.addArrangedSubview(keypadRow(corner + [zero, back]))
+        for k in corner.dropFirst() { k.widthAnchor.constraint(equalTo: corner[0].widthAnchor).isActive = true }
+        back.widthAnchor.constraint(equalTo: zero.widthAnchor).isActive = true
+        if let f = firstDigit { crossRow(zero.widthAnchor.constraint(equalTo: f.widthAnchor)) }
+        applyKeypadMetrics()
+    }
+
+    private func keypadRow(_ views: [UIView]) -> UIStackView {
+        let stack = UIStackView(arrangedSubviews: views)
+        stack.axis = .horizontal
+        stack.spacing = Self.keyGap
+        stack.distribution = .fill
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.insetsLayoutMarginsFromSafeArea = false
+        let side = NumericKeypad.sideMargin(keysWidth: keysWidth, margin: Self.sideMargin)
+        stack.layoutMargins = UIEdgeInsets(top: KeyGeometry.rowGap, left: side, bottom: 0, right: side)
+        return stack
+    }
+
+    /// Phím số: số lớn + chữ cái nhỏ bên dưới (nhãn riêng — title trống, a11y = số).
+    private func keypadDigit(_ d: String, style: NumericKeypad.Style) -> KeyButton {
+        let b = baseButton(title: "", special: false)
+        b.accessibilityLabel = d
+        let letters = NumericKeypad.letters(under: d, style: style)
+        let digit = UILabel(), sub = UILabel()
+        digit.text = d
+        sub.text = letters
+        for l in [digit, sub] {
+            l.textColor = ink
+            l.textAlignment = .center
+            l.isUserInteractionEnabled = false
+            l.isAccessibilityElement = false
+        }
+        let col = UIStackView(arrangedSubviews: [digit, sub])
+        col.axis = .vertical
+        col.alignment = .center
+        col.spacing = -1
+        col.isUserInteractionEnabled = false
+        col.translatesAutoresizingMaskIntoConstraints = false
+        b.addSubview(col)
+        NSLayoutConstraint.activate([col.centerXAnchor.constraint(equalTo: b.centerXAnchor),
+                                     col.centerYAnchor.constraint(equalTo: b.centerYAnchor)])
+        keypadLabels.append((digit, sub))
+        keypadPressFeedback(b, preview: d)
+        armCommit(b) { [weak self] in self?.tapped(.text(d)) }
+        let hold = NumericKeypad.holdChoices(for: d, style: style)
+        if !hold.isEmpty { armDomainHold(b, choices: hold, variants: true) }
+        return b
+    }
+
+    /// Phím ký tự ở ô góc (dấu thập phân, *, #).
+    private func keypadSymbol(_ t: String, style: NumericKeypad.Style) -> KeyButton {
+        let b = baseButton(title: t, special: false)
+        b.titleLabel?.font = Self.keyFont(24)
+        keypadPressFeedback(b, preview: t)
+        armCommit(b) { [weak self] in self?.tapped(.text(t)) }
+        let hold = NumericKeypad.holdChoices(for: t, style: style)
+        if !hold.isEmpty { armDomainHold(b, choices: hold, variants: true) }
+        return b
+    }
+
+    /// Âm/rung như phím ký tự. Đè: "Phím sẫm khi bấm" BẬT ⇒ sẫm nền như bàn số stock (không
+    /// balloon — ô to, ngón không che); TẮT ⇒ ô phóng to nếu công tắc phóng to bật.
+    private func keypadPressFeedback(_ b: KeyButton, preview: String) {
+        if keyPressHighlightEnabled { b.pressedBackground = specialFill }
+        b.addAction(UIAction { [weak self, weak b] _ in
+            Self.clickLetter()
+            guard let self, let b, !self.keyPressHighlightEnabled else { return }
+            self.showBalloon(over: b, text: preview)
+        }, for: .touchDown)
+        if !keyPressHighlightEnabled {
+            b.addAction(UIAction { [weak self] _ in self?.hideBalloon() },
+                        for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        }
+    }
+
+    /// Lề hàng (một tay / máy rộng căn giữa) + cỡ chữ theo hướng — gọi lúc dựng và mỗi
+    /// layoutSubviews khi đang ở bàn số (xoay không dựng lại plane).
+    private func applyKeypadMetrics() {
+        let side = NumericKeypad.sideMargin(keysWidth: keysWidth, margin: Self.sideMargin)
+        for case let r as UIStackView in rowsContainer.arrangedSubviews where r.layoutMargins.left != side {
+            r.layoutMargins = UIEdgeInsets(top: KeyGeometry.rowGap, left: side, bottom: 0, right: side)
+        }
+        let land = isLandscapeNow
+        guard keypadLandscape != land else { return }
+        keypadLandscape = land
+        let t = NumericKeypad.typography(landscape: land)
+        for l in keypadLabels {
+            l.digit.font = Self.keyFont(t.digit)
+            l.letters.font = .systemFont(ofSize: max(t.letters, 1), weight: .semibold)
+            l.letters.isHidden = t.letters == 0 || (l.letters.text ?? "").isEmpty
+        }
     }
 
     // MARK: buttons
@@ -5057,6 +5195,35 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         return find(rowsContainer)
     }
     var debugPlaneName: String { "\(plane)" }
+    /// Test hook: phím bàn số lớn theo nhãn (số = accessibilityLabel, ký hiệu = title, "Chữ", "Xoá").
+    func debugKeypadKey(_ label: String) -> UIControl? {
+        guard plane == .keypad else { return nil }
+        for row in rowsContainer.arrangedSubviews {
+            for c in rowControls(row) {
+                if c.accessibilityLabel == label || (c as? UIButton)?.currentTitle == label { return c }
+            }
+        }
+        return nil
+    }
+    /// Test hook: chữ cái phụ đang hiện dưới số `d` ("" = không có / ẩn).
+    func debugKeypadLetters(_ d: String) -> String {
+        guard let b = debugKeypadKey(d) else { return "" }
+        let ls = (b.subviews.first { $0 is UIStackView } as? UIStackView)?.arrangedSubviews
+            .compactMap { $0 as? UILabel } ?? []
+        guard ls.count == 2, !ls[1].isHidden else { return "" }
+        return ls[1].text ?? ""
+    }
+    /// Test hook: giữ phím bàn số tới khi hiện hàng lựa chọn, chọn ô đầu, nhấc.
+    func debugKeypadHold(_ label: String) {
+        guard let b = debugKeypadKey(label) as? KeyButton else { return }
+        let key = convert(b.bounds, from: b)
+        domainLastPoint = CGPoint(x: key.midX, y: key.midY)
+        b.sendActions(for: .touchDown)
+        domainTimer?.cancel()
+        fireDomainHold(b, choices: NumericKeypad.holdChoices(for: label, style: keypadStyle ?? .digits),
+                       variants: true)
+        b.sendActions(for: .touchUpInside)
+    }
     var debugShiftOn: Bool { shift != .off }
     var debugShiftCaps: Bool { shift == .caps }
     /// Test hook: hiện balloon trên phím chữ `s` (như chạm / giữ ra ký tự phụ `text`), trả
