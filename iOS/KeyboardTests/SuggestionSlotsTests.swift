@@ -132,9 +132,11 @@ final class SuggestionSlotsTests: XCTestCase {
         kb.showSuggestions(S(nextWords: ["a", "b", "c"]))
         let cell = kb.debugSuggestionGeometry().cells[1]
         XCTAssertTrue(kb.hitTest(CGPoint(x: cell.midX, y: cell.midY), with: nil) === kb.debugSlotControl(1))
-        let low = CGPoint(x: cell.midX, y: KeyboardView.openStrip - 1)
+        // Strip mở thực tế (iPhone: theo thanh dự đoán stock 29, iPad 34) = đỉnh vùng phím.
+        let strip = kb.debugRowsTop
+        let low = CGPoint(x: cell.midX, y: strip - 1)
         XCTAssertTrue(kb.hitTest(low, with: nil) === kb.debugSlotControl(1))
-        XCTAssertFalse(kb.hitTest(CGPoint(x: cell.midX, y: KeyboardView.openStrip + 6), with: nil)
+        XCTAssertFalse(kb.hitTest(CGPoint(x: cell.midX, y: strip + 6), with: nil)
                        === kb.debugSlotControl(1))
     }
 

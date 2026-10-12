@@ -8,10 +8,14 @@ import UniformTypeIdentifiers
 @main
 struct VietTelexApp: App {
     init() {
-        // "Kích thước như bàn phím iPhone" (#119): cài mới bật sẵn, người dùng cũ giữ bố cục
-        // quen tay (tự bật ở Giao diện). Ghi MỘT lần — bàn phím đọc khoá này mỗi lần hiện.
-        KeyGeometry.StockSize.seedIfNeeded(UserDefaults(suiteName: "group.com.viettelex"),
-                                           extraStateKeys: BackupSettings.all.map(\.key))
+        // "Chiều cao hàng phím": mức 0 = bàn phím iPhone gốc (bỏ công tắc "Kích thước như bàn
+        // phím iPhone" #119). Chuyển đổi MỘT lần giá trị cũ để người dùng cũ không thấy đổi
+        // (KeyGeometry.RowAdjust) — bàn phím tự tính trong bộ nhớ nếu app chưa chạy.
+        let screen = UIScreen.main.bounds.size
+        KeyGeometry.RowAdjust.migrateIfNeeded(UserDefaults(suiteName: "group.com.viettelex"),
+                                              pad: UIDevice.current.userInterfaceIdiom == .pad,
+                                              portraitWidth: min(screen.width, screen.height),
+                                              extraStateKeys: BackupSettings.all.map(\.key))
         #if DEBUG
         let g = UserDefaults(suiteName: "group.com.viettelex")
         NSLog("DBG kbFullAccess=%d kbLastSeen=%f",

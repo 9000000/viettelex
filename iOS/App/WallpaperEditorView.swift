@@ -10,6 +10,8 @@ struct WallpaperEditorView: View {
     let keyboardSize: CGSize
     /// Phần strip gợi ý (pt) ở đỉnh keyboardSize — phím xem trước nằm dưới nó.
     let stripHeight: CGFloat
+    /// "Nâng bàn phím" (pt) ở đáy keyboardSize — dải trống dưới phím xem trước.
+    let bottomPad: CGFloat
     let palette: KeyboardPalette
     let onCancel: () -> Void
     let onDone: (_ crop: WallpaperCrop, _ dim: Int, _ blur: Int) -> Void
@@ -25,11 +27,12 @@ struct WallpaperEditorView: View {
     private let uiImage: UIImage
 
     init(image: CGImage, crop: WallpaperCrop?, keyboardSize: CGSize, stripHeight: CGFloat,
-         palette: KeyboardPalette, dim: Int, blur: Int, onCancel: @escaping () -> Void,
+         bottomPad: CGFloat = 0, palette: KeyboardPalette, dim: Int, blur: Int, onCancel: @escaping () -> Void,
          onDone: @escaping (WallpaperCrop, Int, Int) -> Void) {
         self.image = image
         self.keyboardSize = keyboardSize
         self.stripHeight = stripHeight
+        self.bottomPad = bottomPad
         self.palette = palette
         self.onCancel = onCancel
         self.onDone = onDone
@@ -87,6 +90,7 @@ struct WallpaperEditorView: View {
         let bakedK = min(1, Double(Wallpaper.maxEdge) / max(cropPx, 1))
         let blurPt = CGFloat(Double(blur) * Double(dispW) / (Double(image.width) * bakedK))
         let strip = keyboardSize.height > 0 ? size.height * stripHeight / keyboardSize.height : 0
+        let raise = keyboardSize.height > 0 ? size.height * bottomPad / keyboardSize.height : 0
         // Mỗi lớp có khung cố định = khung chỉnh (ảnh to hơn khung chỉ nằm trong overlay,
         // không làm lớp phím giãn theo).
         Color.black
@@ -104,6 +108,7 @@ struct WallpaperEditorView: View {
                 VStack(spacing: 0) {
                     Color.clear.frame(height: strip)
                     ThemePreview(palette: palette, wallpaper: nil, dim: 0, large: true, keysOnly: true)
+                    Color.clear.frame(height: raise)
                 }
                 .frame(width: size.width, height: size.height)
                 .opacity(interacting ? 0.35 : 1)

@@ -95,34 +95,35 @@ final class FoldableLayoutTests: XCTestCase {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad)
         let (open, _) = makeKeyboard(width: 801, screen: CGSize(width: 951, height: 669))
         let (land, _) = makeKeyboard(width: 801, screen: CGSize(width: 874, height: 402))
-        XCTAssertEqual(try XCTUnwrap(land.debugLetterFrame("q")).height, 162 / 4 - 10, accuracy: 0.5)
+        XCTAssertEqual(try XCTUnwrap(land.debugLetterFrame("q")).height, 32, accuracy: 0.5, "ngang = stock 32")
         XCTAssertEqual(try XCTUnwrap(open.debugLetterFrame("q")).height, 208 / 4 - 10, accuracy: 0.5)
     }
 
-    /// Ghim iPhone 17 dọc / ngang: safe area 0 ⇒ y hệt trước (chiều cao xin, hàng đáy sát đáy).
+    /// Ghim iPhone 17 dọc / ngang: safe area 0 ⇒ hình học bàn phím gốc (strip dọc 29 như
+    /// thanh dự đoán stock, phím 43 / ngang 32 + đệm 2).
     @MainActor func testIPhoneNumbersUnchanged() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad)
         let (p, _) = makeKeyboard(width: 402, screen: iPhone17)
-        XCTAssertEqual(p.debugRequestedHeight, Self.strip + 212, accuracy: 0.01)
-        XCTAssertEqual(try XCTUnwrap(p.debugLetterFrame("q")).height, 44, accuracy: 0.5)
+        XCTAssertEqual(p.debugRequestedHeight, 29 + 212, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(p.debugLetterFrame("q")).height, 43, accuracy: 0.5)
         let pn = frame(p, try XCTUnwrap(p.debugControl("Số")))
         XCTAssertEqual(pn.height, 43, accuracy: 0.5)
         XCTAssertEqual(pn.maxY, p.bounds.height, accuracy: 0.5)
         let (l, _) = makeKeyboard(width: 874, screen: CGSize(width: 874, height: 402))
         XCTAssertEqual(l.debugRequestedHeight, Self.strip + 162, accuracy: 0.01)
         let ln = frame(l, try XCTUnwrap(l.debugControl("Số")))
-        XCTAssertEqual(ln.height, 162 / 4 - 10, accuracy: 0.5)
-        XCTAssertEqual(ln.maxY, l.bounds.height, accuracy: 0.5)
-        // Duo gập = iPhone dọc.
+        XCTAssertEqual(ln.height, 32, accuracy: 0.5)
+        XCTAssertEqual(ln.maxY, l.bounds.height - 2, accuracy: 0.5)
+        // Duo gập = iPhone dọc (466 ≥ 420: nhóm máy lớn, bước 56 + đệm 7).
         let (f, _) = makeKeyboard(width: 466, screen: duoFolded)
-        XCTAssertEqual(f.debugRequestedHeight, Self.strip + 212, accuracy: 0.01)
+        XCTAssertEqual(f.debugRequestedHeight, 29 + 231, accuracy: 0.01)
     }
 
     /// Gập ⇄ mở trên cùng một view: hình học đổi theo bề ngang mới, không kẹt dạng cũ.
     @MainActor func testFoldUnfoldSwitchesForm() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad)
         let (kb, _) = makeKeyboard(width: 466, screen: duoFolded)
-        XCTAssertEqual(kb.debugRequestedHeight, Self.strip + 212, accuracy: 0.01)
+        XCTAssertEqual(kb.debugRequestedHeight, 29 + 231, accuracy: 0.01)
         kb.debugScreenSize = CGSize(width: 951, height: 669)
         kb.frame.size.width = 801
         kb.debugSetSafeBottom(18)
@@ -132,7 +133,7 @@ final class FoldableLayoutTests: XCTestCase {
         kb.frame.size.width = 466
         kb.debugSetSafeBottom(0)
         kb.setNeedsLayout(); kb.layoutIfNeeded()
-        XCTAssertEqual(kb.debugRequestedHeight, Self.strip + 212, accuracy: 0.01)
+        XCTAssertEqual(kb.debugRequestedHeight, 29 + 231, accuracy: 0.01)
     }
 
     /// Bug 2 (Phil 06/10/2026, ảnh #63): Duo GẬP + xoay NGANG (màn 678×466, view 528, safe đáy 18)

@@ -26,7 +26,9 @@ final class NumberRowTests: XCTestCase {
         let rows = kb.debugRowFrames()
         XCTAssertEqual(rows.count, 5, file: file, line: line)
         guard rows.count == 5 else { return }
-        XCTAssertEqual(rows[0].height, KeyLayout.numberRowHeight(unit: rows[1].height),
+        // Khe trên hàng: iPhone theo bàn phím gốc (11), iPad 10 (KeyGeometry.rowSpec).
+        let gap = kb.rowSpec.gap
+        XCTAssertEqual(rows[0].height, KeyGeometry.numberRowHeight(unit: rows[1].height, gap: gap),
                        accuracy: 0.5, file: file, line: line)
         for r in rows[2..<4] {
             XCTAssertEqual(r.height, rows[1].height, accuracy: 0.5, file: file, line: line)

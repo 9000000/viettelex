@@ -160,7 +160,8 @@ final class KeyGeometryTests: XCTestCase {
         for (i, s) in ["q", "a", "z"].enumerated() {
             let f = try XCTUnwrap(kb.debugLetterFrame(s))
             XCTAssertEqual(h - f.midY, stock[i], accuracy: 1, "hàng \(s)")
-            XCTAssertEqual(f.height, 44, accuracy: 0.5)
+            // Phím chữ 43 như bàn phím gốc (mức 0 của "Chiều cao hàng phím" — trước 44, khe 10).
+            XCTAssertEqual(f.height, 43, accuracy: 0.5)
         }
         let num = try XCTUnwrap(kb.debugControl("Số"))
         let nf = frame(kb, num)

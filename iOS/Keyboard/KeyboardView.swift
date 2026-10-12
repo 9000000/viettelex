@@ -366,7 +366,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             let c = KeyLayout.chrome(keyArea: self.keyAreaHeight(), strip: strip, mode: self.chromeMode,
                                      headroom: self.headroomNow)
             self.rowsTopConstraint?.constant = c.rowsTop
-            self.heightConstraint?.constant = c.total + self.safeBottom + self.hostFillExtra
+            self.heightConstraint?.constant = c.total + self.bottomInset + self.hostFillExtra
             self.suggestionBar.alpha = collapsing ? 0 : 1
             let flip = CGAffineTransform(rotationAngle: collapsing ? .pi : 0)
             self.chevronIcon?.transform = flip
@@ -614,8 +614,12 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         chevronIcon?.transform = CGAffineTransform(rotationAngle: barCollapsed ? .pi : 0)
     }
 
-    /// User chỉnh ±10pt/hàng qua Settings (Giao diện); 4 hàng nên tổng đổi 4×.
+    /// User chỉnh ±10pt/hàng qua Settings (Giao diện); 4 hàng nên tổng đổi 4×. iPhone: so với
+    /// bàn phím gốc của máy (0 = như bàn phím iPhone — KeyGeometry.RowAdjust).
     private var rowHeightAdjust: CGFloat = 0
+    /// "Nâng bàn phím" (Giao diện, 0…48pt): đệm trống dưới hàng phím đáy — view cao thêm đúng
+    /// bấy nhiêu, phím dời lên. Đọc mỗi lần hiện (applyAppearance); 0 = không đổi gì.
+    private var keyboardRaise: CGFloat = 0
 
     /// Hàng phím số 1…0 trên hàng chữ (Settings → Giao diện, mặc định TẮT; khoá
     /// App Group "numberRow"). Nằm trong chữ ký rebuild → đổi là vứt planeCache.
@@ -701,8 +705,10 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let s = KeyLayout.keyboardSafeBottom(pad: Self.isPad, viewSafeBottom: v)
         if s != safeBottom { safeBottom = s; updateSuggestionChrome() }
     }
-    /// Hình học hàng phím hiện tại (KeyGeometry.RowSpec): bố cục mặc định (+ chỉnh tay ±pt mỗi
-    /// hàng) hoặc preset "Kích thước như bàn phím iPhone" (#119 — bỏ qua chỉnh tay). Thuần + rẻ
+    /// Đáy hàng phím cách đáy view: safe area (máy gập mở) + "Nâng bàn phím".
+    private var bottomInset: CGFloat { safeBottom + keyboardRaise }
+    /// Hình học hàng phím hiện tại (KeyGeometry.RowSpec): iPhone = số đo bàn phím gốc + chỉnh
+    /// tay ±pt mỗi hàng; iPad / máy gập mở = bố cục VietTelex + chỉnh tay. Thuần + rẻ
     /// (phoneForm cache theo bounds) — gọi được trên đường layout.
     var rowSpec: KeyGeometry.RowSpec {
         let pad = Self.isPad
@@ -717,11 +723,12 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             // 218 → 216 − 4 (27/09/2026, đo stock iOS 26/27 — KeyGeometry): bước hàng 54
             // như stock, hàng đáy vùng 50 → 3 hàng chữ trùng vị trí stock tính từ đáy.
             // Máy gập mở: 208 (KeyLayout.phoneKeyAreaBase) thay 162 "ngang" — phím lùn.
+            // 12/10/2026: iPhone thường dùng số đo stock (KeyGeometry.rowSpec bỏ qua base).
             base = form.map(KeyLayout.phoneKeyAreaBase) ?? (landscape ? 162 : KeyGeometry.phonePortraitBase)
         }
         return KeyGeometry.rowSpec(pad: pad, landscape: landscape, unfolded: form == .unfolded,
                                    width: bounds.width, base: base, adjust: rowHeightAdjust,
-                                   stock: stockSizeSetting, homeButton: !pad && needsGlobe)
+                                   homeButton: !pad && needsGlobe)
     }
     /// iPhone dọc: hàng đáy thấp hơn 4pt để 3 hàng chữ nằm đúng chỗ stock (KeyGeometry).
     private var bottomTrim: CGFloat { rowSpec.bottomTrim }
@@ -732,16 +739,17 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private var sideMarginNow: CGFloat { rowSpec.sideMargin }
     private var keyGapNow: CGFloat { rowSpec.keyGap }
 
-    /// Preset "Kích thước như bàn phím iPhone" (Giao diện → Bàn phím, App Group
-    /// KeyGeometry.StockSize.settingKey) — đọc MỘT lần mỗi lần hiện (applyAppearance).
-    private(set) var stockSizeSetting = false
     #if DEBUG
-    func debugSetStockSize(_ on: Bool) {
-        stockSizeSetting = on
+    func debugSetRowAdjust(_ a: Int) {
+        rowHeightAdjust = CGFloat(KeyGeometry.RowAdjust.clamp(a))
         lastLayoutWidth = -1; setNeedsLayout(); rebuild()
     }
+    func debugSetRaise(_ r: Int) {
+        keyboardRaise = CGFloat(KeyGeometry.RowAdjust.clampRaise(r))
+        updateSuggestionChrome(); setNeedsLayout()
+    }
     #endif
-    /// Strip gợi ý mở: preset = khoảng từ mép trên tới phím như thanh dự đoán stock (dọc 29:
+    /// Strip gợi ý mở: iPhone = khoảng từ mép trên tới phím như thanh dự đoán stock (dọc 29:
     /// 29 + khe 11 = 40 ≈ stock 39.7–40); mặc định 34.
     private var openStripNow: CGFloat {
         let spec = rowSpec
@@ -788,10 +796,10 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let c = KeyLayout.chrome(keyArea: keyAreaHeight(), strip: strip, mode: chromeMode,
                                  headroom: headroomNow)
         if rowsTopConstraint?.constant != c.rowsTop { rowsTopConstraint?.constant = c.rowsTop }
-        baseRequestedHeight = c.total + safeBottom
+        baseRequestedHeight = c.total + bottomInset
         let total = baseRequestedHeight + hostFillExtra
         if heightConstraint?.constant != total { heightConstraint?.constant = total }
-        if rowsBottomConstraint?.constant != -safeBottom { rowsBottomConstraint?.constant = -safeBottom }
+        if rowsBottomConstraint?.constant != -bottomInset { rowsBottomConstraint?.constant = -bottomInset }
         if rowsHeightConstraint?.constant != c.rows { rowsHeightConstraint?.constant = c.rows }
         if rowsMinHeightConstraint?.constant != c.rows { rowsMinHeightConstraint?.constant = c.rows }
         if rowsMinTopConstraint?.constant != c.minTop { rowsMinTopConstraint?.constant = c.minTop }
@@ -1551,11 +1559,13 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         systemDark = AppearancePolicy.isDark(appearance: appearance, style: style)
         themeSettings = ThemeSettings.load(UserDefaultsProvider.shared)
         resolvePalette()
-        // Chiều cao hàng phím ±10pt (Settings → Giao diện) — đọc mỗi lần hiện.
-        let adj = UserDefaultsProvider.shared?.object(forKey: "rowHeightAdjust") as? Int ?? 0
-        rowHeightAdjust = CGFloat(max(-10, min(10, adj)))
-        // "Kích thước như bàn phím iPhone" (#119): bật thì bỏ qua chỉnh tay ở trên (RowSpec).
-        stockSizeSetting = KeyGeometry.StockSize.setting(UserDefaultsProvider.shared)
+        // Chiều cao hàng phím ±10pt (Settings → Giao diện) — đọc mỗi lần hiện. Bản cũ (có công
+        // tắc "Kích thước như bàn phím iPhone") chưa được app chuyển đổi ⇒ tính trong bộ nhớ,
+        // không ghi (KeyGeometry.RowAdjust.effectiveAdjust).
+        let screen = window?.windowScene?.screen.bounds.size ?? UIScreen.main.bounds.size
+        rowHeightAdjust = CGFloat(KeyGeometry.RowAdjust.effectiveAdjust(
+            UserDefaultsProvider.shared, pad: Self.isPad, portraitWidth: min(screen.width, screen.height)))
+        keyboardRaise = CGFloat(KeyGeometry.RowAdjust.raise(UserDefaultsProvider.shared))
         numberRowEnabled = UserDefaultsProvider.shared?.bool(forKey: Self.numberRowKey) ?? false
         // Bàn phím tách đôi (mặc định TẮT) — rebuild() cuối hàm áp nếu đổi.
         splitSetting = UserDefaultsProvider.shared?.bool(forKey: SplitLayout.settingKey) ?? false

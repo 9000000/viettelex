@@ -72,8 +72,8 @@ enum KeyGeometry {
 
     // MARK: Hình học hàng phím (một nguồn cho KeyboardView + ảnh nền trong app)
 
-    /// Hình học dọc + ngang của hàng phím iPhone/iPad. Mặc định = bố cục VietTelex đã chỉnh
-    /// (27/09/2026); `stock` = preset "Kích thước như bàn phím iPhone" (#119, StockSize).
+    /// Hình học dọc + ngang của hàng phím iPhone/iPad. iPhone (không gập mở) = số đo bàn phím
+    /// gốc của máy (StockSize) + chỉnh tay; iPad / máy gập mở = bố cục VietTelex (base) + chỉnh tay.
     struct RowSpec: Equatable {
         /// Bước hàng chữ (khe trên + phím).
         var unit: CGFloat
@@ -87,7 +87,7 @@ enum KeyGeometry {
         /// Lề trái/phải + khe ngang giữa phím.
         var sideMargin: CGFloat
         var keyGap: CGFloat
-        /// Có phải preset stock không (KeyboardView: bỏ chỉnh tay, strip/headroom stock).
+        /// Hình học theo số đo stock (iPhone) — KeyboardView: strip gợi ý stock.
         var stock: Bool = false
 
         var bottomRowHeight: CGFloat { unit - bottomTrim }
@@ -104,22 +104,26 @@ enum KeyGeometry {
         var numberRowConstant: CGFloat { (1 - numberKeyRatio) * gap }
     }
 
-    /// - base: vùng 4 hàng chuẩn của bố cục mặc định (iPhone dọc 216 / ngang 162 / máy gập mở
-    ///   208 — KeyLayout.phoneKeyAreaBase; iPad 240 / 300).
-    /// - adjust: ±pt mỗi hàng (Settings) — BỎ QUA khi preset stock (preset = số đo đúng).
-    /// - stock: preset bật; chỉ áp cho iPhone (không iPad, không máy gập mở — chưa có số đo).
+    /// - base: vùng 4 hàng chuẩn khi KHÔNG có số đo stock (iPad 240 / 300; máy gập mở 208 —
+    ///   KeyLayout.phoneKeyAreaBase). iPhone thường bỏ qua base.
+    /// - adjust: ±pt mỗi hàng (Settings "Chiều cao hàng phím", RowAdjust). iPhone: so với bàn
+    ///   phím gốc của máy — bước hàng và phím (cả phím hàng đáy) cùng cao thêm `adjust`; khe
+    ///   giữa hàng, phần cắt / đệm dưới hàng đáy giữ như stock ⇒ 0 = đúng bàn phím iPhone.
+    ///   iPad / máy gập mở: (base + adjust × 4) / 4 như trước.
     /// - homeButton: iPhone có nút Home (SE) — không có dải 🌐/mic hệ thống dưới bàn phím
     ///   (KeyboardView: needsGlobe trên iPhone).
     static func rowSpec(pad: Bool, landscape: Bool, unfolded: Bool, width: CGFloat,
-                        base: CGFloat, adjust: CGFloat, stock: Bool, homeButton: Bool = false) -> RowSpec {
-        if stock, !pad, !unfolded,
+                        base: CGFloat, adjust: CGFloat, homeButton: Bool = false) -> RowSpec {
+        if !pad, !unfolded,
            let m = StockSize.metrics(width: width, landscape: landscape, homeButton: homeButton) {
+            let a = RowAdjust.clamp(adjust)
             let trim = m.bottomTrim
+            // Lề trên hàng đáy KHÔNG đổi theo adjust: phím đáy cao thêm đúng `a` như phím chữ.
             let top = trim >= 0 ? m.pitch - trim - m.keyHeight : m.pitch - m.keyHeight
-            return RowSpec(unit: m.pitch, gap: m.pitch - m.keyHeight, bottomTrim: trim, bottomTop: top,
+            return RowSpec(unit: m.pitch + a, gap: m.rowGap, bottomTrim: trim, bottomTop: top,
                            sideMargin: m.sideMargin, keyGap: m.keyGap, stock: true)
         }
-        let unit = (base + adjust * 4) / 4
+        let unit = (base + RowAdjust.clamp(adjust) * 4) / 4
         let flat = pad || landscape          // máy gập mở cũng "ngang" (không cắt hàng đáy)
         return RowSpec(unit: unit, gap: rowGap,
                        bottomTrim: bottomRowTrim(pad: pad, landscape: flat),
@@ -127,7 +131,94 @@ enum KeyGeometry {
                        sideMargin: sideMargin(pad: pad), keyGap: pad ? 10 : 6)
     }
 
-    /// Preset "Kích thước như bàn phím iPhone" (issue #119, iPhone 16 Pro Max / iOS 27: "+4
+    /// "Chiều cao hàng phím" (±pt mỗi hàng) + "Nâng bàn phím" (đệm dưới hàng đáy) — khoá App
+    /// Group, phạm vi, và chuyển đổi một lần từ bản có công tắc "Kích thước như bàn phím iPhone".
+    ///
+    /// Từ bản này (12/10/2026) mức 0 của thanh chiều cao hàng trên iPhone = bàn phím gốc của
+    /// máy (StockSize). Trước đó: công tắc stock (#119) BẬT ⇒ đúng stock, chỉnh tay bỏ qua;
+    /// TẮT ⇒ bước hàng = (216 + A·4)/4 = 54 + A (A = chỉnh tay cũ), khe 10, phím đáy sát đáy view.
+    /// Chuyển đổi (RowAdjust.migrated) giữ BƯỚC HÀNG cũ: A' = A + 54 − bước stock của máy
+    /// (máy < 420pt: A' = A; máy lớn 420+: A' = A − 2). Sai số còn lại (không biểu diễn được
+    /// bằng chỉnh tay + nâng ≥ 0): phím chữ thấp hơn 1pt (khe stock 11 thay 10), strip gợi ý
+    /// thấp hơn 5pt; máy lớn: cả khối phím nằm cao hơn ~7–11pt (đệm stock 7 dưới phím đáy +
+    /// khe trên hàng đáy 11 thay 7) — đúng vị trí bàn phím iPhone, chính là điều #119 xin;
+    /// SE: cao hơn ~4–8pt. iPad: giữ nguyên giá trị (ngữ nghĩa iPad không đổi).
+    ///
+    /// Lưu: app chạy `migrateIfNeeded` lúc khởi động (ghi cờ trước rồi giá trị). Bàn phím KHÔNG
+    /// ghi (không có Toàn quyền thì App Group chỉ đọc) — đọc qua `effectiveAdjust`: chưa có cờ
+    /// thì tính chuyển đổi trong bộ nhớ, cùng hàm thuần ⇒ kết quả trùng với app ghi sau đó.
+    enum RowAdjust {
+        static let key = "rowHeightAdjust"
+        static let range: ClosedRange<Int> = -10...10
+        /// Cờ đã chuyển sang "0 = bàn phím iPhone".
+        static let migratedKey = "rowAdjustStockBase"
+        /// Công tắc cũ "Kích thước như bàn phím iPhone" (#119) — chỉ còn đọc để chuyển đổi.
+        static let legacyStockKey = "stockKeySize"
+
+        /// "Nâng bàn phím" (như Android #112, cùng khoá sao lưu): 0…48pt bước 4, đệm trống
+        /// dưới hàng phím đáy.
+        static let raiseKey = "keyboardRaise"
+        static let raiseMax = 48
+        static let raiseStep = 4
+
+        static func clamp(_ a: Int) -> Int { min(max(a, range.lowerBound), range.upperBound) }
+        static func clamp(_ a: CGFloat) -> CGFloat {
+            min(max(a, CGFloat(range.lowerBound)), CGFloat(range.upperBound))
+        }
+        static func clampRaise(_ r: Int) -> Int { min(max(r, 0), raiseMax) }
+        static func raise(_ d: UserDefaults?) -> Int { clampRaise(d?.integer(forKey: raiseKey) ?? 0) }
+
+        /// Bề ngang dọc lớn hơn mức này = màn hình mở của máy gập (base 208, không stock) ⇒
+        /// không biết cỡ máy khi gập, giữ nguyên giá trị.
+        static let maxPhonePortraitWidth: CGFloat = 500
+
+        /// Giá trị mới (thuần). `legacyStock` = khoá công tắc cũ (nil = chưa có); `fresh` = App
+        /// Group chưa có cài đặt nào của người dùng (StockSize.initialValue) — cài mới coi như bật.
+        static func migrated(oldAdjust: Int, legacyStock: Bool?, fresh: Bool,
+                             pad: Bool, portraitWidth: CGFloat) -> Int {
+            let a = clamp(oldAdjust)
+            if pad { return a }
+            if legacyStock ?? fresh { return 0 }
+            guard portraitWidth > 0, portraitWidth <= maxPhonePortraitWidth,
+                  let m = StockSize.metrics(width: portraitWidth, landscape: false) else { return a }
+            return clamp(a + Int((phonePortraitBase / 4 - m.pitch).rounded()))
+        }
+
+        /// Đọc trạng thái cũ trong `d` rồi tính giá trị mới (không ghi).
+        static func migrated(_ d: UserDefaults, pad: Bool, portraitWidth: CGFloat,
+                             extraStateKeys: [String] = []) -> Int {
+            let legacy: Bool? = d.object(forKey: legacyStockKey) != nil ? d.bool(forKey: legacyStockKey) : nil
+            let fresh = legacy == nil && StockSize.initialValue(
+                existingKeys: Set(d.dictionaryRepresentation().keys),
+                stateKeys: StockSize.userStateKeys.union(extraStateKeys))
+            return migrated(oldAdjust: d.integer(forKey: key), legacyStock: legacy, fresh: fresh,
+                            pad: pad, portraitWidth: portraitWidth)
+        }
+
+        /// Giá trị dùng để vẽ (bàn phím): đã chuyển ⇒ đọc thẳng; chưa ⇒ tính trong bộ nhớ.
+        static func effectiveAdjust(_ d: UserDefaults?, pad: Bool, portraitWidth: CGFloat) -> Int {
+            guard let d else { return 0 }
+            if d.bool(forKey: migratedKey) { return clamp(d.integer(forKey: key)) }
+            return migrated(d, pad: pad, portraitWidth: portraitWidth)
+        }
+
+        /// App gọi lúc khởi động; chạy một lần (cờ), gọi lại không đổi gì. Trả giá trị hiện hành.
+        @discardableResult
+        static func migrateIfNeeded(_ d: UserDefaults?, pad: Bool, portraitWidth: CGFloat,
+                                    extraStateKeys: [String] = []) -> Int {
+            guard let d else { return 0 }
+            if d.bool(forKey: migratedKey) { return clamp(d.integer(forKey: key)) }
+            let v = migrated(d, pad: pad, portraitWidth: portraitWidth, extraStateKeys: extraStateKeys)
+            // Cờ trước: tiến trình kia (bàn phím) thấy cờ thì không chuyển lần hai.
+            d.set(true, forKey: migratedKey)
+            if v != 0 || d.object(forKey: key) != nil { d.set(v, forKey: key) }
+            d.removeObject(forKey: legacyStockKey)
+            return v
+        }
+    }
+
+    /// Số đo bàn phím iPhone gốc = mức 0 của "Chiều cao hàng phím" trên iPhone (trước là công
+    /// tắc "Kích thước như bàn phím iPhone", issue #119, iPhone 16 Pro Max / iOS 27: "+4
     /// mỗi hàng vẫn lệch, gõ nhầm vì quen phím iPhone"). Số đo bàn phím Apple English (US)
     /// trên simulator iOS 27.0 (12/10/2026, XCUITest frame + ảnh @3x, đo pixel mép phím; máy:
     /// SE 3, 17e, 17, 17 Pro, Air, 16 Plus, 17 Pro Max):
@@ -144,9 +235,6 @@ enum KeyGeometry {
     /// mặc định (bước 54, phím đáy sát đáy view) đặt hàng Q thấp hơn stock ~18pt trên 16/17 Pro
     /// Max — đúng lỗi #119 ("+4 mỗi hàng" vẫn lệch 3–7pt, phím cao 48 thay 45).
     enum StockSize {
-        /// Khoá App Group (Bool). Không có khoá = TẮT (người dùng cũ giữ bố cục quen tay);
-        /// app ghi `true` một lần cho cài mới (StockSize.initialValue).
-        static let settingKey = "stockKeySize"
         /// Bề ngang dọc từ đây trở lên = nhóm máy lớn (Air 420, Plus/Pro Max 430/440).
         static let largeMinWidth: CGFloat = 420
 
@@ -200,23 +288,10 @@ enum KeyGeometry {
         /// KeyboardView.openStrip / Wallpaper.suggestionStrip.
         static let defaultOpenStrip: CGFloat = 34
 
-        /// Đọc cài đặt: không có khoá = tắt.
-        static func setting(_ d: UserDefaults?) -> Bool { d?.bool(forKey: settingKey) ?? false }
-
-        /// Giá trị ghi lần đầu app chạy bản có preset: cài MỚI (App Group chưa có cài đặt nào
-        /// của người dùng) ⇒ bật; người dùng cũ ⇒ tắt (giữ bố cục quen tay, tự bật trong app).
+        /// Cài mới hay không: App Group chưa có khoá nào của người dùng ⇒ true (RowAdjust:
+        /// cài mới không có trạng thái cũ để chuyển đổi).
         static func initialValue(existingKeys: Set<String>, stateKeys: Set<String> = userStateKeys) -> Bool {
             existingKeys.isDisjoint(with: stateKeys)
-        }
-        /// Ghi giá trị lần đầu nếu chưa có khoá (app gọi lúc khởi động). Trả giá trị hiện hành.
-        @discardableResult
-        static func seedIfNeeded(_ d: UserDefaults?, extraStateKeys: [String] = []) -> Bool {
-            guard let d else { return false }
-            if d.object(forKey: settingKey) != nil { return d.bool(forKey: settingKey) }
-            let on = initialValue(existingKeys: Set(d.dictionaryRepresentation().keys),
-                                  stateKeys: userStateKeys.union(extraStateKeys))
-            d.set(on, forKey: settingKey)
-            return on
         }
         /// Khoá chỉ xuất hiện khi người dùng đã dùng app/bàn phím (đổi cài đặt, thêm mẫu câu,
         /// bàn phím đã chạy với Toàn quyền…).

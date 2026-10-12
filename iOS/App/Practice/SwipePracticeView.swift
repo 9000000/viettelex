@@ -109,16 +109,13 @@ struct SwipePracticeView: View {
     @AppStorage("swipePracticeSave") private var save = false
     @AppStorage("rowHeightAdjust", store: UserDefaults(suiteName: "group.com.viettelex"))
     private var rowHeightAdjust = 0
-    @AppStorage(KeyGeometry.StockSize.settingKey, store: UserDefaults(suiteName: "group.com.viettelex"))
-    private var stockKeySize = false
-    /// Bước hàng như bàn phím thật: preset "như bàn phím iPhone" ⇒ bước stock theo cỡ máy.
+    /// Bước hàng như bàn phím thật (KeyGeometry.rowSpec): iPhone = bước stock theo cỡ máy + chỉnh tay.
     private var practiceRowHeight: CGFloat {
-        if stockKeySize, UIDevice.current.userInterfaceIdiom == .phone,
-           let m = KeyGeometry.StockSize.metrics(width: min(UIScreen.main.bounds.width, UIScreen.main.bounds.height),
-                                                 landscape: false) {
-            return m.pitch
-        }
-        return 54 + CGFloat(max(-10, min(10, rowHeightAdjust)))
+        let w = min(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
+        let pad = UIDevice.current.userInterfaceIdiom == .pad
+        return KeyGeometry.rowSpec(pad: pad, landscape: false, unfolded: false, width: w,
+                                   base: pad ? 240 : KeyGeometry.phonePortraitBase,
+                                   adjust: CGFloat(rowHeightAdjust)).unit
     }
     @State private var share: ShareItem?
     @State private var confirmDelete = false

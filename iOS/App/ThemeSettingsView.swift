@@ -25,10 +25,11 @@ struct ThemeSettingsView: View {
     @State private var editor: EditorInput?
     // Tính Năng → Giao diện gộp luôn logo + chiều cao hàng (không thuộc "Khôi phục giao diện gốc").
     @AppStorage("showSpaceLogo", store: groupDefaults) private var showSpaceLogo = true
-    @AppStorage("rowHeightAdjust", store: groupDefaults) private var rowHeightAdjust = 0
-    /// "Kích thước như bàn phím iPhone" (#119, KeyGeometry.StockSize) — app ghi giá trị đầu
-    /// (cài mới bật) lúc khởi động; bật thì chỉnh tay chiều cao hàng không áp dụng.
-    @AppStorage(KeyGeometry.StockSize.settingKey, store: groupDefaults) private var stockKeySize = false
+    /// ±pt mỗi hàng; iPhone: 0 = như bàn phím iPhone của máy (KeyGeometry.RowAdjust — app
+    /// chuyển đổi giá trị cũ lúc khởi động, VietTelexApp).
+    @AppStorage(KeyGeometry.RowAdjust.key, store: groupDefaults) private var rowHeightAdjust = 0
+    /// "Nâng bàn phím" 0…48pt (đệm dưới hàng phím đáy).
+    @AppStorage(KeyGeometry.RowAdjust.raiseKey, store: groupDefaults) private var keyboardRaise = 0
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
     @AppStorage("numberRow", store: groupDefaults) private var numberRow = false
     @AppStorage("showSuggestions", store: groupDefaults) private var showSuggestions = true
@@ -48,12 +49,12 @@ struct ThemeSettingsView: View {
         Wallpaper.keyboardSize(screenSize: UIScreen.main.bounds.size,
                                pad: UIDevice.current.userInterfaceIdiom == .pad, landscape: false,
                                rowHeightAdjust: rowHeightAdjust, numberRow: numberRow,
-                               suggestions: showSuggestions, stockSize: stockKeySize)
+                               suggestions: showSuggestions, raise: keyboardRaise)
     }
 
-    /// Strip gợi ý dọc (preset stock: thấp hơn — KeyGeometry.StockSize.openStrip).
+    /// Strip gợi ý dọc (iPhone: theo bàn phím gốc — KeyGeometry.StockSize.openStrip).
     private var wallpaperStrip: CGFloat {
-        guard stockKeySize, !isPad else { return Wallpaper.suggestionStrip }
+        guard !isPad else { return Wallpaper.suggestionStrip }
         let w = min(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
         return KeyGeometry.StockSize.openStrip(width: w, landscape: false) ?? Wallpaper.suggestionStrip
     }
@@ -154,24 +155,36 @@ struct ThemeSettingsView: View {
             }
 
             Section {
-                if !isPad {
-                    settingToggle(L("Kích thước như bàn phím iPhone"),
-                                  L("Phím, khe và chiều cao bàn phím đúng như bàn phím gốc của iPhone (theo cỡ máy) — gõ theo thói quen không lệch phím. Bật thì chỉnh chiều cao hàng phím bên dưới tạm không áp dụng."),
-                                  isOn: $stockKeySize)
-                }
-                Stepper(value: $rowHeightAdjust, in: -10...10) {
+                Stepper(value: $rowHeightAdjust, in: KeyGeometry.RowAdjust.range) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L("Chiều cao hàng phím"))
                         Text(rowHeightAdjust == 0
-                             ? L("Chuẩn")
+                             ? (isPad ? L("Chuẩn") : L("Như bàn phím iPhone"))
                              : String(format: L("%+d pt mỗi hàng (%+d pt cả bàn phím)"),
                                       // phím số = 0.8× phím chữ ⇒ tổng ×4,8 khi bật hàng số
                                       rowHeightAdjust,
                                       Int((Double(rowHeightAdjust) * (numberRow ? 4 + Double(KeyGeometry.numberKeyRatio) : 4)).rounded())))
                             .font(.footnote).foregroundStyle(.secondary)
+                        if !isPad {
+                            Text(L("0 = phím, khe và vị trí như bàn phím gốc của iPhone (theo cỡ máy) — gõ theo thói quen không lệch phím."))
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                     }
                 }
-                .disabled(stockKeySize && !isPad)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("Nâng bàn phím"))
+                    Text(keyboardRaise == 0 ? L("Tắt") : String(format: L("Cao hơn %d pt"), keyboardRaise))
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Slider(value: Binding(get: { Double(keyboardRaise) },
+                                          set: { v in
+                                              let step = Double(KeyGeometry.RowAdjust.raiseStep)
+                                              keyboardRaise = KeyGeometry.RowAdjust.clampRaise(Int((v / step).rounded() * step))
+                                          }),
+                           in: 0...Double(KeyGeometry.RowAdjust.raiseMax),
+                           step: Double(KeyGeometry.RowAdjust.raiseStep))
+                    Text(L("Thêm khoảng trống dưới hàng phím cuối để bàn phím nằm cao hơn."))
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 settingToggle(L("Hiện logo Vᴛ"), L("Logo mờ ở góc phải phím cách."), isOn: $showSpaceLogo)
                 settingToggle(L("Bàn phím tách đôi"), L("Màn hình rộng (iPhone gập khi mở, iPhone xoay ngang, iPad): chia bàn phím làm hai nửa để gõ bằng hai ngón cái. Khi đang tách, gõ vuốt và chế độ một tay tạm tắt."), isOn: $splitKeyboard)
             } header: { Text(L("Bàn phím")) }
@@ -180,7 +193,7 @@ struct ThemeSettingsView: View {
                 Button(L("Khôi phục giao diện gốc"), role: .destructive) { confirmReset = true }
                     .disabled(settings.isDefault)
             } footer: {
-                Text(L("Về theme Hệ thống, tắt ảnh nền (ảnh vẫn giữ để bật lại), độ tối/mờ và độ trong suốt về mặc định. Chiều cao hàng và logo giữ nguyên."))
+                Text(L("Về theme Hệ thống, tắt ảnh nền (ảnh vẫn giữ để bật lại), độ tối/mờ và độ trong suốt về mặc định. Chiều cao hàng, nâng bàn phím và logo giữ nguyên."))
             }
 
             GuideLinkSection(page: .giaoDien)
@@ -202,6 +215,7 @@ struct ThemeSettingsView: View {
             WallpaperEditorView(
                 image: input.image, crop: input.crop, keyboardSize: portraitKeyboardSize,
                 stripHeight: showSuggestions ? wallpaperStrip : 0,
+                bottomPad: CGFloat(KeyGeometry.RowAdjust.clampRaise(keyboardRaise)),
                 palette: settings.palette(systemDark: scheme == .dark, wallpaperActive: true),
                 dim: settings.dim, blur: settings.blur,
                 onCancel: { editor = nil },
