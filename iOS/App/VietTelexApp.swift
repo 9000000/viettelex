@@ -97,6 +97,8 @@ struct RootView: View {
     /// phím và đè đúng dải khung "kính" phía trên bàn phím (host vẽ) → thanh gợi ý
     /// trông như bị cắt (user 25/09/2026).
     @State private var keyboardShown = false
+    /// viettelex://dich → trang Dịch trên máy (chọn ngôn ngữ, tải gói).
+    @State private var showTranslate = false
     @AppStorage("templatesEnabled", store: UserDefaults(suiteName: "group.com.viettelex"))
     private var templatesEnabled = true
     /// Ngôn ngữ giao diện ("vi" | "en", mặc định "vi" — KHÔNG theo máy). Đổi ở Tính Năng
@@ -177,6 +179,12 @@ struct RootView: View {
             if url.host == "maucau" {
                 templatesEnabled = true   // user chủ động mở từ keyboard
                 tab = .mauCau
+            }
+            if url.host == "dich" { showTranslate = true }   // chip "thiếu gói dịch" trên bàn phím
+        }
+        .sheet(isPresented: $showTranslate) {
+            if #available(iOS 26.0, *) {
+                NavigationStack { TranslateSettingsView() }
             }
         }
         #if DEBUG

@@ -77,6 +77,9 @@ targets:
     dependencies:
       - target: VietTelexKeyboard
         embed: true
+      # Dịch trên máy (iOS 26+; deployment 16) — weak để máy cũ vẫn chạy.
+      - sdk: Translation.framework
+        weak: true
       # SwipeEnglish (Luyện vuốt) dùng bảng từ tiếng Anh của engine.
       - package: TelexCore
   VietTelexKeyboard:
@@ -113,6 +116,9 @@ targets:
             RequestsOpenAccess: true
     dependencies:
       - package: TelexCore
+      # Dịch trên máy (iOS 26+; deployment 16) — weak để máy cũ vẫn chạy.
+      - sdk: Translation.framework
+        weak: true
   VietTelexKeyboardTests:
     type: bundle.unit-test
     platform: iOS
@@ -178,6 +184,7 @@ targets:
       - Keyboard/Shortcuts.swift
       - Keyboard/TextTools.swift
       - Keyboard/TextToolRunner.swift
+      - Keyboard/Translate.swift
       # bảng gõ tắt mẫu ở gốc repo — test khứ hồi parse/export cùng định dạng macOS
       - path: ../sample-shortcuts.yml
       # VietTelex Plus: gate dùng chung + logic mua (không StoreKit) + cấu hình StoreKit test.
