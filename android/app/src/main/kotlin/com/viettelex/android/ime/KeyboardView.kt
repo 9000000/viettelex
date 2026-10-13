@@ -213,7 +213,7 @@ class KeyboardView(
             templatesPane.setExtras(listOf(tr("‹ Mẫu câu") to TOOLS_BACK) + TextTool.entries.map { it.label to it.id }, gear = false)
         } else {
             templatesPane.setItems(templates)
-            templatesPane.setExtras(if (textToolsEnabled) listOf(tr("Aa Công cụ văn bản") to TOOLS_ENTRY) else emptyList(), gear = true)
+            templatesPane.setExtras(if (textToolsEnabled) listOf(tr("⚒️ Công cụ") to TOOLS_ENTRY) else emptyList(), gear = true)
         }
         if (plane == Plane.TEMPLATES) rebuild()
     }

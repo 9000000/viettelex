@@ -55,7 +55,7 @@ enum class PlusFeature(val viTitle: String, val viDetail: String) {
         SENTENCE_DIACRITICS -> tr("Cách dùng: gõ không dấu cả câu (hom nay troi dep), gõ dấu cách rồi chạm chip “Thêm dấu” ở đầu thanh gợi ý. Cần bật chip bên dưới.")
         ADVANCED_CLIPBOARD -> tr("Cách dùng: bật Lịch sử clipboard (Tính Năng → Riêng tư & clipboard), chạm nút clipboard trên thanh gợi ý. Copy STK/SĐT/OTP → chip “Dán …” hiện trên thanh gợi ý.")
         CLOUD_SYNC -> tr("Cách dùng: tự động qua Sao lưu của Android (Cài đặt hệ thống → Google → Sao lưu). Chuyển máy: Tính Năng → Sao lưu & đồng bộ → Xuất / nhập file.")
-        TEXT_TOOLS -> tr("Cách dùng: chạm ☰ trên thanh gợi ý → chip “Aa Công cụ văn bản”, hoặc hàng cuối bảng sửa văn bản (icon con trỏ trên thanh gợi ý).")
+        TEXT_TOOLS -> tr("Cách dùng: chạm ☰ trên thanh gợi ý → chip “⚒️ Công cụ”, hoặc hàng cuối bảng sửa văn bản (icon con trỏ trên thanh gợi ý).")
         THANKS_BADGE -> tr("Tự hiện sau khi mua.")
     }
 

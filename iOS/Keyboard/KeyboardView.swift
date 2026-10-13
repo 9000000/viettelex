@@ -1114,7 +1114,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     var onOpenTemplates: (() -> Void)?
 
     // MARK: công cụ văn bản (Plus) — lối vào: chip đầu lưới mẫu câu (burger): chạm
-    // "Aa Công cụ văn bản" → lưới đổi sang danh sách thao tác (áp lên phần đang chọn /
+    // "⚒️ Công cụ" → lưới đổi sang danh sách thao tác (áp lên phần đang chọn /
     // câu trước con trỏ), chạm thao tác → về bàn phím chữ.
 
     /// PlusGate.isUnlocked(.textTools) — controller đặt mỗi lần hiện bàn phím.
@@ -1904,7 +1904,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if !textToolsEnabled { textToolsMode = false }
         let extras: [(display: String, id: String)] = tools
             ? [(L("\u{2039} Mẫu câu"), Self.textToolsBackID)] + TextTool.allCases.map { ($0.label, $0.rawValue) }
-            : (textToolsEnabled ? [(L("Aa Công cụ văn bản"), Self.textToolsEntryID)] : [])
+            : (textToolsEnabled ? [(L("⚒️ Công cụ"), Self.textToolsEntryID)] : [])
         let chips = TemplateChipsView(items: tools ? [] : userTemplates, extras: extras,
                                       showGear: !tools, dark: dark,
                                       plainFill: plainFill,
