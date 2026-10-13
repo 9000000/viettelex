@@ -61,7 +61,7 @@ class BackupTests {
         val p = BackupCodec.decode(fixture("backup-ios-v1"))
         assertEquals("ios", p.platform)
         assertEquals(Instant.parse("2026-09-27T08:00:00Z"), p.createdAt)
-        assertEquals(38, p.settings!!.size)             // emojiSuggest/pasteButton chỉ iOS, bị bỏ qua
+        assertEquals(39, p.settings!!.size)             // emojiSuggest/pasteButton chỉ iOS, bị bỏ qua
         assertEquals(true, p.settings!![Keys.TEXT_TOOLS_ENABLED])
         assertEquals("wood", p.settings!![Keys.KEY_SOUND_STYLE])
         assertEquals(true, p.settings!![Keys.KEY_SOUND])
