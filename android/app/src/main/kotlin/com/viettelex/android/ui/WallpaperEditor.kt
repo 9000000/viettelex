@@ -77,7 +77,8 @@ data class KeyboardFrame(val w: Int, val h: Int, val keysTop: Int, val keysH: In
             val tablet = res.configuration.smallestScreenWidthDp >= 600
             val keyDp = KeyLayout.keyAreaDp(tablet, landscape = false,
                 rowHeightAdjust = prefs.getInt(Keys.ROW_HEIGHT_ADJUST, Prefs.D.rowHeightAdjust),
-                numberRow = prefs.getBoolean(Keys.NUMBER_ROW, Prefs.D.numberRow))
+                numberRow = prefs.getBoolean(Keys.NUMBER_ROW, Prefs.D.numberRow),
+                numberRowFull = prefs.getBoolean(Keys.NUMBER_ROW_FULL_HEIGHT, Prefs.D.numberRowFullHeight))
             val stripDp = if (prefs.getBoolean(Keys.SHOW_SUGGESTIONS, Prefs.D.showSuggestions)) KeyLayout.OPEN_STRIP else 0f
             val strip = Math.round(stripDp * dm.density)
             val keys = Math.round(keyDp * dm.density)

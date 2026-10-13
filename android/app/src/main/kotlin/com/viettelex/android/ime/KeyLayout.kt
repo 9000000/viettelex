@@ -95,6 +95,8 @@ data class LayoutConfig(
     val oneHand: OneHandSide = OneHandSide.OFF,
     /** Bảng sửa văn bản có hàng công cụ văn bản cuối (PlusGate TEXT_TOOLS). */
     val editTools: Boolean = false,
+    /** Hàng số cao bằng hàng chữ (Settings, mặc định tắt ⇒ phím số 0.8×) — [keyAreaPx] đã tính theo nó. */
+    val numberRowFull: Boolean = false,
 )
 
 object KeyLayout {
@@ -122,34 +124,43 @@ object KeyLayout {
      */
     const val NUMBER_KEY_RATIO = 0.8f
 
+    /** Tỉ lệ phím số / phím chữ: [NUMBER_KEY_RATIO], hoặc 1 khi bật "Hàng số cao bằng hàng chữ". */
+    fun numberKeyRatio(full: Boolean): Float = if (full) 1f else NUMBER_KEY_RATIO
+
     /** Cao hàng số (khe + phím) khi hàng chữ cao [unit] (khe + phím); [gap] cùng đơn vị (dp hoặc px). */
-    fun numberRowHeight(unit: Float, gap: Float): Float = gap + NUMBER_KEY_RATIO * maxOf(unit - gap, 0f)
+    fun numberRowHeight(unit: Float, gap: Float, full: Boolean = false): Float =
+        gap + numberKeyRatio(full) * maxOf(unit - gap, 0f)
 
     /**
      * Gboard: điện thoại 224 dọc (4 × 56) / 168 ngang; tablet 256 / 300; + rowHeightAdjust × 4 hàng.
      * Hàng số bật ⇒ + [numberRowHeight] (điện thoại dọc: 10 + 0.8 × 46 = 46.8 dp), cho MỌI plane
      * (chuyển 123/emoji không đổi chiều cao bàn phím; plane số/ký hiệu giữ 4 hàng, mỗi hàng cao hơn chút).
+     * [numberRowFull] ⇒ hàng số cao đúng 1 hàng chữ (56 dp dọc), bàn phím cao thêm tương ứng.
      */
-    fun keyAreaDp(tablet: Boolean, landscape: Boolean, rowHeightAdjust: Int, numberRow: Boolean = false): Float {
+    fun keyAreaDp(tablet: Boolean, landscape: Boolean, rowHeightAdjust: Int, numberRow: Boolean = false,
+                  numberRowFull: Boolean = false): Float {
         val base = if (tablet) (if (landscape) 300f else 256f) else (if (landscape) 168f else 224f)
         val four = base + rowHeightAdjust.coerceIn(-10, 10) * 4f
-        return if (numberRow) four + numberRowHeight(four / 4f, ROW_GAP) else four
+        return if (numberRow) four + numberRowHeight(four / 4f, ROW_GAP, numberRowFull) else four
     }
 
     /** Cả bàn phím cao thêm bao nhiêu dp khi chỉnh [rowHeightAdjust] dp mỗi hàng (chữ cài đặt). */
-    fun adjustTotalDp(rowHeightAdjust: Int, numberRow: Boolean): Int = Math.round(
-        keyAreaDp(false, false, rowHeightAdjust, numberRow) - keyAreaDp(false, false, 0, numberRow))
+    fun adjustTotalDp(rowHeightAdjust: Int, numberRow: Boolean, numberRowFull: Boolean = false): Int = Math.round(
+        keyAreaDp(false, false, rowHeightAdjust, numberRow, numberRowFull) - keyAreaDp(false, false, 0, numberRow, numberRowFull))
 
     /** Chiều cao hàng ô tìm emoji (plane EMOJI_SEARCH): 1/5 vùng phím. */
     fun searchHeaderPx(keyAreaPx: Float) = keyAreaPx / 5f
 
     /**
      * Chiều cao một hàng phím chuẩn (khe + phím) trong vùng phím [keyAreaPx] — ngược của
-     * [keyAreaDp]: K = 4u + gap + r(u − gap) ⇒ u = (K − (1 − r)·gap) / (4 + r), gap = [ROW_GAP] × [density].
+     * [keyAreaDp]: K = 4u + gap + r(u − gap) ⇒ u = (K − (1 − r)·gap) / (4 + r), gap = [ROW_GAP] × [density],
+     * r = [numberKeyRatio] (hàng số đủ cao: r = 1 ⇒ u = K / 5).
      */
-    fun rowUnit(keyAreaPx: Float, numberRow: Boolean, density: Float): Float =
-        if (numberRow) (keyAreaPx - (1f - NUMBER_KEY_RATIO) * ROW_GAP * density) / (4f + NUMBER_KEY_RATIO)
-        else keyAreaPx / 4f
+    fun rowUnit(keyAreaPx: Float, numberRow: Boolean, density: Float, numberRowFull: Boolean = false): Float {
+        if (!numberRow) return keyAreaPx / 4f
+        val r = numberKeyRatio(numberRowFull)
+        return (keyAreaPx - (1f - r) * ROW_GAP * density) / (4f + r)
+    }
 
     /**
      * Dải strip giữ theo CÔNG TẮC "Thanh gợi ý" toàn cục, không theo từng ô (port iOS
@@ -202,8 +213,8 @@ object KeyLayout {
             Plane.LETTERS -> {
                 // Hàng số (tuỳ chọn): phím CHAR như plane 123 (arm DOWN, chốt UP, balloon),
                 // phím số 0.8× phím chữ ([numberRowHeight]); 4 hàng chữ dời xuống y0. Không hàng số ⇒ y0 = 0, như cũ.
-                val u = rowUnit(c.keyAreaPx, c.numberRow, c.density)
-                val y0 = if (c.numberRow) numberRowHeight(u, ROW_GAP * c.density) else 0f
+                val u = rowUnit(c.keyAreaPx, c.numberRow, c.density, c.numberRowFull)
+                val y0 = if (c.numberRow) numberRowHeight(u, ROW_GAP * c.density, c.numberRowFull) else 0f
                 if (c.numberRow) equalRow(out, NUM1, KeyKind.CHAR, c, 0, y0, 0f)
                 equalRow(out, ROW1.map { it.toString() }, KeyKind.LETTER, c, 0, u, 0f, y0)
                 equalRow(out, ROW2.map { it.toString() }, KeyKind.LETTER, c, 1, u, 0.5f, y0)
@@ -221,7 +232,7 @@ object KeyLayout {
             }
             Plane.TEMPLATES -> {
                 // Chips giãn phần trên; hàng đáy cao ĐÚNG 1 hàng phím chuẩn.
-                val u = rowUnit(c.keyAreaPx, c.numberRow, c.density)
+                val u = rowUnit(c.keyAreaPx, c.numberRow, c.density, c.numberRowFull)
                 bottomRow(out, c, c.keyAreaPx - u, u, planeKey = "ABC", clearInsteadOfEmoji = true)
             }
             Plane.EMOJI -> Unit   // EmojiPane tự vẽ

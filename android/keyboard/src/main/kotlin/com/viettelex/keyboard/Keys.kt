@@ -93,6 +93,8 @@ object Keys {
     const val ROW_HEIGHT_ADJUST = "rowHeightAdjust"
     /** Bool — hàng phím số trên plane chữ (tên như iOS App Group). */
     const val NUMBER_ROW = "numberRow"
+    /** Bool — hàng số cao bằng hàng chữ (chỉ khi [NUMBER_ROW] bật), mặc định TẮT (phím số 0.8×). */
+    const val NUMBER_ROW_FULL_HEIGHT = "numberRowFullHeight"
     /** Int 0…48 (dp) — nâng bàn phím: đệm nền dưới hàng phím đáy, mặc định 0 (#112). */
     const val KEYBOARD_RAISE = "keyboardRaise"
     /** Bool — giữ q…p ra 1…0 (chỉ khi hàng số tắt), mặc định BẬT — [KeyAlternates]. */

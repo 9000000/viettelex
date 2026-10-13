@@ -464,8 +464,10 @@ class KeyboardView(
 
     fun configure(returnLabel: String, kind: InputKind, needsGlobe: Boolean, showLogo: Boolean,
                   templatesEnabled: Boolean, templates: List<TemplateItem>, keyAreaPx: Float,
-                  numberSigned: Boolean = false, numberDecimal: Boolean = false, numberRow: Boolean = false) {
+                  numberSigned: Boolean = false, numberDecimal: Boolean = false, numberRow: Boolean = false,
+                  numberRowFull: Boolean = false) {
         this.numberRow = numberRow
+        this.numberRowFull = numberRowFull
         this.numberSigned = numberSigned
         this.numberDecimal = numberDecimal
         this.returnLabel = returnLabel
@@ -546,9 +548,10 @@ class KeyboardView(
     private var numberSigned = false
     private var numberDecimal = false
     private var numberRow = false
+    private var numberRowFull = false
     /** Chế độ một tay (IME chỉ đặt khác OFF trên điện thoại). */
     var oneHand = OneHandSide.OFF; private set
-    private fun signature() = "$returnLabel|$inputKind|$needsGlobe|$width|$keyAreaPx|$numberSigned|$numberDecimal|$numberRow|$oneHand|$textToolsEnabled"
+    private fun signature() = "$returnLabel|$inputKind|$needsGlobe|$width|$keyAreaPx|$numberSigned|$numberDecimal|$numberRow|$numberRowFull|$oneHand|$textToolsEnabled"
 
     private fun rebuild() {
         if (width == 0) return
@@ -560,7 +563,7 @@ class KeyboardView(
         keys = planeCache.getOrPut(plane) {
             KeyLayout.build(LayoutConfig(plane, width.toFloat(), keyAreaPx, d, inputKind, needsGlobe,
                 theme.tablet, returnLabel, numberSigned, numberDecimal, numberRow, oneHand,
-                editTools = textToolsEnabled))
+                editTools = textToolsEnabled, numberRowFull = numberRowFull))
         }
         railSpan = if (OneHand.appliesTo(plane)) OneHand.rail(width.toFloat(), oneHand) else null
         spaceKey = keys.firstOrNull { it.kind == KeyKind.SPACE }
@@ -568,7 +571,7 @@ class KeyboardView(
             val sz = theme.dp(22f)
             logoRect.set(it.right - theme.dp(10f) - sz, it.centerY - sz / 2, it.right - theme.dp(10f), it.centerY + sz / 2)
         }
-        val paneBottom = if (plane == Plane.TEMPLATES) keyAreaPx - KeyLayout.rowUnit(keyAreaPx, numberRow, d) else keyAreaPx
+        val paneBottom = if (plane == Plane.TEMPLATES) keyAreaPx - KeyLayout.rowUnit(keyAreaPx, numberRow, d, numberRowFull) else keyAreaPx
         templatesPane.layout(width.toFloat(), paneBottom)
         emojiPane.layout(width.toFloat(), keyAreaPx)
         searchBar.layout(width.toFloat(), KeyLayout.searchHeaderPx(keyAreaPx))

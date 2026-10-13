@@ -85,6 +85,8 @@ object L10nTable {
         put("Bảng gõ tắt", "Shortcut table")
         put("Mẫu câu", "Snippets")
         put("Hàng phím số", "Number row")
+        put("Hàng số cao bằng hàng chữ", "Number row as tall as letter rows")
+        put("Phím số to bằng phím chữ (bàn phím cao thêm đúng một hàng).", "Digit keys as big as letter keys (keyboard gets exactly one row taller).")
         put("Nâng bàn phím", "Raise keyboard")
         put("Đổi bàn phím", "Switch keyboard")
         put("Gõ bằng giọng nói", "Voice input")
