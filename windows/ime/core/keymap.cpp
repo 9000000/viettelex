@@ -56,7 +56,12 @@ KeyInput classifyKey(uint32_t v, const Modifiers& m) {
         default: break;
     }
     char32_t c = usQwertyChar(v, m.shift, m.capsLock);
-    if (c) { k.kind = KeyKind::Char; k.ch = c; return k; }
+    if (c) {
+        k.kind = KeyKind::Char;
+        k.ch = c;
+        k.numpad = v >= vk::Numpad0 && v <= vk::Numpad9;
+        return k;
+    }
     k.kind = KeyKind::Other;
     return k;
 }

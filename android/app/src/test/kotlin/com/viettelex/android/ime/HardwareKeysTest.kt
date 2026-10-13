@@ -82,6 +82,8 @@ class HardwareKeysTest {
         assertEquals(HwKey.Text("!"), HardwareKeys.classify(KeyEvent.KEYCODE_1, SHIFT, '!'.code))
         assertEquals(HwKey.Text("."), HardwareKeys.classify(KeyEvent.KEYCODE_PERIOD, 0, '.'.code))
         assertEquals(HwKey.Text("?"), HardwareKeys.classify(KeyEvent.KEYCODE_SLASH, SHIFT, '?'.code))
+        assertEquals(HwKey.Text("4", numpad = true), HardwareKeys.classify(KeyEvent.KEYCODE_NUMPAD_4, 0, '4'.code))
+        assertEquals(Key.Text("4", numpad = true), HardwareKeys.sessionKey(HwKey.Text("4", numpad = true), true))
         // Numpad khi tắt NumLock (unicode 0) ⇒ điều hướng, để app.
         assertEquals(HwKey.Pass, HardwareKeys.classify(KeyEvent.KEYCODE_NUMPAD_4, 0, 0))
     }
@@ -199,5 +201,17 @@ class HardwareKeysTest {
         t.type("vieetj1")
         assertEquals("việt1", t.ed.text)
         assertFalse(t.s.bridge.isComposing)
+    }
+
+    // #124: số bàn phím số (numpad) không bao giờ bỏ dấu VNI (như UniKey) — chốt từ rồi chèn
+    // số; hàng số trên vẫn bỏ dấu.
+    @Test fun vniNumpadDigitsAreBoundaries() {
+        val r = Rig(settings = KeyboardSettings(vniMode = true))
+        r.type("a")
+        assertTrue(r.key(KeyEvent.KEYCODE_NUMPAD_1, 0, '1'.code))
+        assertFalse(r.s.bridge.isComposing)
+        r.type("a1 ")
+        assertTrue(r.key(KeyEvent.KEYCODE_NUMPAD_0, 0, '0'.code))
+        assertEquals("a1á 0", r.ed.text)
     }
 }

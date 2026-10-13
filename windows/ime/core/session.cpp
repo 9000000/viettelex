@@ -182,7 +182,7 @@ bool TypingSession::wantsKey(const KeyInput& k) const {
     if (!engine_) return false;
     switch (k.kind) {
         case KeyKind::Char:
-            return isWordKey(k.ch) || wordActive() || reopenArmed_;
+            return isWordKey(k) || wordActive() || reopenArmed_;
         case KeyKind::Backspace:
             return wordActive() ||
                    (opt_.reEditWord && reopenArmed_ && vtx_can_reopen_last_commit(engine_));
@@ -203,7 +203,7 @@ bool TypingSession::handleKey(const KeyInput& k, TextSink& sink) {
     if (!engine_) return false;
     switch (k.kind) {
         case KeyKind::Char:
-            if (isWordKey(k.ch)) return handleWordKey(k.ch, sink);
+            if (isWordKey(k)) return handleWordKey(k.ch, sink);
             return commitWord(sink, KeyKind::Char);
         case KeyKind::Backspace:
             return handleBackspace(sink);

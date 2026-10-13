@@ -8,8 +8,10 @@ sealed class Key {
     /**
      * Số / ký hiệu / dấu câu (boundary + ngắt câu). [replacesLetter]: ký tự phụ của cú giữ
      * phím chữ ([KeyAlternates]) — huỷ đúng phím chữ vừa chèn lúc chạm trước khi chèn.
+     * [numpad]: số từ bàn phím số (numpad) của phím cứng — KHÔNG BAO GIỜ mang dấu VNI, luôn
+     * là ranh giới như UniKey (#124).
      */
-    data class Text(val text: String, val replacesLetter: Boolean = false) : Key()
+    data class Text(val text: String, val replacesLetter: Boolean = false, val numpad: Boolean = false) : Key()
     object Space : Key()
     /** Space thứ 2 trong < 0.35 s (IME đo nhịp). */
     object DoubleSpacePeriod : Key()
@@ -672,7 +674,7 @@ class KeyboardSession(
                 // VNI: số trong lúc soạn từ (hàng số / plane 123 / phím cứng) mang dấu — phím
                 // của từ. Sau từ tiếng Anh vuốt nguyên văn thì số chỉ là số.
                 val d = key.text.singleOrNull()
-                if (literal == null && d != null && bridge.vniDigit(d, proxy)) {
+                if (literal == null && d != null && !key.numpad && bridge.vniDigit(d, proxy)) {
                     clearUndo()
                     if (typedWait != null && bridge.isComposing) typedPending = typedWait
                 } else {

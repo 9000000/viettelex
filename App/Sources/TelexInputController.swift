@@ -863,7 +863,8 @@ final class TelexInputController: IMKInputController {
         // app because every digit was consumed here — engine-level VNI tests all passed).
         guard let chars = effectiveCharacters(event), let ch = chars.first, let ascii = ch.asciiValue,
               isWordKey(ascii, vniMode: engine.vniMode,
-                        bracketVowels: engine.bracketVowels) else {
+                        bracketVowels: engine.bracketVowels,
+                        keypad: isKeypadDigitKeyCode(Int(event.keyCode))) else {
             // space / punctuation / any non-letter ends the word. Brackets signal a
             // code-ish context (arr[i], {json}, (x)); skip auto-restore there so a
             // token isn't "corrected" (auto-restore is off around [ ] { }).
@@ -2867,10 +2868,19 @@ func isAsciiLetter(_ c: UInt8) -> Bool {
 /// In VNI the digits carry the diacritics ("a1"→á), so they are word keys; in Telex a
 /// digit ends the word. Extracted so AppTests can pin it — issue #28 (2026-07-27) was
 /// exactly this predicate being letters-only while the engine happily accepted digits.
+/// Numpad digits are NEVER VNI marks (like UniKey): `keypad` = the key came from the
+/// numeric keypad → it ends the word like punctuation and the digit reaches the app (#124).
 @inline(__always)
-func isWordKey(_ c: UInt8, vniMode: Bool, bracketVowels: Bool = false) -> Bool {
-    isAsciiLetter(c) || (vniMode && isAsciiDigit(c))
+func isWordKey(_ c: UInt8, vniMode: Bool, bracketVowels: Bool = false, keypad: Bool = false) -> Bool {
+    isAsciiLetter(c) || (vniMode && !keypad && isAsciiDigit(c))
         || (bracketVowels && isBracketVowelKey(c))
+}
+
+/// kVK_ANSI_Keypad0…9 (82…89, 91, 92 — 90 is kVK_F20). Physical keycode, so it holds
+/// whatever layout is active.
+@inline(__always)
+func isKeypadDigitKeyCode(_ k: Int) -> Bool {
+    (k >= kVK_ANSI_Keypad0 && k <= kVK_ANSI_Keypad7) || k == kVK_ANSI_Keypad8 || k == kVK_ANSI_Keypad9
 }
 
 /// `[ ] { }` — the keys the bracket-vowel option turns into ơ/ư. They must be WORD

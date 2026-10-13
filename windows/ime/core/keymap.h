@@ -34,6 +34,7 @@ enum class KeyKind : uint8_t {
 struct KeyInput {
     KeyKind kind = KeyKind::Other;
     char32_t ch = 0;   // Char only
+    bool numpad = false;  // Char from the numeric keypad: never a VNI mark key (#124)
 };
 
 // VK constants used by the classifier (values from WinUser.h).
