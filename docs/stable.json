@@ -74,8 +74,8 @@
     "notes": "VNI: phím số bên phải (numpad) luôn ra số, không bỏ dấu; \"www\" giữ đủ chữ"
   },
   "android": {
-    "version": "1.5.4",
-    "apk": "https://github.com/ptrinh/viettelex/releases/download/android-v1.5.4/VietTelex-android-1.5.4.apk",
+    "version": "1.5.5",
+    "apk": "https://github.com/ptrinh/viettelex/releases/download/android-v1.5.5/VietTelex-android-1.5.5.apk",
     "play": "https://play.google.com/store/apps/details?id=com.viettelex.android"
   }
 }
