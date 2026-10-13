@@ -134,6 +134,8 @@ enum L10n {
         "Số mục hiện ở đây sau khi mở bàn phím VietTelex (cần Toàn quyền truy cập để báo về app).": "The count shows here after you open the VietTelex keyboard (Full Access is needed to report it to the app).",
         "Mẫu câu": "Snippets",
         "Hàng phím số": "Number row",
+        "Hàng số cao bằng hàng chữ": "Number row as tall as letter rows",
+        "Phím số to bằng phím chữ (mặc định thấp hơn một chút). Bàn phím cao thêm đúng một hàng.": "Number keys as tall as letter keys (slightly shorter by default). The keyboard grows by exactly one row.",
         "Giữ phím ra ký tự đặc biệt": "Hold keys for symbols",
         "Vuốt phím cách đổi Tiếng Việt / Tiếng Anh": "Swipe space to switch Vietnamese / English",
         "Phóng to chữ khi bấm": "Key preview on press",

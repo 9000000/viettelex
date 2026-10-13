@@ -285,6 +285,7 @@
 		E29FDF78A65EA7E6F0F8EF8F /* SensitiveWords.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9F4445707DBA22FE5219CD /* SensitiveWords.swift */; };
 		E318F2FD0A91CFD018E4BC65 /* Wallpaper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A12BC49EB45298684CF97D /* Wallpaper.swift */; };
 		E6D596FF4699916EC99C811C /* KeyGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 491E9FDC24E9CC711FC62BD8 /* KeyGeometryTests.swift */; };
+		9158E85419EC0E211D76DEC8 /* NumberRowFullHeightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57EA9452496184AC2ED6BA5 /* NumberRowFullHeightTests.swift */; };
 		E74F85FA5D7275FFA0E8F759 /* NumberRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE8993F83A60C653C26799EC /* NumberRowTests.swift */; };
 		E8DB9BE35A9F0D3CE0E869E6 /* FutoSwipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76444B4521814651DA2C026A /* FutoSwipe.swift */; };
 		E971817D1FA24FB167538336 /* SwipeRevise.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93B754A244411A21FFA6EA0 /* SwipeRevise.swift */; };
@@ -535,6 +536,7 @@
 		E8E2E27B46842AE6F5EB0A74 /* SyncMerge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncMerge.swift; sourceTree = "<group>"; };
 		EBB757354715E62384994C56 /* RamFixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RamFixTests.swift; sourceTree = "<group>"; };
 		EE4C2C271F18A006B9967589 /* SwipePractice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipePractice.swift; sourceTree = "<group>"; };
+		E57EA9452496184AC2ED6BA5 /* NumberRowFullHeightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberRowFullHeightTests.swift; sourceTree = "<group>"; };
 		EE8993F83A60C653C26799EC /* NumberRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberRowTests.swift; sourceTree = "<group>"; };
 		EF30CED4269435719F2F5392 /* PasteOfferOnceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteOfferOnceTests.swift; sourceTree = "<group>"; };
 		F0396F7F4C967F32F6246FFB /* NumericKeypadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumericKeypadTests.swift; sourceTree = "<group>"; };
@@ -729,6 +731,7 @@
 				3B258DEED17434ED054B29D7 /* LetterUndoTests.swift */,
 				46501A28188D32863452971E /* MathResultsTests.swift */,
 				A7FCB71A2846557F9B5442F7 /* NumberChipsTests.swift */,
+				E57EA9452496184AC2ED6BA5 /* NumberRowFullHeightTests.swift */,
 				EE8993F83A60C653C26799EC /* NumberRowTests.swift */,
 				F0396F7F4C967F32F6246FFB /* NumericKeypadTests.swift */,
 				769E76C687A1221F2389FD54 /* OneHandTests.swift */,
@@ -1290,6 +1293,7 @@
 				06A12CC4391529A62752829A /* MathResultsTests.swift in Sources */,
 				B7ABF18E21AA806DFDB67928 /* NumberChips.swift in Sources */,
 				45143ADE3A7BEAE0B4841933 /* NumberChipsTests.swift in Sources */,
+				9158E85419EC0E211D76DEC8 /* NumberRowFullHeightTests.swift in Sources */,
 				E74F85FA5D7275FFA0E8F759 /* NumberRowTests.swift in Sources */,
 				9490C8A48BDA087FBFC2CF96 /* NumericKeypad.swift in Sources */,
 				C6465DB2FD6BA0B131DB30D7 /* NumericKeypadTests.swift in Sources */,

@@ -117,7 +117,8 @@ enum Wallpaper {
     /// Bề ngang: dọc = cạnh ngắn màn hình, ngang = cạnh dài. iPhone: bước hàng/khe/strip theo
     /// số đo bàn phím gốc + chỉnh tay (KeyGeometry.rowSpec).
     static func keyboardSize(screenSize: CGSize, pad: Bool, landscape: Bool, rowHeightAdjust: Int,
-                             numberRow: Bool, suggestions: Bool, raise: Int = 0) -> CGSize {
+                             numberRow: Bool, suggestions: Bool, raise: Int = 0,
+                             numberRowFullHeight: Bool = false) -> CGSize {
         let width = landscape ? max(screenSize.width, screenSize.height) : min(screenSize.width, screenSize.height)
         let base: CGFloat = pad ? (landscape ? 300 : 240) : (landscape ? 162 : KeyGeometry.phonePortraitBase)
         let spec = KeyGeometry.rowSpec(pad: pad, landscape: landscape, unfolded: false, width: width,
@@ -125,7 +126,7 @@ enum Wallpaper {
         let strip = spec.stock
             ? (KeyGeometry.StockSize.openStrip(width: width, landscape: landscape) ?? suggestionStrip)
             : suggestionStrip
-        return CGSize(width: width, height: spec.keyArea(numberRow: numberRow) + (suggestions ? strip : 0)
+        return CGSize(width: width, height: spec.keyArea(numberRow: numberRow, fullHeight: numberRowFullHeight) + (suggestions ? strip : 0)
                           + CGFloat(KeyGeometry.RowAdjust.clampRaise(raise)))
     }
 

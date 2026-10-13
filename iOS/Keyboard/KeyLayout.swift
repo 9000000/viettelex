@@ -31,21 +31,30 @@ enum KeyLayout {
     /// tester Plus 1.2.8: "phím số nhỏ quá so với phím chữ, nhìn không cân đối".
     static let numberKeyRatio: CGFloat = KeyGeometry.numberKeyRatio
     /// Cao hàng số (khe + phím) khi hàng chữ cao `unit` (khe + phím).
-    static func numberRowHeight(unit: CGFloat) -> CGFloat { KeyGeometry.numberRowHeight(unit: unit) }
+    static func numberRowHeight(unit: CGFloat, fullHeight: Bool = false) -> CGFloat {
+        KeyGeometry.numberRowHeight(unit: unit, fullHeight: fullHeight)
+    }
     /// Hàng số = `numberRowMultiplier` × hàng chữ + `numberRowConstant` (constraint Auto Layout).
+    /// Tuỳ chọn cao bằng hàng chữ: multiplier 1, constant 0.
     static let numberRowMultiplier: CGFloat = numberKeyRatio
-    static var numberRowConstant: CGFloat { (1 - numberKeyRatio) * KeyGeometry.rowGap }
+    static var numberRowConstant: CGFloat { numberRowConstant(fullHeight: false) }
+    static func numberRowMultiplier(fullHeight: Bool) -> CGFloat { KeyGeometry.numberKeyRatio(fullHeight: fullHeight) }
+    static func numberRowConstant(fullHeight: Bool) -> CGFloat {
+        (1 - numberRowMultiplier(fullHeight: fullHeight)) * KeyGeometry.rowGap
+    }
 
     /// Tổng chiều cao vùng phím. `base` = 4 hàng chuẩn, `adjust` = ±pt MỖI hàng
     /// (Settings). Hàng số bật → thêm một hàng số (numberRowHeight), cho MỌI plane (bàn phím
     /// không đổi chiều cao khi chuyển 123/emoji — host relayout dở dang, xem updateSuggestionChrome).
-    static func keyAreaHeight(base: CGFloat, adjust: CGFloat, numberRow: Bool) -> CGFloat {
+    static func keyAreaHeight(base: CGFloat, adjust: CGFloat, numberRow: Bool,
+                              fullHeight: Bool = false) -> CGFloat {
         let unit = (base + adjust * 4) / 4
-        return unit * 4 + (numberRow ? numberRowHeight(unit: unit) : 0)
+        return unit * 4 + (numberRow ? numberRowHeight(unit: unit, fullHeight: fullHeight) : 0)
     }
     /// Ngược của keyAreaHeight: cao một hàng chữ chuẩn từ tổng vùng phím.
-    static func rowUnit(keyArea: CGFloat, numberRow: Bool) -> CGFloat {
-        numberRow ? (keyArea - numberRowConstant) / (4 + numberRowMultiplier) : keyArea / 4
+    static func rowUnit(keyArea: CGFloat, numberRow: Bool, fullHeight: Bool = false) -> CGFloat {
+        numberRow ? (keyArea - numberRowConstant(fullHeight: fullHeight))
+            / (4 + numberRowMultiplier(fullHeight: fullHeight)) : keyArea / 4
     }
 
     // MARK: Chiều cao bàn phím (bug tester 1.2.x: phím co lại ở Notes/Facebook, lúc

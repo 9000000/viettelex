@@ -32,6 +32,7 @@ struct ThemeSettingsView: View {
     @AppStorage(KeyGeometry.RowAdjust.raiseKey, store: groupDefaults) private var keyboardRaise = 0
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
     @AppStorage("numberRow", store: groupDefaults) private var numberRow = false
+    @AppStorage(KeyGeometry.numberRowFullHeightKey, store: groupDefaults) private var numberRowFullHeight = false
     @AppStorage("showSuggestions", store: groupDefaults) private var showSuggestions = true
     /// Bàn phím tách đôi khi màn hình rộng (SplitLayout.settingKey) — mặc định TẮT.
     @AppStorage("splitKeyboard", store: groupDefaults) private var splitKeyboard = false
@@ -49,7 +50,8 @@ struct ThemeSettingsView: View {
         Wallpaper.keyboardSize(screenSize: UIScreen.main.bounds.size,
                                pad: UIDevice.current.userInterfaceIdiom == .pad, landscape: false,
                                rowHeightAdjust: rowHeightAdjust, numberRow: numberRow,
-                               suggestions: showSuggestions, raise: keyboardRaise)
+                               suggestions: showSuggestions, raise: keyboardRaise,
+                               numberRowFullHeight: numberRowFullHeight)
     }
 
     /// Strip gợi ý dọc (iPhone: theo bàn phím gốc — KeyGeometry.StockSize.openStrip).
@@ -161,9 +163,9 @@ struct ThemeSettingsView: View {
                         Text(rowHeightAdjust == 0
                              ? (isPad ? L("Chuẩn") : L("Như bàn phím iPhone"))
                              : String(format: L("%+d pt mỗi hàng (%+d pt cả bàn phím)"),
-                                      // phím số = 0.8× phím chữ ⇒ tổng ×4,8 khi bật hàng số
+                                      // phím số = 0.8× phím chữ ⇒ tổng ×4,8 khi bật hàng số (×5 khi cao bằng hàng chữ)
                                       rowHeightAdjust,
-                                      Int((Double(rowHeightAdjust) * (numberRow ? 4 + Double(KeyGeometry.numberKeyRatio) : 4)).rounded())))
+                                      Int((Double(rowHeightAdjust) * (numberRow ? 4 + Double(KeyGeometry.numberKeyRatio(fullHeight: numberRowFullHeight)) : 4)).rounded())))
                             .font(.footnote).foregroundStyle(.secondary)
                         if !isPad {
                             Text(L("0 = phím, khe và vị trí như bàn phím gốc của iPhone (theo cỡ máy) — gõ theo thói quen không lệch phím."))
