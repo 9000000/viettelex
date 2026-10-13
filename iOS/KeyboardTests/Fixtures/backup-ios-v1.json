@@ -69,6 +69,7 @@
     "systemBackdropSky" : false,
     "teencode" : false,
     "templatesEnabled" : true,
+    "textToolsEnabled" : true,
     "uiLanguage" : "en"
   },
   "shortcuts" : {

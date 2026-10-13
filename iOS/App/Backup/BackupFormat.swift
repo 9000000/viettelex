@@ -61,6 +61,7 @@ enum BackupSettings {
         Spec(key: "addTonesChip", kind: .bool(false)),
         Spec(key: "numberChips", kind: .bool(true)),
         Spec(key: "mathResults", kind: .bool(true)),
+        Spec(key: "textToolsEnabled", kind: .bool(true)),   // công tắc Công cụ văn bản (Plus)
         Spec(key: "suggestInNoSuggestFields", kind: .bool(true)),
         Spec(key: "emojiSuggest", kind: .bool(true)),    // chỉ iOS dùng
         Spec(key: "pasteButton", kind: .bool(true)),     // chỉ iOS dùng

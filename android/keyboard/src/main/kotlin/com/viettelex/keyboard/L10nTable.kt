@@ -434,6 +434,7 @@ object L10nTable {
         put("Đồng bộ", "Sync")
         put("Cài đặt, gõ tắt và từ đã học theo bạn sang máy khác.", "Your settings, shortcuts and learned words follow you to other devices.")
         put("Công cụ văn bản", "Text tools")
+        put("Chip ⚒️ Công cụ trong lưới mẫu câu: đổi HOA/thường, bỏ dấu, dịch…", "⚒️ Tools chip in the templates grid: UPPER/lower case, remove tones, translate…")
         put("Đổi HOA/thường, hoa đầu từ/đầu câu, xoá dấu tiếng Việt.", "Switch UPPER/lower, Title Case/Sentence case, strip Vietnamese accents.")
         put("Huy hiệu cảm ơn", "Thank-you badge")
         put("Dấu ★ nhỏ trong app — lời cảm ơn vì đã ủng hộ.", "A small ★ in the app — a thank-you for your support.")

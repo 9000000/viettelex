@@ -87,6 +87,10 @@ struct KeyboardSettings {
     /// "Hiện kết quả phép tính": gõ "12*3=" → chip "36" ở slot đầu — mặc định BẬT; chỉ đọc
     /// context ngay sau phím "=", tắt ⇒ không làm gì.
     var mathResults = true
+    /// Công cụ văn bản (Plus — chip "Aa Công cụ văn bản" đầu lưới mẫu câu) — mặc định BẬT;
+    /// người dùng tắt được ở màn Plus / Gõ tắt & mẫu câu. Tắt ⇒ không chip, không làm gì.
+    /// Giống Android Keys.TEXT_TOOLS_ENABLED.
+    var textToolsEnabled = true
     /// "Gợi ý cả khi ứng dụng tắt gợi ý" (#113, như Gboard/Laban) — mặc định BẬT: ô
     /// autocorrection = .no không nhạy cảm vẫn gợi ý chữ (không tự sửa, không học). Tắt ⇒
     /// như cũ: chỉ thanh công cụ (StripMode.tools). Song sinh Android `suggestInNoSuggestFields`.
@@ -144,7 +148,8 @@ struct KeyboardSettings {
         }
         let flags: [(String, WritableKeyPath<KeyboardSettings, Bool>)] = [
             ("addTonesChip", \.addTonesChip), ("numberChips", \.numberChips),
-            ("mathResults", \.mathResults), ("suggestInNoSuggestFields", \.suggestInNoSuggestFields),
+            ("mathResults", \.mathResults), ("textToolsEnabled", \.textToolsEnabled),
+            ("suggestInNoSuggestFields", \.suggestInNoSuggestFields),
             ("emojiSuggest", \.emojiSuggest), ("pasteButton", \.pasteButton),
             ("autoCapitalize", \.autoCapitalize), ("spaceSwipeLanguage", \.spaceSwipeLanguage),
             ("longPressNumbers", \.longPressNumbers), ("longPressSymbols", \.longPressSymbols),
@@ -152,6 +157,11 @@ struct KeyboardSettings {
         for (k, kp) in flags where d.object(forKey: k) != nil { s[keyPath: kp] = d.bool(forKey: k) }
         s.learnWords = s.showSuggestions   // bật gợi ý = bật học (quyết định 2026-07-24)
         return s
+    }
+
+    /// Công cụ văn bản hiện thật: đã mở khoá Plus VÀ công tắc người dùng bật.
+    func textToolsActive(unlocked: Bool = PlusGate.isUnlocked(.textTools)) -> Bool {
+        unlocked && textToolsEnabled
     }
 }
 

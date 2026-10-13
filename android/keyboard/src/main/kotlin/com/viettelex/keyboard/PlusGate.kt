@@ -59,8 +59,23 @@ enum class PlusFeature(val viTitle: String, val viDetail: String) {
         THANKS_BADGE -> tr("Tự hiện sau khi mua.")
     }
 
-    /** Công tắc bật tính năng (mặc định TẮT) — màn Plus đặt công tắc ngay dưới dòng cách dùng. */
-    val settingKey: String? get() = if (this == SENTENCE_DIACRITICS) Keys.ADD_TONES_CHIP else null
+    /**
+     * Công tắc bật/tắt tính năng — màn Plus đặt công tắc ngay dưới dòng cách dùng (khi đã mở
+     * khoá). Chip "Thêm dấu" mặc định TẮT; Công cụ văn bản mặc định BẬT ([settingDefault]).
+     */
+    val settingKey: String? get() = when (this) {
+        SENTENCE_DIACRITICS -> Keys.ADD_TONES_CHIP
+        TEXT_TOOLS -> Keys.TEXT_TOOLS_ENABLED
+        else -> null
+    }
+
+    /** Giá trị khi chưa từng đặt — khớp mặc định [KeyboardSettings]. */
+    val settingDefault: Boolean get() = this == TEXT_TOOLS
+
+    /** Nhãn + một dòng mô tả của công tắc trên màn Plus. */
+    val settingTitle: String get() = if (this == TEXT_TOOLS) tr("Công cụ văn bản") else tr("Bật chip “Thêm dấu”")
+    val settingCaption: String? get() =
+        if (this == TEXT_TOOLS) tr("Chip ⚒️ Công cụ trong lưới mẫu câu: đổi HOA/thường, bỏ dấu, dịch…") else null
 }
 
 /**

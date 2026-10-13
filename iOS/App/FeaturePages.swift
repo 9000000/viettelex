@@ -142,6 +142,9 @@ struct FeatureSearchEntry: Identifiable {
         if PlusGate.isUnlocked(.sentenceDiacritics) {
             e.append(.init(viTitle: LK("Chip “Thêm dấu”"), keywords: "thêm dấu câu không dấu plus", page: .goiY))
         }
+        if PlusGate.isUnlocked(.textTools) {
+            e.append(.init(viTitle: LK("Công cụ văn bản"), keywords: "text tools hoa thường bỏ dấu dịch translate plus", page: .goTat))
+        }
         if ICloudSync.isUnlocked() {
             e.append(.init(viTitle: LK("Đồng bộ iCloud"), keywords: "sync icloud đồng bộ", page: .saoLuu))
         }
@@ -484,12 +487,16 @@ struct GoVuotPage: View {
 
 struct GoTatPage: View {
     @AppStorage("templatesEnabled", store: featureDefaults) private var templatesEnabled = true
+    @AppStorage(PlusFeature.textToolsKey, store: featureDefaults) private var textToolsEnabled = true
 
     var body: some View {
         FeaturePageList(page: .goTat) {
             ShortcutsSection()
             Section {
                 settingToggle(L("Mẫu câu"), L("Nút ☰ trên bàn phím chèn câu soạn sẵn — quản lý ở tab Mẫu Câu. Tắt: ẩn nút ☰ và tab Mẫu Câu."), isOn: $templatesEnabled)
+                if templatesEnabled, PlusGate.isUnlocked(.textTools) {
+                    settingToggle(L("Công cụ văn bản"), L("Chip ⚒️ Công cụ trong lưới mẫu câu: đổi HOA/thường, bỏ dấu, dịch…"), isOn: $textToolsEnabled)
+                }
             } header: { Text(L("Mẫu câu")) }
         }
     }
