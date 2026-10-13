@@ -1,3 +1,15 @@
+viettelex (1.0.13) UNRELEASED; urgency=medium
+
+  * Kiểu gõ VNI: phím số bên phải (numpad) luôn ra số, không bỏ dấu; hàng số
+    phía trên vẫn bỏ dấu như cũ (#124).
+  * "www" luôn giữ đủ chữ w.
+  * ---
+  * VNI: numeric keypad digits always type digits and never add tone marks;
+    the top-row digits still do (#124).
+  * "www" always keeps all its w's.
+
+ -- VietTelex Maintainers <maintainers@viettelex.invalid>  Tue, 13 Oct 2026 18:33:05 +0700
+
 viettelex (1.0.12) UNRELEASED; urgency=medium
 
   * Từ tiếng Anh lẻ chen trong câu tiếng Việt không làm từ sau mất dấu:
