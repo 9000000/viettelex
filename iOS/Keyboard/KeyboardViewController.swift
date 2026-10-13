@@ -2527,7 +2527,7 @@ extension KeyboardViewController {
         translateTask = Task { @MainActor [weak self] in
             let core = TranslateText.splitWhitespace(src.text).core
             let result: Result<String, TranslateFailure>
-            if let pair = TranslateDirection.resolve(detected: TranslateText.detect(core), target: target) {
+            if let pair = TranslateDirection.resolve(detected: TranslateText.detect(core, target: target), target: target) {
                 result = await OnDeviceTranslator.translate(core, pair: pair)
             } else {
                 result = .failure(.unknownLanguage)

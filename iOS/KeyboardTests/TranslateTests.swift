@@ -54,23 +54,42 @@ final class TranslateTests: XCTestCase {
     // MARK: nhận ra ngôn ngữ
 
     func testLooksVietnamese() {
-        XCTAssertTrue(TranslateText.looksVietnamese("Hôm nay trời đẹp quá"))
-        XCTAssertTrue(TranslateText.looksVietnamese("Cảm ơn bạn nhiều"))
-        XCTAssertTrue(TranslateText.looksVietnamese("ok, gặp lại sau nhé"))
+        XCTAssertTrue(TranslateText.looksVietnamese("Hôm nay trời đẹp quá", target: "ja"))
+        XCTAssertTrue(TranslateText.looksVietnamese("Cảm ơn bạn nhiều", target: "fr"))
+        XCTAssertTrue(TranslateText.looksVietnamese("ok, gặp lại sau nhé", target: "en"))
         // NFD (ô tổ hợp) cũng nhận.
-        XCTAssertTrue(TranslateText.looksVietnamese("Hôm nay trời đẹp".decomposedStringWithCanonicalMapping))
-        // Dấu sắc/huyền/ngã/mũ một mình là của tiếng Pháp/Bồ… — không tính.
-        XCTAssertFalse(TranslateText.looksVietnamese("Café au lait très bon"))
-        XCTAssertFalse(TranslateText.looksVietnamese("São Paulo é grande"))
-        XCTAssertFalse(TranslateText.looksVietnamese("Good morning"))
-        XCTAssertFalse(TranslateText.looksVietnamese("123 !!"))
+        XCTAssertTrue(TranslateText.looksVietnamese("Hôm nay trời đẹp".decomposedStringWithCanonicalMapping, target: "ja"))
+        // Đích tiếng Anh: nguyên âm Latin-1 có dấu cũng tính (tiếng Anh không có) — kể cả chữ hoa.
+        XCTAssertTrue(TranslateText.looksVietnamese("BÉ ăn cơm", target: "en"))
+        XCTAssertTrue(TranslateText.looksVietnamese("Cô ấy", target: "en"))
+        // Đích Latin khác: sắc/huyền/mũ một mình là của tiếng Pháp/Bồ… — không tính.
+        XCTAssertFalse(TranslateText.looksVietnamese("Café au lait très bon", target: "fr"))
+        XCTAssertFalse(TranslateText.looksVietnamese("São Paulo é grande", target: "pt"))
+        XCTAssertFalse(TranslateText.looksVietnamese("Good morning", target: "en"))
+        XCTAssertFalse(TranslateText.looksVietnamese("123 !!", target: "en"))
     }
 
-    func testDetect() {
-        XCTAssertEqual(TranslateText.detect("Hôm nay trời đẹp quá"), "vi")
-        XCTAssertEqual(TranslateText.detect("The weather is really nice today, isn't it?"), "en")
-        XCTAssertEqual(TranslateText.detect("今日はとてもいい天気ですね"), "ja")
-        XCTAssertNil(TranslateText.detect("123 456"))
+    func testDetectWithoutNaturalLanguage() {
+        // Tiếng Việt ⇒ "vi"; chữ thuộc hệ chữ của đích ⇒ chính đích (khứ hồi).
+        XCTAssertEqual(TranslateText.detect("Hôm nay trời đẹp quá", target: "en"), "vi")
+        XCTAssertEqual(TranslateText.detect("The weather is really nice today, isn't it?", target: "en"), "en")
+        XCTAssertEqual(TranslateText.detect("今日はとてもいい天気ですね", target: "ja"), "ja")
+        XCTAssertEqual(TranslateText.detect("今天天气很好", target: "zh-TW"), "zh-TW")
+        XCTAssertEqual(TranslateText.detect("Привет, как дела?", target: "ru"), "ru")
+        XCTAssertEqual(TranslateText.detect("안녕하세요", target: "ko"), "ko")
+        XCTAssertEqual(TranslateText.detect("สวัสดีครับ", target: "th"), "th")
+        XCTAssertEqual(TranslateText.detect("Bonjour, ça va ?", target: "fr"), "fr")
+        // Có kana ⇒ tiếng Nhật, không phải tiếng Trung ⇒ không coi là đích zh.
+        XCTAssertEqual(TranslateText.detect("今日はいい天気", target: "zh"), "vi")
+        // Không dấu, hệ chữ khác đích ⇒ coi là tiếng Việt (giới hạn đã biết: tiếng Anh khi đích ja).
+        XCTAssertEqual(TranslateText.detect("hom nay troi dep", target: "ja"), "vi")
+        XCTAssertNil(TranslateText.detect("123 456", target: "en"))
+        XCTAssertNil(TranslateText.detect("  ", target: "ja"))
+        // Đi qua luật chiều dịch.
+        XCTAssertEqual(TranslateDirection.resolve(detected: TranslateText.detect("今日は", target: "ja"), target: "ja"),
+                       .init(source: "ja", target: "vi"))
+        XCTAssertEqual(TranslateDirection.resolve(detected: TranslateText.detect("chào bạn", target: "ja"), target: "ja"),
+                       .init(source: "vi", target: "ja"))
     }
 
     // MARK: khoảng trắng
