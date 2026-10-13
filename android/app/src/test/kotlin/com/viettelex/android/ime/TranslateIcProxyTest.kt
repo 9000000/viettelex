@@ -1,9 +1,7 @@
 package com.viettelex.android.ime
 
-import com.google.mlkit.nl.translate.TranslateLanguage
 import com.viettelex.keyboard.TextToolRunner
 import com.viettelex.keyboard.TranslateDirection
-import com.viettelex.keyboard.TranslateLangs
 import com.viettelex.keyboard.TranslateRunner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -71,8 +69,11 @@ class TranslateIcProxyTest {
         assertNull(p.batch(ed) { TranslateRunner.prepare(this, "en", IcProxy.CONTEXT_CAP) })
     }
 
-    /** Danh sách chép tay ở :keyboard phải khớp ML Kit đang dùng. */
-    @Test fun languageListMatchesMlKit() {
-        assertEquals(TranslateLanguage.getAllLanguages().toSet(), TranslateLangs.ALL.toSet())
+    /** APK gốc KHÔNG phụ thuộc ML Kit (nằm ở module on-demand :translate) — classpath test = classpath app. */
+    @Test fun baseHasNoMlKit() {
+        for (cls in listOf("com.google.mlkit.nl.translate.Translation", "com.google.mlkit.common.MlKit")) {
+            val found = try { Class.forName(cls); true } catch (_: ClassNotFoundException) { false }
+            assertTrue("$cls lọt vào app gốc", !found)
+        }
     }
 }

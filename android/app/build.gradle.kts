@@ -36,6 +36,8 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     androidResources { noCompress += listOf("bin") }
+    // Module Play Feature Delivery (on-demand) — chỉ vào AAB; assembleRelease (APK GitHub) không có.
+    dynamicFeatures += setOf(":translate")
 }
 dependencies {
     implementation(project(":telexcore")); implementation(project(":keyboard"))
@@ -48,9 +50,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     // VietTelex Plus + ủng hộ: Google Play Billing (thư viện chính chủ của Google).
     implementation("com.android.billingclient:billing:8.0.0")
-    // Dịch trên máy (Plus): Google ML Kit Translation on-device — chữ không rời máy; gói ngôn ngữ
-    // chỉ tải khi người dùng bấm trong app. Kéo theo libtranslate_jni.so (~16 MB arm64, chưa nén).
-    implementation("com.google.mlkit:translate:17.0.3")
+    // Dịch trên máy (Plus): ML Kit nằm ở module on-demand :translate (APK gốc không có);
+    // Play Feature Delivery tải module khi người dùng bấm trong app.
+    implementation("com.google.android.play:feature-delivery:2.1.0")
     // Billing kéo vài androidx cũ (livedata 2.8.3, fragment 1.1.0) — nâng lên bản mới hơn
     // (đã có sẵn trong cache Gradle) để build --offline chạy được; chỉ là ràng buộc
     // phiên bản, không thêm thư viện mới.

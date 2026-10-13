@@ -460,5 +460,11 @@ object L10nTable {
         put("Xoá gói không dùng (%s)", "Delete unused packs (%s)")
         put("Dịch chạy ngay trên máy bằng Google ML Kit — chữ bạn gõ không bao giờ được gửi đi. Mạng chỉ dùng khi bạn bấm tải gói.", "Translation runs on your device with Google ML Kit — what you type is never sent anywhere. The network is used only when you tap to download packs.")
         put("Đóng", "Close")
+        put("Đang chờ tải tính năng Dịch…", "Waiting to download the Translate feature…")
+        put("Đang tải tính năng Dịch… %d%%", "Downloading the Translate feature… %d%%")
+        put("Đang tải tính năng Dịch…", "Downloading the Translate feature…")
+        put("Đang cài tính năng Dịch…", "Installing the Translate feature…")
+        put("Đã tải tính năng Dịch — mở lại app để dùng.", "Translate feature downloaded — reopen the app to use it.")
+        put("Tải tính năng Dịch (~7 MB)", "Download the Translate feature (~7 MB)")
     }
 }
