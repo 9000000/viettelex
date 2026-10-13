@@ -10,22 +10,30 @@ final class TextToolsPanelTests: XCTestCase {
     typealias L = TextToolsPanelLogic
 
     func testToolOrderMatchesOldMenu() {
-        XCTAssertEqual(L.tools, [.addTones, .upper, .lower, .title, .sentence, .stripDiacritics])
-        XCTAssertEqual(Set(L.tools), Set(TextAction.allCases))
+        XCTAssertEqual(L.tools(translate: false), [.addTones, .upper, .lower, .title, .sentence, .stripDiacritics])
+        // Dịch (macOS 26+) đứng cuối, phím 7.
+        XCTAssertEqual(L.tools(translate: true), L.tools(translate: false) + [.translate])
+        XCTAssertEqual(Set(L.tools(translate: true)), Set(TextAction.allCases))
+        XCTAssertEqual(L.tools, L.tools(translate: TranslateText.isSupportedOS))
     }
 
     func testDigitKeysRunTools() {
-        let digits = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_6]
+        let digits = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_6, kVK_ANSI_7]
         let keypad = [kVK_ANSI_Keypad1, kVK_ANSI_Keypad2, kVK_ANSI_Keypad3,
-                      kVK_ANSI_Keypad4, kVK_ANSI_Keypad5, kVK_ANSI_Keypad6]
-        for i in 0..<6 {
-            XCTAssertEqual(L.command(keyCode: digits[i], shift: false), .run(i))
-            XCTAssertEqual(L.command(keyCode: keypad[i], shift: false), .run(i))
+                      kVK_ANSI_Keypad4, kVK_ANSI_Keypad5, kVK_ANSI_Keypad6, kVK_ANSI_Keypad7]
+        for count in [6, 7] {                  // không / có Dịch
+            let b = L.bindings(toolCount: count)
+            for i in 0..<count {
+                XCTAssertEqual(L.command(keyCode: digits[i], shift: false, in: b), .run(i))
+                XCTAssertEqual(L.command(keyCode: keypad[i], shift: false, in: b), .run(i))
+            }
+            if count == 6 { XCTAssertNil(L.command(keyCode: kVK_ANSI_7, shift: false, in: b)) }
+            XCTAssertNil(L.command(keyCode: kVK_ANSI_8, shift: false, in: b))
+            XCTAssertNil(L.command(keyCode: kVK_ANSI_0, shift: false, in: b))
+            XCTAssertNil(L.command(keyCode: kVK_ANSI_1, shift: true, in: b))     // ⇧1 = "!" không phải công cụ
+            XCTAssertNil(L.command(keyCode: kVK_ANSI_A, shift: false, in: b))    // phím chữ đi thẳng vào app
         }
-        XCTAssertNil(L.command(keyCode: kVK_ANSI_7, shift: false))
-        XCTAssertNil(L.command(keyCode: kVK_ANSI_0, shift: false))
-        XCTAssertNil(L.command(keyCode: kVK_ANSI_1, shift: true))     // ⇧1 = "!" không phải công cụ
-        XCTAssertNil(L.command(keyCode: kVK_ANSI_A, shift: false))    // phím chữ đi thẳng vào app
+        XCTAssertEqual(L.bindings.count, L.bindings(toolCount: L.tools.count).count)
     }
 
     func testNavigationKeys() {
@@ -40,13 +48,18 @@ final class TextToolsPanelTests: XCTestCase {
 
     func testBindingsUnique() {
         // Mỗi (phím, shift) một lệnh: RegisterEventHotKey trùng sẽ fail.
-        var seen = Set<String>()
-        for b in L.bindings { XCTAssertTrue(seen.insert("\(b.keyCode)-\(b.shift)").inserted, "\(b)") }
+        for count in [6, 7] {
+            var seen = Set<String>()
+            for b in L.bindings(toolCount: count) {
+                XCTAssertTrue(seen.insert("\(b.keyCode)-\(b.shift)").inserted, "\(b)")
+            }
+        }
     }
 
     func testMoveWraps() {
-        XCTAssertEqual(L.moved(0, by: -1), 5)
-        XCTAssertEqual(L.moved(5, by: 1), 0)
+        XCTAssertEqual(L.moved(0, by: -1, count: 6), 5)
+        XCTAssertEqual(L.moved(5, by: 1, count: 6), 0)
+        XCTAssertEqual(L.moved(0, by: -1, count: 7), 6)
         XCTAssertEqual(L.moved(2, by: 1), 3)
         XCTAssertEqual(L.moved(0, by: 1, count: 0), 0)
     }

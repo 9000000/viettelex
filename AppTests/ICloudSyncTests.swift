@@ -15,6 +15,7 @@ private final class FakeCloud: SyncCloud {
 private final class FakeMac {
     var settings: [String: Bool] = [:]
     var shortcuts: [String: String] = [:]
+    var translateTarget = "en"
     let defaults: UserDefaults
     let suite = "vt.test.sync.\(UUID().uuidString)"
     init() { defaults = UserDefaults(suiteName: suite)! }
@@ -23,7 +24,9 @@ private final class FakeMac {
                                   getSetting: { [unowned self] in self.settings[$0] ?? false },
                                   setSetting: { [unowned self] in self.settings[$0] = $1 },
                                   getShortcuts: { [unowned self] in self.shortcuts },
-                                  setShortcuts: { [unowned self] in self.shortcuts = $0 })
+                                  setShortcuts: { [unowned self] in self.shortcuts = $0 },
+                                  getText: { [unowned self] in $0 == "translateTarget" ? self.translateTarget : nil },
+                                  setText: { [unowned self] in if $0 == "translateTarget" { self.translateTarget = $1 } })
     func sync(_ cloud: FakeCloud, now: Int64) {
         SyncEngine.run(local: store, cloud: cloud, now: now, sections: ICloudSync.sections)
     }
@@ -44,7 +47,8 @@ final class ICloudSyncTests: XCTestCase {
         XCTAssertEqual(s["modernTone"], SyncEntry(v: "true", t: 1000))   // tên chuẩn, không phải modernOrthography
         XCTAssertNil(s["modernOrthography"])
         XCTAssertEqual(s["simpleTelex"]?.v, "false")
-        XCTAssertEqual(Set(s.keys), MacSyncStore.managed)
+        XCTAssertEqual(Set(s.keys), MacSyncStore.managed.union(MacSyncStore.textSettings.map(\.canonical)))
+        XCTAssertEqual(s["translateTarget"]?.v, "en")
         XCTAssertEqual(domain(cloud, .shortcuts)["ko"], SyncEntry(v: "không", t: 1000))
     }
 
@@ -108,6 +112,24 @@ final class ICloudSyncTests: XCTestCase {
         cloud.store[SyncSection.settings.cloudKey] = SyncMerge.encode(["teencode": SyncEntry(v: "maybe", t: 10)])
         mac.sync(cloud, now: 1000)
         XCTAssertEqual(mac.settings["teencode"], true)
+    }
+
+    /// Ngôn ngữ đích của Dịch: chuỗi, cùng key với iOS; giá trị lạ / tiếng Việt từ iCloud bị bỏ.
+    func testTranslateTargetSyncsAsString() {
+        let cloud = FakeCloud(), mac = FakeMac()
+        mac.translateTarget = "ja"
+        mac.sync(cloud, now: 1000)
+        XCTAssertEqual(domain(cloud, .settings)["translateTarget"]?.v, "ja")
+
+        cloud.store[SyncSection.settings.cloudKey] = SyncMerge.encode(["translateTarget": SyncEntry(v: "zh-TW", t: 5000)])
+        mac.sync(cloud, now: 6000)
+        XCTAssertEqual(mac.translateTarget, "zh-TW")
+
+        for bad in ["vi", "xx"] {
+            cloud.store[SyncSection.settings.cloudKey] = SyncMerge.encode(["translateTarget": SyncEntry(v: bad, t: 9000)])
+            mac.sync(cloud, now: 10000)
+            XCTAssertEqual(mac.translateTarget, "zh-TW", bad)
+        }
     }
 
     /// AppState map đủ mọi key macOS trong bảng (thiếu một key = setting đó không bao giờ đồng bộ).

@@ -33,6 +33,12 @@ final class MacSyncStore: SyncLocal {
         Setting(canonical: "liveSpellCheck", local: "liveSpellCheck"),
     ]
     static let managed = Set(settings.map(\.canonical))
+    /// Setting dạng chuỗi, giá trị hợp lệ = `allowed` (cùng spec BackupSettings iOS — giá trị
+    /// lạ từ iCloud bị bỏ qua). Hiện có: ngôn ngữ đích của Dịch.
+    struct TextSetting { let canonical: String; let allowed: [String] }
+    static let textSettings: [TextSetting] = [
+        TextSetting(canonical: TranslatePrefs.targetKey, allowed: TranslatePrefs.knownTargets),
+    ]
     static func ledgerKey(_ s: SyncSection) -> String { "syncLedger.\(s.rawValue)" }
 
     let ledgerDefaults: UserDefaults
@@ -40,15 +46,21 @@ final class MacSyncStore: SyncLocal {
     let setSetting: (String, Bool) -> Void
     let getShortcuts: () -> [String: String]
     let setShortcuts: ([String: String]) -> Void
+    /// nil = không quản lý key đó (giá trị trong sổ giữ nguyên, như setting chỉ iPhone có).
+    let getText: (String) -> String?
+    let setText: (String, String) -> Void
 
     init(ledgerDefaults: UserDefaults,
          getSetting: @escaping (String) -> Bool, setSetting: @escaping (String, Bool) -> Void,
-         getShortcuts: @escaping () -> [String: String], setShortcuts: @escaping ([String: String]) -> Void) {
+         getShortcuts: @escaping () -> [String: String], setShortcuts: @escaping ([String: String]) -> Void,
+         getText: @escaping (String) -> String? = { _ in nil }, setText: @escaping (String, String) -> Void = { _, _ in }) {
         self.ledgerDefaults = ledgerDefaults
         self.getSetting = getSetting
         self.setSetting = setSetting
         self.getShortcuts = getShortcuts
         self.setShortcuts = setShortcuts
+        self.getText = getText
+        self.setText = setText
     }
 
     func current(_ s: SyncSection) -> [String: String] {
@@ -59,6 +71,7 @@ final class MacSyncStore: SyncLocal {
             // hai bên đóng dấu qua lại mãi.
             var out = SyncMerge.live(ledger(.settings) ?? [:]).filter { !Self.managed.contains($0.key) }
             for m in Self.settings { out[m.canonical] = getSetting(m.local) ? "true" : "false" }
+            for t in Self.textSettings { if let v = getText(t.canonical) { out[t.canonical] = v } }
             return out
         case .shortcuts: return getShortcuts()
         case .templates: return [:]
@@ -72,6 +85,11 @@ final class MacSyncStore: SyncLocal {
                 guard let v = values[m.canonical], v == "true" || v == "false" else { continue }
                 let b = v == "true"
                 if getSetting(m.local) != b { setSetting(m.local, b) }
+            }
+            for t in Self.textSettings {
+                guard let v = values[t.canonical], t.allowed.contains(v),
+                      let cur = getText(t.canonical), cur != v else { continue }
+                setText(t.canonical, v)
             }
         case .shortcuts: if values != getShortcuts() { setShortcuts(values) }
         case .templates: break
@@ -88,7 +106,9 @@ final class MacSyncStore: SyncLocal {
                      getSetting: { a.syncedSetting($0) ?? false },
                      setSetting: { a.setSyncedSetting($0, $1) },
                      getShortcuts: { a.shortcuts },
-                     setShortcuts: { a.setShortcuts($0) })
+                     setShortcuts: { a.setShortcuts($0) },
+                     getText: { $0 == TranslatePrefs.targetKey ? a.translateTarget : nil },
+                     setText: { if $0 == TranslatePrefs.targetKey { a.translateTarget = $1 } })
     }
 }
 

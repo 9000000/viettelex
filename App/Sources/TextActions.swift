@@ -7,6 +7,9 @@
 // Logic thuần dùng chung với iOS/Android, biên dịch theo đường dẫn (project.yml):
 // TextTools.swift (fixture chung text-tools.txt) và AddTones.swift + lexicon.
 //
+// Dịch (macOS 26+): Apple Translation ngay trên máy, gói ngôn ngữ đã cài — xem
+// TranslateAction.swift (chiều dịch dùng chung iOS: Translate.swift + TranslatePrefs.swift).
+//
 // Thêm dấu chạy trong PROCESS CON (`VietTelex --add-tones`, stdin → stdout): bảng
 // lexicon/bigram/tiếng Anh giải mã ra ~1 MB heap dạng `static let` — nạp trong process
 // IME thì sống tới hết phiên đăng nhập. Process con thoát là trả sạch RAM.
@@ -20,7 +23,7 @@ import Carbon.HIToolbox
 import InputMethodKit
 
 enum TextAction: String, CaseIterable {
-    case addTones, upper, lower, title, sentence, stripDiacritics
+    case addTones, upper, lower, title, sentence, stripDiacritics, translate
 
     /// Khoá VTLocalized (vi.lproj dịch).
     var titleKey: String {
@@ -31,12 +34,13 @@ enum TextAction: String, CaseIterable {
         case .title: return "Title Case"
         case .sentence: return "Sentence case"
         case .stripDiacritics: return "Remove tones"
+        case .translate: return "Translate"
         }
     }
 
     var textTool: TextTool? {
         switch self {
-        case .addTones: return nil
+        case .addTones, .translate: return nil
         case .upper: return .upper
         case .lower: return .lower
         case .title: return .title
@@ -127,17 +131,28 @@ enum TextActionRunner {
         busy = true
         NotificationCenter.default.post(name: .telexResetComposition, object: nil)
 
-        if let s = focused.flatMap(axSelectedText) {
-            transform(action, s, client: client, clipboard: nil)
-        } else if let s = client.flatMap(imkSelectedText) {
-            transform(action, s, client: client, clipboard: nil)
+        // `same`: vùng chọn vẫn là chữ đã đọc? Chỉ Dịch dùng (kết quả về sau một lúc —
+        // người dùng gõ tiếp / bôi đen chỗ khác thì KHÔNG ghi đè).
+        if let focused, let s = axSelectedText(focused) {
+            transform(action, s, client: client, clipboard: nil, same: { axSelectedText(focused) == s })
+        } else if let client, let s = imkSelectedText(client) {
+            transform(action, s, client: client, clipboard: nil, same: { imkSelectedText(client) == s })
         } else if trusted {
+            // ⌘C: không đọc lại vùng chọn được (lại ⌘C) ⇒ chỉ chắc app + ô đang gõ chưa đổi.
+            let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
             PasteboardBridge.copySelection { s, snapshot in
                 guard let s, !s.isEmpty else {
                     snapshot?.restore()
                     return fail("no selection (copy)")
                 }
-                transform(action, s, client: client, clipboard: snapshot)
+                transform(action, s, client: client, clipboard: snapshot, same: {
+                    guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return false }
+                    switch (focused, focusedElement()) {
+                    case (nil, nil): return true
+                    case let (a?, b?): return CFEqual(a, b)
+                    default: return false
+                    }
+                })
             }
         } else {
             fail("no selection, no Accessibility")
@@ -145,7 +160,10 @@ enum TextActionRunner {
     }
 
     private static func transform(_ action: TextAction, _ text: String, client: IMKTextInput?,
-                                  clipboard: PasteboardBridge.Snapshot?) {
+                                  clipboard: PasteboardBridge.Snapshot?, same: @escaping () -> Bool) {
+        if action == .translate {
+            return translate(text, client: client, clipboard: clipboard, same: same)
+        }
         let finish: (String?) -> Void = { result in
             guard let result else {
                 clipboard?.restore()
@@ -162,6 +180,87 @@ enum TextActionRunner {
             }
         } else {
             finish(TextActionTransform.apply(action, text) { _ in nil })
+        }
+    }
+
+    // MARK: Dịch (bất đồng bộ — Apple Translation)
+
+    /// Lần dịch đang chờ; tăng khi xong / hết giờ ⇒ kết quả về muộn bị bỏ.
+    private static var translateGen = 0
+    /// Trần chờ một bản dịch (gói đã cài thường < 1 s).
+    static let translateTimeout: TimeInterval = 20
+
+    private static func translate(_ text: String, client: IMKTextInput?,
+                                  clipboard: PasteboardBridge.Snapshot?, same: @escaping () -> Bool) {
+        guard #available(macOS 26.0, *) else {
+            clipboard?.restore()
+            return fail("translate: macOS < 26")
+        }
+        let target = AppState.shared.translateTarget
+        guard (text as NSString).length <= TextActionTransform.maxLength,
+              let pair = TranslateDirection.resolve(detected: TranslateText.detect(text, target: target),
+                                                    target: target) else {
+            clipboard?.restore()
+            return fail("translate: nothing to translate")
+        }
+        let core = TranslateText.splitWhitespace(text).core
+        translateGen &+= 1
+        let gen = translateGen
+        TranslateToast.show(VTLocalized("Translating…"), client: client, sticky: true)
+        // Session sống trong OnDeviceTranslator.translate (Task tách khỏi main), nhả ngay sau.
+        Task.detached(priority: .userInitiated) {
+            let r = await OnDeviceTranslator.translate(core, pair: pair)
+            DispatchQueue.main.async {
+                guard gen == translateGen else { return }      // đã hết giờ
+                translateGen &+= 1
+                finishTranslate(r, text, pair: pair, client: client, clipboard: clipboard, same: same)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + translateTimeout) {
+            guard gen == translateGen else { return }
+            translateGen &+= 1
+            TranslateToast.hide()
+            clipboard?.restore()
+            fail("translate: timed out")
+        }
+    }
+
+    private static func finishTranslate(_ r: Result<String, TranslateFailure>, _ text: String,
+                                        pair: TranslateDirection.Pair, client: IMKTextInput?,
+                                        clipboard: PasteboardBridge.Snapshot?, same: () -> Bool) {
+        TranslateToast.hide()
+        switch r {
+        case .success(let out):
+            let result = TranslateText.rewrap(original: text, translated: out)
+            guard !TranslateText.splitWhitespace(out).core.isEmpty,
+                  !result.unicodeScalars.elementsEqual(text.unicodeScalars) else {
+                clipboard?.restore()
+                return fail("translate: unchanged")
+            }
+            guard same() else {
+                clipboard?.restore()
+                busy = false
+                return DebugLog.log("text-action translate: selection changed while waiting — not written")
+            }
+            replace(with: result, client: client, clipboard: clipboard)
+            busy = false
+            DebugLog.log("text-action translate \(pair.source)→\(pair.target): \((text as NSString).length) → \((result as NSString).length) chars")
+        case .failure(let f):
+            clipboard?.restore()
+            busy = false
+            DebugLog.log("text-action translate \(pair.source)→\(pair.target) failed: \(f)")
+            switch f {
+            case .notInstalled:
+                TranslateToast.show(VTLocalized("Translation pack not downloaded — open VietTelex Settings → Text tools."),
+                                    client: client, sticky: false) {
+                    SettingsWindowController.shared.show(tab: .general, revealTextTools: true)
+                }
+            case .unsupported:
+                TranslateToast.show(VTLocalized("This Mac can’t translate this language pair."),
+                                    client: client, sticky: false)
+            case .unknownLanguage, .failed:
+                NSSound.beep()
+            }
         }
     }
 

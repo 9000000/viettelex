@@ -5,6 +5,8 @@
 // người dùng mở app (App/Plus/TranslateSettingsView.swift).
 // KHÔNG TỐN GÌ khi không dùng: Translation chỉ chạm tới khi bấm chip;
 // session là biến cục bộ, nhả ngay sau một lần dịch. Luật chiều dịch: Shared/TranslatePrefs.swift.
+// macOS dùng chung file này (project.yml, Công cụ → Dịch — App/Sources/TranslateAction.swift):
+// mọi chỗ cần OS mới ghi cả iOS 26 lẫn macOS 26.
 import Foundation
 #if canImport(Translation)
 import Translation
@@ -12,9 +14,9 @@ import Translation
 
 /// Phần THUẦN (test được): nhận ra ngôn ngữ + giữ khoảng trắng hai đầu.
 enum TranslateText {
-    /// Hệ điều hành có dịch trên máy dùng được từ bàn phím (init installedSource: iOS 26).
+    /// Hệ điều hành có dịch trên máy dùng được từ bàn phím (init installedSource: iOS/macOS 26).
     static var isSupportedOS: Bool {
-        if #available(iOS 26.0, *) { return true }
+        if #available(iOS 26.0, macOS 26.0, *) { return true }
         return false
     }
 
@@ -138,7 +140,7 @@ enum TranslateFailure: Error, Equatable {
     case failed
 }
 
-@available(iOS 26.0, *)
+@available(iOS 26.0, macOS 26.0, *)
 enum OnDeviceTranslator {
     /// Dịch một lần. Kiểm tra gói đã cài TRƯỚC (LanguageAvailability, không tạo session);
     /// session sống trong hàm này rồi được nhả.
@@ -163,7 +165,11 @@ enum OnDeviceTranslator {
                  TranslationError.unsupportedTargetLanguage: return .failure(.unsupported)
             case TranslationError.unableToIdentifyLanguage: return .failure(.unknownLanguage)
             default:
+                #if os(iOS)
                 TouchLog.write("translate failed: \(type(of: error))")
+                #else
+                DebugLog.log("translate failed: \(type(of: error))")
+                #endif
                 return .failure(.failed)
             }
         }
