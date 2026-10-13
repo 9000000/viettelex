@@ -26,10 +26,14 @@ enum KeyGeometry {
     static let rowGap: CGFloat = 10
     /// Hàng phím số: PHÍM số = 0.8× phím chữ (không tính khe) — KeyLayout.numberRowHeight.
     static let numberKeyRatio: CGFloat = 0.8
+    /// Tuỳ chọn "Hàng số cao bằng hàng chữ" (Giao diện, mặc định TẮT; khoá App Group
+    /// `numberRowFullHeightKey`) ⇒ phím số = phím chữ (tỉ lệ 1).
+    static let numberRowFullHeightKey = "numberRowFullHeight"
+    static func numberKeyRatio(fullHeight: Bool) -> CGFloat { fullHeight ? 1 : numberKeyRatio }
     /// Cao hàng số (khe + phím) khi hàng chữ cao `unit` (khe + phím). Dùng chung app (Wallpaper).
     /// `gap` = khe trên mỗi hàng (preset "như bàn phím iPhone" có khe riêng — RowSpec).
-    static func numberRowHeight(unit: CGFloat, gap: CGFloat = rowGap) -> CGFloat {
-        gap + numberKeyRatio * max(unit - gap, 0)
+    static func numberRowHeight(unit: CGFloat, gap: CGFloat = rowGap, fullHeight: Bool = false) -> CGFloat {
+        gap + numberKeyRatio(fullHeight: fullHeight) * max(unit - gap, 0)
     }
     /// Vùng phím chuẩn 4 hàng × 54 trước khi trừ phần cắt ở hàng đáy (iPhone dọc).
     static let phonePortraitBase: CGFloat = 216
@@ -96,12 +100,13 @@ enum KeyGeometry {
         /// Phím chữ / phím hàng đáy (không tính khe).
         var letterKeyHeight: CGFloat { unit - gap }
         var bottomKeyHeight: CGFloat { bottomRowHeight - bottomTop - bottomPad }
-        /// Tổng vùng phím (4 hàng + hàng số nếu bật).
-        func keyArea(numberRow: Bool) -> CGFloat {
-            unit * 4 + (numberRow ? numberRowHeight(unit: unit, gap: gap) : 0) - bottomTrim
+        /// Tổng vùng phím (4 hàng + hàng số nếu bật; `fullHeight` = hàng số cao bằng hàng chữ).
+        func keyArea(numberRow: Bool, fullHeight: Bool = false) -> CGFloat {
+            unit * 4 + (numberRow ? numberRowHeight(unit: unit, gap: gap, fullHeight: fullHeight) : 0) - bottomTrim
         }
         /// Hàng số = multiplier × hàng chữ + constant (constraint Auto Layout).
-        var numberRowConstant: CGFloat { (1 - numberKeyRatio) * gap }
+        var numberRowConstant: CGFloat { numberRowConstant(fullHeight: false) }
+        func numberRowConstant(fullHeight: Bool) -> CGFloat { (1 - numberKeyRatio(fullHeight: fullHeight)) * gap }
     }
 
     /// - base: vùng 4 hàng chuẩn khi KHÔNG có số đo stock (iPad 240 / 300; máy gập mở 208 —
@@ -299,6 +304,7 @@ enum KeyGeometry {
             "rowHeightAdjust", "numberRow", "showSuggestions", "simpleTelex", "templatesEnabled",
             "userTemplates", "kbLastSeen", "kbFullAccess", "keyboardTheme", "showSpaceLogo",
             "splitKeyboard", "keyPreviewEnabled", "hapticFeedback", "swipeTyping", "uiLanguage",
+            "numberRowFullHeight",
         ]
     }
 

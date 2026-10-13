@@ -117,6 +117,7 @@ struct FeatureSearchEntry: Identifiable {
             .init(viTitle: LK("Bảng gõ tắt"), keywords: "shortcut yaml import export", page: .goTat),
             .init(viTitle: LK("Mẫu câu"), keywords: "template câu soạn sẵn snippets tắt ẩn tab ☰", page: .goTat),
             .init(viTitle: LK("Hàng phím số"), keywords: "number row số", page: .phim),
+            .init(viTitle: LK("Hàng số cao bằng hàng chữ"), keywords: "number row height cao số", page: .phim),
             .init(viTitle: LK("Giữ phím ra ký tự đặc biệt"), keywords: "ký hiệu symbol @ # giữ lâu", page: .phim),
             .init(viTitle: LK("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh"), keywords: "space ngôn ngữ english language", page: .phim),
             .init(viTitle: LK("Phóng to chữ khi bấm"), keywords: "key preview popup", page: .phim),
@@ -497,6 +498,8 @@ struct GoTatPage: View {
 
 struct PhimPage: View {
     @AppStorage("numberRow", store: featureDefaults) private var numberRow = false
+    /// Hàng số cao bằng hàng chữ — mặc định TẮT (phím số 0.8×, KeyGeometry.numberRowFullHeightKey).
+    @AppStorage(KeyGeometry.numberRowFullHeightKey, store: featureDefaults) private var numberRowFullHeight = false
     /// Giữ phím chữ ra ký tự phụ (KeyAlternates) — số mặc định BẬT, ký hiệu TẮT.
     @AppStorage("longPressNumbers", store: featureDefaults) private var longPressNumbers = true
     @AppStorage("longPressSymbols", store: featureDefaults) private var longPressSymbols = false
@@ -529,6 +532,9 @@ struct PhimPage: View {
         FeaturePageList(page: .phim) {
             Section {
                 settingToggle(L("Hàng phím số"), L("Thêm hàng 1 … 0 trên hàng chữ (bàn phím cao thêm gần một hàng)."), isOn: $numberRow)
+                if numberRow {
+                    settingToggle(L("Hàng số cao bằng hàng chữ"), L("Phím số to bằng phím chữ (mặc định thấp hơn một chút). Bàn phím cao thêm đúng một hàng."), isOn: $numberRowFullHeight)
+                }
                 // iPad có ký tự phụ vuốt xuống riêng ⇒ chỉ iPhone.
                 if isPhone {
                     if !numberRow {

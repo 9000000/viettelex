@@ -627,6 +627,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         didSet { if numberRowEnabled != oldValue { rebuild() } }
     }
     static let numberRowKey = "numberRow"
+    /// Hàng số cao bằng hàng chữ (Giao diện, mặc định TẮT — KeyGeometry.numberRowFullHeightKey):
+    /// chỉ đổi tỉ lệ constraint + tổng chiều cao, không tốn gì mỗi lần gõ.
+    var numberRowFullHeight = false {
+        didSet { if numberRowFullHeight != oldValue { rebuild() } }
+    }
 
     // MARK: giữ phím chữ ra ký tự phụ (KeyAlternates, issue #98)
     private var altNumbersSetting = true
@@ -732,7 +737,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
     /// iPhone dọc: hàng đáy thấp hơn 4pt để 3 hàng chữ nằm đúng chỗ stock (KeyGeometry).
     private var bottomTrim: CGFloat { rowSpec.bottomTrim }
-    private func keyAreaHeight() -> CGFloat { rowSpec.keyArea(numberRow: numberRowEnabled) }
+    private func keyAreaHeight() -> CGFloat {
+        rowSpec.keyArea(numberRow: numberRowEnabled, fullHeight: numberRowFullHeight)
+    }
     /// Chiều cao một hàng phím chuẩn (hàng số: KeyLayout.numberRowHeight).
     private func rowUnitHeight() -> CGFloat { rowSpec.unit }
     /// Lề / khe ngang theo hình học hiện tại (preset ngang: lề 4.33, khe 6.67 như stock).
@@ -1567,6 +1574,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             UserDefaultsProvider.shared, pad: Self.isPad, portraitWidth: min(screen.width, screen.height)))
         keyboardRaise = CGFloat(KeyGeometry.RowAdjust.raise(UserDefaultsProvider.shared))
         numberRowEnabled = UserDefaultsProvider.shared?.bool(forKey: Self.numberRowKey) ?? false
+        numberRowFullHeight = UserDefaultsProvider.shared?.bool(forKey: KeyGeometry.numberRowFullHeightKey) ?? false
         // Bàn phím tách đôi (mặc định TẮT) — rebuild() cuối hàm áp nếu đổi.
         splitSetting = UserDefaultsProvider.shared?.bool(forKey: SplitLayout.settingKey) ?? false
         keyPreviewEnabled = Self.keyPreviewSetting(UserDefaultsProvider.shared)
@@ -1752,6 +1760,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private var builtGlobe = false
     private var builtKind: InputKind = .normal
     private var builtNumberRow = false
+    private var builtNumberRowFull = false
     private var builtPressHighlight = KeyboardView.keyPressHighlightDefault
     /// Khe/lề dựng vào constraint lúc build (preset stock: dọc ≠ ngang) — đổi là dựng lại.
     /// (Phần cắt / đệm hàng đáy đổi tại chỗ ở applyBottomTrim — không cần dựng lại.)
@@ -1804,6 +1813,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             || builtPalette != palette
             || builtGlobe != needsGlobe || builtKind != inputKind
             || builtNumberRow != numberRowEnabled
+            || builtNumberRowFull != numberRowFullHeight
             || builtPressHighlight != keyPressHighlightEnabled
             || builtAlts != activeAlts
             || builtSplit != split
@@ -1844,6 +1854,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         builtDark = dark; builtPalette = palette; builtWidth = bounds.width
         builtGlobe = needsGlobe; builtKind = inputKind
         builtNumberRow = numberRowEnabled
+        builtNumberRowFull = numberRowFullHeight
         builtPressHighlight = keyPressHighlightEnabled
         builtAlts = activeAlts
         builtSplit = split
@@ -2096,7 +2107,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
 
     /// Có hàng số / iPhone (hàng đáy cắt bớt): rowsContainer thôi fillEqually — hàng số =
-    /// KeyLayout.numberRowHeight (phím số 0.8× phím chữ), hàng đáy = hàng chữ − bottomTrim, còn lại bằng nhau. Ràng buộc GIỮA
+    /// KeyLayout.numberRowHeight (phím số 0.8× phím chữ, hoặc 1× khi bật "Hàng số cao bằng hàng chữ"), hàng đáy = hàng chữ − bottomTrim, còn lại bằng nhau. Ràng buộc GIỮA
     /// các hàng → crossRow (sống qua planeCache). iPad không số: fillEqually như cũ.
     private func applyRowHeights() {
         let rows = rowsContainer.arrangedSubviews
@@ -2106,8 +2117,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let ref = rows[numberRow ? 1 : 0]
         if numberRow {
             crossRow(rows[0].heightAnchor.constraint(equalTo: ref.heightAnchor,
-                                                     multiplier: KeyLayout.numberRowMultiplier,
-                                                     constant: rowSpec.numberRowConstant))
+                                                     multiplier: KeyLayout.numberRowMultiplier(fullHeight: numberRowFullHeight),
+                                                     constant: rowSpec.numberRowConstant(fullHeight: numberRowFullHeight)))
         }
         for r in rows[(numberRow ? 2 : 1)..<(rows.count - 1)] {
             crossRow(r.heightAnchor.constraint(equalTo: ref.heightAnchor))

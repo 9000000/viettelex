@@ -48,6 +48,7 @@
     "modernTone" : true,
     "numberChips" : true,
     "numberRow" : true,
+    "numberRowFullHeight" : false,
     "pasteButton" : true,
     "quickTelex" : false,
     "reEditWords" : false,
