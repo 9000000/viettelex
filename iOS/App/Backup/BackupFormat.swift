@@ -82,6 +82,8 @@ enum BackupSettings {
         Spec(key: "systemBackdropLavender", kind: .bool(false)),
         // Ngôn ngữ giao diện app (L10n) — mặc định "vi", không theo máy.
         Spec(key: "uiLanguage", kind: .string("vi", ["vi", "en"])),
+        // Dịch trên máy (Plus): ngôn ngữ đích — chỉ iOS dùng.
+        Spec(key: TranslatePrefs.targetKey, kind: .string(TranslatePrefs.defaultTarget, TranslatePrefs.knownTargets)),
     ]
     static let byKey: [String: Spec] = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
 }
