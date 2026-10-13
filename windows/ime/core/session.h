@@ -143,6 +143,8 @@ public:
 
 private:
     bool isWordKey(char32_t c) const;
+    // Numpad digits are never VNI marks (UniKey): they end the word like punctuation (#124).
+    bool isWordKey(const KeyInput& k) const { return !k.numpad && isWordKey(k.ch); }
     bool handleWordKey(char32_t c, TextSink& sink);
     bool handleBackspace(TextSink& sink);
     // kind: Char (printable boundary), Boundary (Enter/Tab/Esc), Navigation/Chord.

@@ -1114,7 +1114,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     var onOpenTemplates: (() -> Void)?
 
     // MARK: công cụ văn bản (Plus) — lối vào: chip đầu lưới mẫu câu (burger): chạm
-    // "Aa Công cụ văn bản" → lưới đổi sang danh sách thao tác (áp lên phần đang chọn /
+    // "⚒️ Công cụ" → lưới đổi sang danh sách thao tác (áp lên phần đang chọn /
     // câu trước con trỏ), chạm thao tác → về bàn phím chữ.
 
     /// PlusGate.isUnlocked(.textTools) — controller đặt mỗi lần hiện bàn phím.
@@ -1124,6 +1124,15 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         }
     }
     var onTextTool: ((TextTool) -> Void)?
+    /// Chip "Dịch ↔ <đích>" cuối danh sách công cụ (Plus .translate, iOS 26+); nil = ẩn.
+    /// Controller đặt mỗi lần hiện bàn phím.
+    var translateChipLabel: String? {
+        didSet {
+            if oldValue != translateChipLabel, templatesActive { rebuildUncachedPlane() }
+        }
+    }
+    var onTranslate: (() -> Void)?
+    private static let translateID = "\u{E000}translate"
     private var textToolsMode = false
     private static let textToolsEntryID = "\u{E000}tools"
     private static let textToolsBackID = "\u{E000}back"
@@ -1164,6 +1173,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     static let mathToken = "\u{E000}math"
     /// Payload ô "↩︎ Hoàn tác" sau khi áp công cụ văn bản.
     static let toolUndoToken = "\u{E000}toolUndo"
+    /// Payload chip thông báo Dịch trên máy ("Đang dịch…", "Mở app … tải gói dịch").
+    static let translateNoticeToken = "\u{E000}translateNotice"
     /// Payload chip "Thêm dấu" / "Hoàn tác" (AddTones — chỉ khi người dùng bấm).
     static let addTonesToken = "\u{E000}addTones"
     static let undoTonesToken = "\u{E000}undoTones"
@@ -1904,7 +1915,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if !textToolsEnabled { textToolsMode = false }
         let extras: [(display: String, id: String)] = tools
             ? [(L("\u{2039} Mẫu câu"), Self.textToolsBackID)] + TextTool.allCases.map { ($0.label, $0.rawValue) }
-            : (textToolsEnabled ? [(L("Aa Công cụ văn bản"), Self.textToolsEntryID)] : [])
+                + (translateChipLabel.map { [($0, Self.translateID)] } ?? [])
+            : (textToolsEnabled ? [(L("⚒️ Công cụ"), Self.textToolsEntryID)] : [])
         let chips = TemplateChipsView(items: tools ? [] : userTemplates, extras: extras,
                                       showGear: !tools, dark: dark,
                                       plainFill: plainFill,
@@ -1917,13 +1929,14 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                 self.textToolsMode = id == Self.textToolsEntryID
                 self.rebuildUncachedPlane()
             default:
-                guard let tool = TextTool(rawValue: id) else { return }
+                let tool = TextTool(rawValue: id)
+                guard tool != nil || id == Self.translateID else { return }
                 Self.clickModifier()
                 self.textToolsMode = false
                 self.plane = .letters
                 self.rebuild()
                 self.styleBurger()
-                self.onTextTool?(tool)
+                if let tool { self.onTextTool?(tool) } else { self.onTranslate?() }
             }
         },
                                       onTap: { [weak self] text in

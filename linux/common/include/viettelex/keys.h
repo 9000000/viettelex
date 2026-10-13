@@ -27,6 +27,9 @@ inline bool isModifierOnly(uint32_t k) {
            || k == 0xff7f                           // Num_Lock
            || k == 0xff14;                          // Scroll_Lock
 }
+// Keypad keys (KP_Space 0xff80 … KP_9 0xffb9, KP_Equal 0xffbd): their unicode is a plain
+// digit/operator, but like UniKey they never act as VNI marks — always a boundary (#124).
+inline bool isKeypad(uint32_t k) { return k >= 0xff80 && k <= 0xffbd; }
 }  // namespace ks
 
 struct KeyEvent {

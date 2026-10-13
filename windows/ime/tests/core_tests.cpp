@@ -109,6 +109,8 @@ TEST(keymap_kinds) {
     CHECK(classifyKey(0x70 /*F1*/, m).kind == KeyKind::Other);
     CHECK(classifyKey(vk::Space, m).kind == KeyKind::Char);
     CHECK(classifyKey(vk::Numpad0 + 5, m).ch == U'5');
+    CHECK(classifyKey(vk::Numpad0 + 5, m).numpad);  // #124
+    CHECK(!classifyKey('5', m).numpad);
     m.ctrl = true;
     CHECK(classifyKey('C', m).kind == KeyKind::Chord);
     m.ctrl = false;

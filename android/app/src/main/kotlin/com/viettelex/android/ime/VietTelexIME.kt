@@ -353,8 +353,9 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             templatesCache ?: VTPrefs.templates(this, prefs).also { templatesCache = it } else emptyList()
         kb.configure(field.returnLabel, field.kind, needsGlobe(), settings.showSpaceLogo,
             settings.templatesEnabled, templates,
-            th.dp(KeyLayout.keyAreaDp(th.tablet, th.landscape, settings.rowHeightAdjust, settings.numberRow)),
-            field.numberSigned, field.numberDecimal, settings.numberRow)
+            th.dp(KeyLayout.keyAreaDp(th.tablet, th.landscape, settings.rowHeightAdjust, settings.numberRow,
+                settings.numberRowFullHeight)),
+            field.numberSigned, field.numberDecimal, settings.numberRow, settings.numberRowFullHeight)
         kb.keyPreview = settings.keyPreview
         kb.keyPressHighlight = settings.keyPressHighlight
         kb.configureSpaceFlick(settings.spaceSwipeLanguage, session.language)

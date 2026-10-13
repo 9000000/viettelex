@@ -38,6 +38,9 @@ struct Rig {
         else if (c == kLeft) k.kind = KeyKind::Navigation;
         else if (c == kCtrlZ) k.kind = KeyKind::Chord;
         else { k.kind = KeyKind::Char; k.ch = static_cast<unsigned char>(c); }
+        send(k);
+    }
+    void send(const KeyInput& k) {
         bool eaten = s.wantsKey(k) && s.handleKey(k, doc);
         if (eaten) return;
         // Invariant: a key reaching the app never finds a composition open.
@@ -248,6 +251,22 @@ TEST(session_vni_mode) {
         r.apply();
         r.type("vie65t ");
         CHECK_EQ(r.text(), std::string("việt "));
+    }
+}
+
+// #124: numpad digits are never VNI marks — they end the word and reach the app; the
+// number row keeps marking.
+TEST(session_vni_numpad_digits_are_boundaries) {
+    for (OutputMode m : {OutputMode::Composition, OutputMode::InPlace}) {
+        Rig r(m);
+        r.settings.vniMode = true;
+        r.apply();
+        r.type("a");
+        r.send(classifyKey(vk::Numpad0 + 1, Modifiers{}));
+        r.type("a1 ");
+        r.send(classifyKey(vk::Numpad0, Modifiers{}));
+        CHECK_EQ(r.text(), std::string("a1\xc3\xa1 0"));
+        CHECK(!r.doc.comp);
     }
 }
 

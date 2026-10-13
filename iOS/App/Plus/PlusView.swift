@@ -59,7 +59,7 @@ struct PlusView: View {
             }
 
             Section {
-                ForEach(PlusFeature.allCases) { f in
+                ForEach(PlusFeature.allCases.filter(\.isAvailableOnDevice)) { f in
                     Label {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(f.title)
@@ -68,6 +68,10 @@ struct PlusView: View {
                             if f.settingKey != nil, PlusGate.isUnlocked(f) {
                                 Toggle(L("Bật chip “Thêm dấu”"), isOn: $addTonesChip)
                                     .font(.subheadline).tint(.green)
+                            }
+                            if f == .translate, PlusGate.isUnlocked(f), #available(iOS 26.0, *) {
+                                NavigationLink(L("Ngôn ngữ & gói dịch")) { TranslateSettingsView() }
+                                    .font(.subheadline)
                             }
                         }
                     } icon: {

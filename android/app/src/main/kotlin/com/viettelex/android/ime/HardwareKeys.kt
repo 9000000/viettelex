@@ -8,8 +8,9 @@ import com.viettelex.keyboard.Key
 sealed class HwKey {
     /** Chữ ASCII a–z/A–Z (đã theo Shift/CapsLock) → engine Telex như phím chạm. */
     data class Letter(val ch: Char) : HwKey()
-    /** Số / dấu câu in được → ranh giới từ (auto-restore) rồi chèn. */
-    data class Text(val text: String) : HwKey()
+    /** Số / dấu câu in được → ranh giới từ (auto-restore) rồi chèn. [numpad]: số của bàn
+     *  phím số — không mang dấu VNI (#124). */
+    data class Text(val text: String, val numpad: Boolean = false) : HwKey()
     object Space : HwKey()
     /** Chốt từ đang soạn rồi để Enter THẬT đi tới app (Shift+Enter, "Enter để gửi"…). */
     object Enter : HwKey()
@@ -54,7 +55,8 @@ object HardwareKeys {
         val ch = unicode.toChar()
         if (unicode > 0x7E || unicode < 0x20) return HwKey.Pass   // Tab, ký tự điều khiển, chữ ngoài ASCII (layout khác)
         if (ch in 'a'..'z' || ch in 'A'..'Z') return HwKey.Letter(ch)
-        return HwKey.Text(ch.toString())                           // số, dấu câu, ký hiệu ASCII in được
+        // số, dấu câu, ký hiệu ASCII in được; số numpad đánh dấu riêng (VNI: không bỏ dấu, #124)
+        return HwKey.Text(ch.toString(), numpad = keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9)
     }
 
     /**
@@ -63,7 +65,7 @@ object HardwareKeys {
      */
     fun sessionKey(k: HwKey, composing: Boolean): Key? = when (k) {
         is HwKey.Letter -> Key.Letter(k.ch)
-        is HwKey.Text -> Key.Text(k.text)
+        is HwKey.Text -> Key.Text(k.text, numpad = k.numpad)
         HwKey.Space -> Key.Space
         HwKey.Backspace -> if (composing) Key.Backspace else null
         HwKey.Enter, HwKey.Modifier, HwKey.Pass -> null

@@ -54,6 +54,9 @@ enum PlusFeature: String, CaseIterable, Identifiable {
     case iCloudSync
     /// Công cụ văn bản: HOA/thường/Hoa Đầu Từ/Hoa đầu câu, xoá dấu (Keyboard/TextTools.swift).
     case textTools
+    /// Dịch trên máy (Apple Translation, iOS 26+): Việt ↔ ngôn ngữ chọn trong app
+    /// (Shared/TranslatePrefs.swift, Keyboard/Translate.swift).
+    case translate
     /// Huy hiệu cảm ơn người ủng hộ.
     case thanksBadge
 
@@ -66,6 +69,7 @@ enum PlusFeature: String, CaseIterable, Identifiable {
         case .advancedClipboard: return L("Clipboard nâng cao")
         case .iCloudSync: return L("Đồng bộ iCloud")
         case .textTools: return L("Công cụ văn bản")
+        case .translate: return L("Dịch trên máy")
         case .thanksBadge: return L("Huy hiệu cảm ơn")
         }
     }
@@ -77,6 +81,7 @@ enum PlusFeature: String, CaseIterable, Identifiable {
         case .advancedClipboard: return L("Ghim không giới hạn, chip tách số tài khoản, số điện thoại, mã OTP.")
         case .iCloudSync: return L("Cài đặt, gõ tắt và từ đã học theo bạn sang máy khác.")
         case .textTools: return L("Đổi HOA/thường, hoa đầu từ/đầu câu, xoá dấu tiếng Việt.")
+        case .translate: return L("Dịch giữa tiếng Việt và ngôn ngữ bạn chọn ngay trên máy — chữ không gửi đi đâu.")
         case .thanksBadge: return L("Dấu ★ nhỏ trong app — lời cảm ơn vì đã ủng hộ.")
         }
     }
@@ -89,7 +94,8 @@ enum PlusFeature: String, CaseIterable, Identifiable {
         case .sentenceDiacritics: return L("Cách dùng: gõ không dấu cả câu (hom nay troi dep), gõ dấu cách rồi chạm chip “Thêm dấu” ở đầu thanh gợi ý. Cần bật chip bên dưới.")
         case .advancedClipboard: return L("Cách dùng: bật Lịch sử clipboard (Tính Năng → Riêng tư & clipboard), chạm nút clipboard trên thanh gợi ý. Copy STK/SĐT/OTP → chip “Dán …” hiện trên thanh gợi ý.")
         case .iCloudSync: return L("Cách dùng: Tính Năng → Sao lưu & đồng bộ → bật Đồng bộ iCloud.")
-        case .textTools: return L("Cách dùng: chạm ☰ trên thanh gợi ý → chip “Aa Công cụ văn bản” đầu lưới mẫu câu. Áp lên đoạn đang chọn hoặc câu trước con trỏ.")
+        case .textTools: return L("Cách dùng: chạm ☰ trên thanh gợi ý → chip “⚒️ Công cụ” đầu lưới mẫu câu. Áp lên đoạn đang chọn hoặc câu trước con trỏ.")
+        case .translate: return L("Cách dùng: chạm ☰ trên thanh gợi ý → “⚒️ Công cụ” → “Dịch ↔ …”. Chọn ngôn ngữ và tải gói dịch ngay bên dưới (cần iOS 26).")
         case .thanksBadge: return L("Tự hiện sau khi mua.")
         }
     }
@@ -99,6 +105,15 @@ enum PlusFeature: String, CaseIterable, Identifiable {
         self == .sentenceDiacritics ? PlusOnboarding.addTonesKey : nil
     }
 
+    /// Máy dùng được tính năng này (màn Plus ẩn dòng không dùng được).
+    var isAvailableOnDevice: Bool {
+        if self == .translate {
+            if #available(iOS 26.0, *) { return true }
+            return false
+        }
+        return true
+    }
+
     var systemImage: String {
         switch self {
         case .premiumThemes: return "paintpalette"
@@ -106,6 +121,7 @@ enum PlusFeature: String, CaseIterable, Identifiable {
         case .advancedClipboard: return "doc.on.clipboard"
         case .iCloudSync: return "icloud"
         case .textTools: return "wand.and.stars"
+        case .translate: return "character.bubble"
         case .thanksBadge: return "star"
         }
     }

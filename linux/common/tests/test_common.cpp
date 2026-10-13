@@ -480,6 +480,24 @@ void testVniAndLiveSettings() {
     CHECK_EQ(m.doc, std::string("việt việt "));
 }
 
+// #124: numpad digits are never VNI marks — they end the word and reach the app;
+// top-row digits keep marking.
+void testVniKeypadDigitsAreBoundaries() {
+    Settings st;
+    st.vni = true;
+    for (auto mode : {DisplayMode::Preedit, DisplayMode::Surrounding}) {
+        Session s;
+        Mock m;
+        s.applySettings(st);
+        s.setDisplayMode(mode, m);
+        type(s, m, "a");
+        press(s, m, 0xffb1, '1');  // KP_1
+        type(s, m, "a1 ");
+        press(s, m, 0xffb0, '0');  // KP_0
+        CHECK_EQ(m.screen(), std::string("a1\xc3\xa1 0"));
+    }
+}
+
 void testModesAgreeOnRandomScripts() {
     std::mt19937 rng(12345);
     const std::string alphabet = "aeoudwsfrxjzntghiycqAEO  <<.";
@@ -2549,6 +2567,7 @@ int main() {
     testFinishCommitsPreedit();
     testOverflowNeverLosesText();
     testVniAndLiveSettings();
+    testVniKeypadDigitsAreBoundaries();
     testModesAgreeOnRandomScripts();
     testConfigParse();
     testSetConfigValue();

@@ -38,6 +38,9 @@ final class KeyboardViewController: UIInputViewController {
     private var wordSwipeRestore: (text: String, tail: String)?
     /// Công cụ văn bản vừa áp → ô "↩︎ Hoàn tác" / ⌫ ngay sau (một lượt).
     private var textToolUndo: TextTools.Undo?
+    /// Dịch trên máy: chip thông báo ở slot đầu (tới phím kế) + lượt dịch đang chờ.
+    private var translateNotice: (text: String, opensApp: Bool)?
+    private var translateTask: Task<Void, Never>?
     private var filterSensitive = true
     /// Gõ vuốt (thử nghiệm): công tắc trong app; `swipe` chỉ tạo khi bật (0 RAM khi tắt).
     private var swipeSetting = false
@@ -143,6 +146,7 @@ final class KeyboardViewController: UIInputViewController {
         keyboard.onTemplate = { [weak self] in self?.insertTemplate($0) }
         keyboard.onOpenTemplates = { [weak self] in self?.openTemplatesInApp() }
         keyboard.onTextTool = { [weak self] in self?.applyTextTool($0) }
+        keyboard.onTranslate = { [weak self] in self?.applyTranslate() }
         keyboard.onOneHandChange = { side in
             // Bàn phím tự lưu (không Full Access thì không ghi được App Group).
             UserDefaults.standard.set(side.rawValue, forKey: OneHand.key)
@@ -215,6 +219,10 @@ final class KeyboardViewController: UIInputViewController {
         restoreUndo = nil; undoOfferActive = false
         textToolUndo = nil
         keyboard.textToolsEnabled = PlusGate.isUnlocked(.textTools)
+        translateTask?.cancel(); translateTask = nil; translateNotice = nil
+        keyboard.translateChipLabel = TranslateText.isSupportedOS && PlusGate.isUnlocked(.translate)
+            ? L("Dịch ↔ %@", TranslatePrefs.displayName(TranslatePrefs.target(UserDefaultsProvider.shared)))
+            : nil
         checkExternalDictEdit()
         clip.load(from: UserDefaultsProvider.shared)
         pasteOnce.reload(offeredID: Self.loadPasteOffered())
@@ -278,6 +286,7 @@ final class KeyboardViewController: UIInputViewController {
         keyboard.onSuggestion = { [weak self] item in
             guard let self else { return }
             if item == KeyboardView.toolUndoToken { self.undoTextTool(); return }
+            if item == KeyboardView.translateNoticeToken { self.tapTranslateNotice(); return }
             if let c = self.emailChips.first(where: { $0.label == item }) { self.acceptEmailChip(c); return }
             if self.urlChips.contains(where: { $0.label == item }) { self.acceptURLChip(item); return }
             self.textToolUndo = nil
@@ -722,6 +731,9 @@ final class KeyboardViewController: UIInputViewController {
                 default: break
                 }
             }
+        }
+        if translateNotice != nil || translateTask != nil {   // phím kế: bỏ thông báo + lượt dịch đang chờ
+            translateTask?.cancel(); translateTask = nil; translateNotice = nil
         }
         if textToolUndo != nil {               // ⌫ ngay sau công cụ văn bản = hoàn tác
             if case .backspace = key { undoTextTool(); return }
@@ -1253,8 +1265,8 @@ final class KeyboardViewController: UIInputViewController {
     /// openURL: (pattern chuẩn của keyboard bên thứ ba).
     /// LƯU Ý: mở app chứa từ keyboard extension CHỈ chạy khi đã cấp Toàn quyền
     /// Truy cập (Full Access) — iOS chặn hoàn toàn nếu chưa cấp.
-    private func openTemplatesInApp() {
-        guard let url = URL(string: "viettelex://maucau") else { return }
+    private func openTemplatesInApp(_ host: String = "maucau") {
+        guard let url = URL(string: "viettelex://\(host)") else { return }
         let sel = NSSelectorFromString("openURL:")
         var responder: UIResponder? = self
         while let r = responder {
@@ -1529,6 +1541,11 @@ final class KeyboardViewController: UIInputViewController {
         // Vừa sửa lại từ vuốt theo từ gõ: chip "↩︎ từ cũ" tới phím kế.
         if composed.isEmpty, let u = swipeTypedUndo {
             set.actionLabel = "\u{21A9}\u{FE0E} \(u.edit.old)"; set.actionPayload = KeyboardView.undoReviseToken
+            set.literal = nil; set.paste = false; set.clipChips = []
+        }
+        // Dịch trên máy: thông báo ("Đang dịch…", thiếu gói…) thắng mọi chip tới phím kế.
+        if composed.isEmpty, let n = translateNotice {
+            set.actionLabel = n.text; set.actionPayload = KeyboardView.translateNoticeToken
             set.literal = nil; set.paste = false; set.clipChips = []
         }
         keyboard.showSuggestions(set)
@@ -2485,6 +2502,82 @@ extension KeyboardViewController {
         lastWord = nil; lastWord2 = nil
         KeyboardView.clickModifier()
         updateAutoShift(); updateSuggestions()
+    }
+}
+
+// MARK: dịch trên máy (Plus, iOS 26+) — logic thuần: Shared/TranslatePrefs.swift + Keyboard/Translate.swift.
+extension KeyboardViewController {
+    /// Bấm chip "Dịch ↔ …": nguồn như công cụ văn bản; dịch bất đồng bộ (Translation chạy
+    /// ngoài tiến trình), xong mới thay chữ — chỉ khi ô còn y như lúc bấm.
+    fileprivate func applyTranslate() {
+        guard #available(iOS 26.0, *), PlusGate.isUnlocked(.translate) else { return }
+        translateTask?.cancel(); translateTask = nil
+        bridge.reset()
+        lastWord = nil; lastWord2 = nil
+        restoreUndo = nil; undoOfferActive = false
+        wordSwipeRestore = nil
+        textToolUndo = nil
+        let selected = textDocumentProxy.selectedText
+        guard let src = TextTools.source(selected: selected, before: textDocumentProxy.documentContextBeforeInput) else {
+            showTranslateNotice(L("Chọn hoặc gõ chữ cần dịch"))
+            return
+        }
+        let target = TranslatePrefs.target(UserDefaultsProvider.shared)
+        showTranslateNotice(L("Đang dịch…"))
+        translateTask = Task { @MainActor [weak self] in
+            let core = TranslateText.splitWhitespace(src.text).core
+            let result: Result<String, TranslateFailure>
+            if let pair = TranslateDirection.resolve(detected: TranslateText.detect(core), target: target) {
+                result = await OnDeviceTranslator.translate(core, pair: pair)
+            } else {
+                result = .failure(.unknownLanguage)
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.finishTranslate(result.map { TranslateText.rewrap(original: src.text, translated: $0) }, src: src)
+        }
+    }
+
+    private func finishTranslate(_ r: Result<String, TranslateFailure>, src: TextTools.Source) {
+        translateTask = nil
+        translateNotice = nil
+        switch r {
+        case .success(let out):
+            applyingEdit = true
+            defer { applyingEdit = false }
+            var selected: String?
+            if #available(iOS 16.0, *) { selected = textDocumentProxy.selectedText }
+            switch TextToolRunner.replace(src, with: out, proxy: Proxy(p: textDocumentProxy),
+                                          strict: true, currentSelection: selected) {
+            case .applied(let u): textToolUndo = u
+            case .failsafe:
+                TouchLog.write("failsafe: translate context changed while waiting → skip")
+                showTranslateNotice(L("Chữ đã đổi — bấm Dịch lại"), refresh: false)
+            case .unchanged, .noSource: break
+            }
+            bridge.reset()
+            lastWord = nil; lastWord2 = nil
+        case .failure(.notInstalled):
+            showTranslateNotice(L("Mở app VietTelex để tải gói dịch"), opensApp: true, refresh: false)
+        case .failure(.unsupported):
+            showTranslateNotice(L("Máy chưa dịch được cặp ngôn ngữ này"), opensApp: true, refresh: false)
+        case .failure(.unknownLanguage):
+            showTranslateNotice(L("Không nhận ra ngôn ngữ"), refresh: false)
+        case .failure(.failed):
+            showTranslateNotice(L("Không dịch được"), refresh: false)
+        }
+        updateAutoShift(); updateSuggestions()
+    }
+
+    private func showTranslateNotice(_ text: String, opensApp: Bool = false, refresh: Bool = true) {
+        translateNotice = (text, opensApp)
+        if refresh { updateSuggestions() }
+    }
+
+    fileprivate func tapTranslateNotice() {
+        let opens = translateNotice?.opensApp == true
+        translateNotice = nil
+        if opens { openTemplatesInApp("dich") }   // app mở trang Dịch trên máy (cần Toàn quyền)
+        updateSuggestions()
     }
 }
 

@@ -842,7 +842,8 @@ bool Session::processKey(const KeyEvent &ev, InputContext &ic) {
     }
 
     uint32_t ch = ev.unicode;
-    if (ch && isWordKey(ch)) {
+    // Numpad digits are never VNI marks (#124): they end the word like any boundary.
+    if (ch && isWordKey(ch) && !ks::isKeypad(ev.keysym)) {
         bool r = handleLetter(ch, ic);
         caretMoved_ = false;
         lastWasBoundaryChar_ = false;
