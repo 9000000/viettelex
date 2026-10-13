@@ -104,6 +104,7 @@ internal data class FeatureSearchEntry(val viTitle: String, val keywords: String
             FeatureSearchEntry("Bảng gõ tắt", "shortcut yaml import export", FeaturePage.GoTat), // l10n-key
             FeatureSearchEntry("Mẫu câu", "template câu soạn sẵn", FeaturePage.GoTat), // l10n-key
             FeatureSearchEntry("Hàng phím số", "number row số", FeaturePage.Phim), // l10n-key
+            FeatureSearchEntry("Hàng số cao bằng hàng chữ", "number row tall height cao số", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Giữ phím hàng trên để ra số", "số giữ lâu number long press", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Giữ phím ra ký tự đặc biệt", "ký hiệu symbol @ # giữ lâu long press", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh", "space ngôn ngữ english language", FeaturePage.Phim), // l10n-key
@@ -474,6 +475,12 @@ private fun PhimPage(onBack: () -> Unit) {
     VTSection(header = tr("Phím")) {
         BoolToggle(Keys.NUMBER_ROW, Prefs.D.numberRow, tr("Hàng phím số"), tr("Thêm hàng 1 … 0 trên hàng chữ (bàn phím cao thêm gần một hàng)."))
         RowDivider()
+        // Chỉ hiện khi hàng số bật (tắt hàng số thì công tắc này vô nghĩa, giá trị vẫn giữ).
+        if (numberRow) {
+            BoolToggle(Keys.NUMBER_ROW_FULL_HEIGHT, Prefs.D.numberRowFullHeight, tr("Hàng số cao bằng hàng chữ"),
+                tr("Phím số to bằng phím chữ (bàn phím cao thêm đúng một hàng)."))
+            RowDivider()
+        }
         // Hàng số bật ⇒ giữ q…p ra số vô nghĩa (KeyAlternates.numbersSettingVisible).
         if (KeyAlternates.numbersSettingVisible(numberRow)) {
             BoolToggle(Keys.LONG_PRESS_NUMBERS, Prefs.D.longPressNumbers, tr("Giữ phím hàng trên để ra số"), tr("Giữ q … p để gõ 1 … 0 (số nhỏ ở góc phím)."))

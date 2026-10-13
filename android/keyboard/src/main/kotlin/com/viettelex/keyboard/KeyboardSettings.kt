@@ -86,6 +86,8 @@ data class KeyboardSettings(
     var rowHeightAdjust: Int = 0,
     /** Hàng phím số 1…0 trên hàng chữ — mặc định TẮT. */
     var numberRow: Boolean = false,
+    /** Hàng số cao bằng hàng chữ (chỉ có tác dụng khi [numberRow]) — mặc định TẮT. */
+    var numberRowFullHeight: Boolean = false,
     /** Nâng bàn phím 0…[KEYBOARD_RAISE_MAX] dp (đệm nền dưới hàng đáy) — mặc định 0. */
     var keyboardRaise: Int = 0,
     /** Giữ q…p ra 1…0 (chỉ khi hàng số tắt) — mặc định BẬT. Giống iOS. */
@@ -152,6 +154,7 @@ data class KeyboardSettings(
             s.keyPressHighlight = b(Keys.KEY_PRESS_HIGHLIGHT, s.keyPressHighlight)
             s.debugTouchLog = b(Keys.DEBUG_TOUCH_LOG, s.debugTouchLog)
             s.numberRow = b(Keys.NUMBER_ROW, s.numberRow)
+            s.numberRowFullHeight = b(Keys.NUMBER_ROW_FULL_HEIGHT, s.numberRowFullHeight)
             s.keyboardRaise = clampRaise((get(Keys.KEYBOARD_RAISE) as? Number)?.toInt() ?: 0)
             s.longPressNumbers = b(Keys.LONG_PRESS_NUMBERS, s.longPressNumbers)
             s.longPressSymbols = b(Keys.LONG_PRESS_SYMBOLS, s.longPressSymbols)
