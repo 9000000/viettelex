@@ -360,9 +360,11 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         kb.keyPressHighlight = settings.keyPressHighlight
         kb.configureSpaceFlick(settings.spaceSwipeLanguage, session.language)
         if (session.language == com.viettelex.keyboard.KeyboardLanguage.EN) warmEnglish()
-        kb.textToolsEnabled = PlusGate.isUnlocked(PlusFeature.TEXT_TOOLS) && !field.isSecure
+        // Plus + công tắc "Công cụ văn bản" (mặc định bật) + không phải ô mật khẩu.
+        kb.textToolsEnabled = settings.textToolsActive(PlusGate.isUnlocked(PlusFeature.TEXT_TOOLS), field.isSecure)
+        // Dịch nằm trong Công cụ ⇒ tắt Công cụ là tắt luôn Dịch.
         // APK ngoài Play (không tải được module :translate) ⇒ ẩn hẳn Dịch.
-        kb.translateEnabled = PlusGate.isUnlocked(PlusFeature.TRANSLATE) && !field.isSecure &&
+        kb.translateEnabled = kb.textToolsEnabled && PlusGate.isUnlocked(PlusFeature.TRANSLATE) &&
             com.viettelex.android.translate.TranslateFeature.offered(this)
         st.setPlane(kb.plane)
         // Giữ lâu "," = gõ giọng nói: chỉ khi máy có IME giọng nói (đọc lại khi vào ô mới —
@@ -922,7 +924,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
      * Lối vào hiện tại: chip đầu lưới mẫu câu; bảng sửa văn bản gộp sau gọi thẳng hàm này.
      */
     override fun onTextTool(tool: TextTool) {
-        if (!PlusGate.isUnlocked(PlusFeature.TEXT_TOOLS)) return
+        if (keyboard?.textToolsEnabled != true) return   // Plus + công tắc (đặt lúc vào ô)
         clearSwipeUndo()
         handler.removeCallbacks(suggestRun)
         if (!proxy.begin()) return

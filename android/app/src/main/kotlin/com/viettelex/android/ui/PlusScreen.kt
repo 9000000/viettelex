@@ -50,6 +50,7 @@ fun PlusScreen(plus: PlusController, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var debugOverride by rememberBoolPref(Keys.PLUS_DEBUG_OVERRIDE, false)
     var addTonesChip by rememberBoolPref(Keys.ADD_TONES_CHIP, Prefs.D.addTonesChip)
+    var textToolsEnabled by rememberBoolPref(Keys.TEXT_TOOLS_ENABLED, Prefs.D.textToolsEnabled)
     val isPlus = PlusGate.resolve(s.purchased, debugOverride, BuildConfig.DEBUG)
 
     LaunchedEffect(Unit) { plus.refresh() }
@@ -84,7 +85,11 @@ fun PlusScreen(plus: PlusController, onBack: () -> Unit) {
             }
             if (f == PlusFeature.TRANSLATE && PlusGate.isUnlocked(f)) TranslateSettings()
             if (f.settingKey != null && PlusGate.isUnlocked(f)) {
-                SettingToggle(tr("Bật chip “Thêm dấu”"), null, addTonesChip) { addTonesChip = it }
+                if (f == PlusFeature.TEXT_TOOLS) {
+                    SettingToggle(f.settingTitle, f.settingCaption, textToolsEnabled) { textToolsEnabled = it }
+                } else {
+                    SettingToggle(f.settingTitle, f.settingCaption, addTonesChip) { addTonesChip = it }
+                }
             }
         }
     }

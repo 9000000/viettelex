@@ -100,9 +100,27 @@ enum PlusFeature: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Công tắc App Group bật tính năng (mặc định TẮT) — màn Plus đặt công tắc ngay dưới.
+    /// Công tắc App Group bật/tắt tính năng — màn Plus đặt công tắc ngay dưới (khi đã mở khoá).
+    /// Chip "Thêm dấu" mặc định TẮT; Công cụ văn bản mặc định BẬT (`settingDefault`).
     var settingKey: String? {
-        self == .sentenceDiacritics ? PlusOnboarding.addTonesKey : nil
+        switch self {
+        case .sentenceDiacritics: return PlusOnboarding.addTonesKey
+        case .textTools: return Self.textToolsKey
+        default: return nil
+        }
+    }
+    /// Key App Group công tắc "Công cụ văn bản" (KeyboardSettings.textToolsEnabled).
+    static let textToolsKey = "textToolsEnabled"
+
+    /// Giá trị khi chưa từng đặt — phải khớp mặc định KeyboardSettings.
+    var settingDefault: Bool { self == .textTools }
+
+    /// Nhãn + một dòng mô tả của công tắc trên màn Plus.
+    var settingTitle: String {
+        self == .textTools ? L("Công cụ văn bản") : L("Bật chip “Thêm dấu”")
+    }
+    var settingSubtitle: String? {
+        self == .textTools ? L("Chip ⚒️ Công cụ trong lưới mẫu câu: đổi HOA/thường, bỏ dấu, dịch…") : nil
     }
 
     /// Máy dùng được tính năng này (màn Plus ẩn dòng không dùng được).

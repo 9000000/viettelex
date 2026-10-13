@@ -568,6 +568,7 @@ enum L10n {
         "Thêm dấu cả câu": "Add tones to a sentence",
         "Clipboard nâng cao": "Advanced clipboard",
         "Công cụ văn bản": "Text tools",
+        "Chip ⚒️ Công cụ trong lưới mẫu câu: đổi HOA/thường, bỏ dấu, dịch…": "⚒️ Tools chip in the templates grid: UPPER/lower case, remove tones, translate…",
         "Huy hiệu cảm ơn": "Thank-you badge",
         "Thêm bộ màu bàn phím và đặt ảnh riêng làm nền.": "More keyboard color themes and your own photo as the background.",
         "Gõ không dấu cả câu, một chạm thêm dấu.": "Type a whole sentence without tones, add them with one tap.",

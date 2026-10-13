@@ -61,7 +61,8 @@ class BackupTests {
         val p = BackupCodec.decode(fixture("backup-ios-v1"))
         assertEquals("ios", p.platform)
         assertEquals(Instant.parse("2026-09-27T08:00:00Z"), p.createdAt)
-        assertEquals(37, p.settings!!.size)             // emojiSuggest/pasteButton chỉ iOS, bị bỏ qua
+        assertEquals(38, p.settings!!.size)             // emojiSuggest/pasteButton chỉ iOS, bị bỏ qua
+        assertEquals(true, p.settings!![Keys.TEXT_TOOLS_ENABLED])
         assertEquals("wood", p.settings!![Keys.KEY_SOUND_STYLE])
         assertEquals(true, p.settings!![Keys.KEY_SOUND])
         assertEquals(70, p.settings!![Keys.KEY_SOUND_VOLUME])
@@ -126,9 +127,10 @@ class BackupTests {
             "keyboardTransparency" to 250, "keyLabelTransparency" to 35,
             BackupPrefs.SHORTCUTS_KEY to "# VietTelex — bảng gõ tắt\nko: không\n")
         val p = BackupPrefs.snapshot({ prefs[it] }, listOf(TemplateItem("", "a")), null)
-        assertEquals(43, p.settings!!.size)
+        assertEquals(44, p.settings!!.size)
         assertEquals("en", p.settings!![Keys.TRANSLATE_TARGET])   // Dịch trên máy: mặc định English
         assertEquals(false, p.settings!![Keys.NUMBER_ROW_FULL_HEIGHT])   // mặc định tắt
+        assertEquals(true, p.settings!![Keys.TEXT_TOOLS_ENABLED])   // chưa đặt ⇒ BẬT (mặc định)
         assertEquals("vi", p.settings!![Keys.UI_LANGUAGE])   // chưa chọn ⇒ mặc định Tiếng Việt
         assertEquals(100, p.settings!!["keyboardTransparency"])   // kẹp 0…100
         assertEquals(35, p.settings!!["keyLabelTransparency"])
@@ -166,6 +168,16 @@ class BackupTests {
         assertEquals(listOf("VietTelex"), plan.learnedWords!!.manual)
         assertTrue("3 gõ tắt" in plan.summary, plan.summary)
         assertTrue("1 mẫu câu mới" in plan.summary, plan.summary)
+    }
+
+    /** Công tắc "Công cụ văn bản" tắt ⇒ đi theo file sao lưu (khứ hồi + nhập ghi đúng pref). */
+    @Test fun textToolsSwitchRoundTrip() {
+        val p = BackupPrefs.snapshot({ if (it == Keys.TEXT_TOOLS_ENABLED) false else null }, emptyList(), null)
+        assertEquals(false, p.settings!![Keys.TEXT_TOOLS_ENABLED])
+        val back = BackupCodec.decode(BackupCodec.encode(p))
+        assertEquals(false, back.settings!![Keys.TEXT_TOOLS_ENABLED])
+        val plan = BackupPrefs.plan(back, { null }, emptyList())
+        assertEquals(false, plan.writes[Keys.TEXT_TOOLS_ENABLED])
     }
 
     @Test fun raiseBackupClampedAndLegacyPeriodKeyIgnored() {

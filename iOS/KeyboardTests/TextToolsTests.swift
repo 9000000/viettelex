@@ -184,4 +184,54 @@ final class TextToolsTests: XCTestCase {
         XCTAssertFalse(TextToolRunner.undo(u, proxy: p))
         XCTAssertEqual(p.text, "Xin Chào")
     }
+
+    // MARK: công tắc "Công cụ văn bản" (mặc định BẬT) — hiện thật = Plus mở VÀ công tắc bật
+
+    func testSwitchDefaultOnAndEffectiveFlag() {
+        XCTAssertTrue(KeyboardSettings().textToolsEnabled, "mặc định BẬT — người dùng cũ không đổi gì")
+        var s = KeyboardSettings()
+        XCTAssertTrue(s.textToolsActive(unlocked: true))
+        XCTAssertFalse(s.textToolsActive(unlocked: false))
+        s.textToolsEnabled = false
+        XCTAssertFalse(s.textToolsActive(unlocked: true))
+        XCTAssertFalse(s.textToolsActive(unlocked: false))
+        // Màn Plus / Gõ tắt ghi ĐÚNG key bàn phím đọc.
+        XCTAssertEqual(PlusFeature.textTools.settingKey, "textToolsEnabled")
+        XCTAssertTrue(PlusFeature.textTools.settingDefault)
+        XCTAssertFalse(PlusFeature.sentenceDiacritics.settingDefault)
+        let saved = UserDefaultsProvider.shared
+        defer { UserDefaultsProvider.shared = saved }
+        let d = KeyboardBenchTests.makeDefaults("TT")
+        UserDefaultsProvider.shared = d
+        XCTAssertTrue(KeyboardSettings.load().textToolsEnabled, "chưa đặt ⇒ BẬT")
+        d.set(false, forKey: PlusFeature.textTools.settingKey!)
+        XCTAssertFalse(KeyboardSettings.load().textToolsEnabled)
+    }
+
+    func testSwitchInBackup() throws {
+        guard case .bool(true)? = BackupSettings.byKey["textToolsEnabled"]?.kind else {
+            return XCTFail("thiếu spec sao lưu textToolsEnabled (bool, mặc định true)")
+        }
+        var p = BackupPayload(createdAt: nil, platform: "ios", settings: ["textToolsEnabled": .bool(false)],
+                              shortcuts: [:], templates: nil, learnedWords: nil)
+        XCTAssertEqual(try BackupCodec.decode(BackupCodec.encode(p)), p)
+        p.settings = ["textToolsEnabled": .bool(true)]
+        XCTAssertEqual(try BackupCodec.decode(BackupCodec.encode(p)).settings?["textToolsEnabled"], .bool(true))
+    }
+
+    /// Luồng thật: công tắc tắt ⇒ bàn phím không có chip công cụ (lần hiện kế tiếp đọc lại).
+    @MainActor func testKeyboardHonoursSwitch() {
+        let saved = UserDefaultsProvider.shared
+        let savedPaywall = PlusGate.paywallEnabled
+        defer { UserDefaultsProvider.shared = saved; PlusGate.paywallEnabled = savedPaywall }
+        PlusGate.paywallEnabled = false                     // Plus mở cho mọi người
+        for on in [true, false] {
+            let d = KeyboardBenchTests.makeDefaults("TT")
+            d.set(on, forKey: "textToolsEnabled")
+            UserDefaultsProvider.shared = d
+            let rig = KeyboardBenchTests.Rig()
+            XCTAssertEqual(rig.vc.debugKeyboard.textToolsEnabled, on, "textToolsEnabled=\(on)")
+            rig.close()
+        }
+    }
 }

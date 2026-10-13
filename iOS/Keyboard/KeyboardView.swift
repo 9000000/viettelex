@@ -1124,7 +1124,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     // "⚒️ Công cụ" → lưới đổi sang danh sách thao tác (áp lên phần đang chọn /
     // câu trước con trỏ), chạm thao tác → về bàn phím chữ.
 
-    /// PlusGate.isUnlocked(.textTools) — controller đặt mỗi lần hiện bàn phím.
+    /// KeyboardSettings.textToolsActive() (Plus + công tắc "Công cụ văn bản") — controller
+    /// đặt mỗi lần hiện bàn phím.
     var textToolsEnabled = false {
         didSet {
             if oldValue != textToolsEnabled, templatesActive { rebuildUncachedPlane() }

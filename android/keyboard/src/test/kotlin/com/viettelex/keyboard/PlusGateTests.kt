@@ -72,4 +72,22 @@ class PlusGateTests {
         assertEquals(Keys.ADD_TONES_CHIP, PlusFeature.SENTENCE_DIACRITICS.settingKey)
         assertNull(PlusFeature.CLOUD_SYNC.settingKey)
     }
+
+    /** Công tắc "Công cụ văn bản": mặc định BẬT; hiện thật = Plus mở && công tắc bật && ô không mật khẩu. */
+    @Test fun textToolsSwitch() {
+        assertEquals(Keys.TEXT_TOOLS_ENABLED, PlusFeature.TEXT_TOOLS.settingKey)
+        assertEquals("textToolsEnabled", Keys.TEXT_TOOLS_ENABLED)        // cùng key iOS
+        assertTrue(PlusFeature.TEXT_TOOLS.settingDefault)
+        assertFalse(PlusFeature.SENTENCE_DIACRITICS.settingDefault)
+        assertTrue(KeyboardSettings().textToolsEnabled)
+        assertTrue(KeyboardSettings.load { null }.textToolsEnabled)
+        assertFalse(KeyboardSettings.load { if (it == Keys.TEXT_TOOLS_ENABLED) false else null }.textToolsEnabled)
+        val on = KeyboardSettings()
+        assertTrue(on.textToolsActive(unlocked = true, secureField = false))
+        assertFalse(on.textToolsActive(unlocked = false, secureField = false))
+        assertFalse(on.textToolsActive(unlocked = true, secureField = true))
+        val off = KeyboardSettings(textToolsEnabled = false)
+        assertFalse(off.textToolsActive(unlocked = true, secureField = false))
+        assertFalse(off.textToolsActive(unlocked = false, secureField = false))
+    }
 }

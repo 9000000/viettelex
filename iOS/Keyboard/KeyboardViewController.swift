@@ -218,8 +218,9 @@ final class KeyboardViewController: UIInputViewController {
         lastKeyWasEmailTrigger = false
         restoreUndo = nil; undoOfferActive = false
         textToolUndo = nil
-        keyboard.textToolsEnabled = PlusGate.isUnlocked(.textTools)
+        keyboard.textToolsEnabled = settings.textToolsActive()   // Plus + công tắc người dùng
         translateTask?.cancel(); translateTask = nil; translateNotice = nil
+        // Chip Dịch nằm trong danh sách Công cụ ⇒ tắt Công cụ là ẩn luôn.
         keyboard.translateChipLabel = TranslateText.isSupportedOS && PlusGate.isUnlocked(.translate)
             ? L("Dịch ↔ %@", TranslatePrefs.displayName(TranslatePrefs.target(UserDefaultsProvider.shared)))
             : nil
@@ -2470,7 +2471,7 @@ extension KeyboardViewController {
 extension KeyboardViewController {
     /// Nguồn: selectedText (iOS 16+) nếu có, không thì đoạn trước con trỏ (tới xuống dòng).
     fileprivate func applyTextTool(_ tool: TextTool) {
-        guard PlusGate.isUnlocked(.textTools) else { return }
+        guard keyboard.textToolsEnabled else { return }   // Plus + công tắc (viewWillAppear)
         applyingEdit = true
         defer { applyingEdit = false }
         // Từ đang soạn đã nằm trong ô (iOS chèn thẳng) — engine bỏ nó như sau khi dán.

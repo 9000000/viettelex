@@ -38,6 +38,8 @@ import androidx.compose.runtime.DisposableEffect
 import android.os.SystemClock
 import com.viettelex.keyboard.KeyAlternates
 import com.viettelex.keyboard.Keys
+import com.viettelex.keyboard.PlusFeature
+import com.viettelex.keyboard.PlusGate
 import java.text.Normalizer
 import java.util.Locale
 import com.viettelex.keyboard.tr
@@ -103,6 +105,7 @@ internal data class FeatureSearchEntry(val viTitle: String, val keywords: String
             FeatureSearchEntry("Gõ tắt", "shortcut viết tắt", FeaturePage.GoTat), // l10n-key
             FeatureSearchEntry("Bảng gõ tắt", "shortcut yaml import export", FeaturePage.GoTat), // l10n-key
             FeatureSearchEntry("Mẫu câu", "template câu soạn sẵn", FeaturePage.GoTat), // l10n-key
+            FeatureSearchEntry("Công cụ văn bản", "text tools hoa thường bỏ dấu dịch translate plus", FeaturePage.GoTat), // l10n-key
             FeatureSearchEntry("Hàng phím số", "number row số", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Hàng số cao bằng hàng chữ", "number row tall height cao số", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Giữ phím hàng trên để ra số", "số giữ lâu number long press", FeaturePage.Phim), // l10n-key
@@ -464,6 +467,11 @@ private fun GoTatPage(onBack: () -> Unit) {
     ShortcutsSection { showShortcuts = true }
     VTSection(header = tr("Mẫu câu")) {
         BoolToggle(Keys.TEMPLATES_ENABLED, Prefs.D.templatesEnabled, tr("Mẫu câu"), tr("Nút ☰ trên bàn phím chèn câu soạn sẵn — quản lý ở tab Mẫu Câu."))
+        if (PlusGate.isUnlocked(PlusFeature.TEXT_TOOLS)) {
+            RowDivider()
+            BoolToggle(Keys.TEXT_TOOLS_ENABLED, Prefs.D.textToolsEnabled, tr("Công cụ văn bản"),
+                tr("Chip ⚒️ Công cụ trong lưới mẫu câu: đổi HOA/thường, bỏ dấu, dịch…"))
+        }
     }
     GuideLinkSection(FeaturePage.GoTat)
 }
