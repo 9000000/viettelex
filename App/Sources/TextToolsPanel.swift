@@ -1,12 +1,13 @@
 // TextToolsPanel.swift
 // Bảng nổi "Công cụ…" cạnh con trỏ: 6 công cụ văn bản (TextActions.swift) thay cho 6 mục
-// phẳng trong menu VietTelex (maintainer 27/09/2026). Menu con NSMenu KHÔNG dùng được:
+// phẳng trong menu VietTelex (maintainer 27/09/2026), + "Dịch ↔ …" (phím 7) trên macOS 26+
+// (TranslateAction.swift). Menu con NSMenu KHÔNG dùng được:
 // TextInputMenuAgent (macOS 27) vẽ menu con nhưng không chuyển action của mục con về IME.
 //
 // Giữ nguyên focus + vùng chọn của app đang gõ:
 //  • NSPanel .nonactivatingPanel, canBecomeKey = false → không bao giờ thành key window,
 //    app không activate, app đang gõ vẫn giữ first responder + vùng chọn.
-//  • Vì panel không nhận phím, bàn phím đi qua Carbon hotkey KHÔNG modifier (1–6, ↑↓←→,
+//  • Vì panel không nhận phím, bàn phím đi qua Carbon hotkey KHÔNG modifier (1–6/7, ↑↓←→,
 //    Tab/⇧Tab, Return/Enter, Esc) đăng ký CHỈ khi panel đang mở — WindowServer nuốt phím
 //    đó trước app, gỡ đăng ký ngay khi đóng.
 //  • Click ra ngoài / đổi app / gõ phím khác = đóng, không làm gì.
@@ -20,8 +21,12 @@ import InputMethodKit
 // MARK: - Logic thuần (test ở AppTests/TextToolsPanelTests)
 
 enum TextToolsPanelLogic {
-    /// Thứ tự 6 nút = thứ tự cũ trong menu; phím số i+1 chạy tools[i].
-    static let tools: [TextAction] = [.addTones, .upper, .lower, .title, .sentence, .stripDiacritics]
+    /// Thứ tự 6 nút = thứ tự cũ trong menu, Dịch cuối cùng (chỉ khi OS dịch được trên
+    /// máy — macOS 26+); phím số i+1 chạy tools[i].
+    static func tools(translate: Bool) -> [TextAction] {
+        [.addTones, .upper, .lower, .title, .sentence, .stripDiacritics] + (translate ? [.translate] : [])
+    }
+    static let tools = tools(translate: TranslateText.isSupportedOS)
 
     enum Command: Equatable {
         case run(Int)        // chạy tools[index] ngay (phím số)
@@ -32,12 +37,14 @@ enum TextToolsPanelLogic {
 
     /// Phím panel bắt khi đang mở: (keyCode, shift) → lệnh. Nguồn duy nhất cho cả
     /// đăng ký hotkey lẫn xử lý.
-    static let bindings: [(keyCode: Int, shift: Bool, command: Command)] = {
+    static let bindings = bindings(toolCount: tools.count)
+
+    static func bindings(toolCount: Int) -> [(keyCode: Int, shift: Bool, command: Command)] {
         var b: [(Int, Bool, Command)] = []
-        let digits = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_6]
+        let digits = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_6, kVK_ANSI_7]
         let keypad = [kVK_ANSI_Keypad1, kVK_ANSI_Keypad2, kVK_ANSI_Keypad3,
-                      kVK_ANSI_Keypad4, kVK_ANSI_Keypad5, kVK_ANSI_Keypad6]
-        for i in 0..<tools.count {
+                      kVK_ANSI_Keypad4, kVK_ANSI_Keypad5, kVK_ANSI_Keypad6, kVK_ANSI_Keypad7]
+        for i in 0..<min(toolCount, digits.count) {
             b.append((digits[i], false, .run(i)))
             b.append((keypad[i], false, .run(i)))
         }
@@ -52,9 +59,10 @@ enum TextToolsPanelLogic {
         b.append((kVK_Space, false, .activate))
         b.append((kVK_Escape, false, .cancel))
         return b
-    }()
+    }
 
-    static func command(keyCode: Int, shift: Bool) -> Command? {
+    static func command(keyCode: Int, shift: Bool,
+                        in bindings: [(keyCode: Int, shift: Bool, command: Command)] = bindings) -> Command? {
         bindings.first { $0.keyCode == keyCode && $0.shift == shift }?.command
     }
 
@@ -192,7 +200,7 @@ final class TextToolsPanel {
     // MARK: Layout
 
     private static let rowHeight: CGFloat = 24
-    private static let width: CGFloat = 230
+    private static let width: CGFloat = 250
     private static let pad: CGFloat = 5
 
     private func present() {
@@ -223,9 +231,10 @@ final class TextToolsPanel {
 
         for (i, action) in TextToolsPanelLogic.tools.enumerated() {
             let y = size.height - Self.pad - CGFloat(i + 1) * Self.rowHeight
+            let title = action == .translate ? TranslateUI.toolTitle() : VTLocalized(action.titleKey)
             let row = ToolRowView(frame: NSRect(x: Self.pad, y: y, width: size.width - 2 * Self.pad,
                                                 height: Self.rowHeight),
-                                  title: VTLocalized(action.titleKey), shortcut: "\(i + 1)")
+                                  title: title, shortcut: "\(i + 1)")
             row.onHover = { [weak self] in self?.select(i) }
             row.onClick = { [weak self] in self?.run(i) }
             fx.addSubview(row)
@@ -240,7 +249,8 @@ final class TextToolsPanel {
         installInputHooks()
     }
 
-    private static func anchorOrigin(client: IMKTextInput?, panelSize: NSSize) -> NSPoint {
+    /// Góc dưới-trái cho một ô nổi cạnh con trỏ (bảng Công cụ, ô báo của Dịch).
+    static func anchorOrigin(client: IMKTextInput?, panelSize: NSSize) -> NSPoint {
         var carets: [NSRect] = []
         if let client {
             let sel = client.selectedRange()

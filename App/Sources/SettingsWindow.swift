@@ -25,7 +25,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// id của app đang gõ — maintainer 12/09/2026). Mở tab nâng cao theo đường này
     /// thì tự tắt "Ẩn tính năng nâng cao": user bấm là muốn thấy bảng, không phải
     /// rơi về Tùy chỉnh.
-    func show(tab: SettingsTab, modeFilter: String? = nil) {
+    /// `revealTextTools`: mở sẵn mục Công cụ văn bản (Dịch thiếu gói → tải ở đó).
+    func show(tab: SettingsTab, modeFilter: String? = nil, revealTextTools: Bool = false) {
         NSApp.setActivationPolicy(.regular)
         if tab == .modeTable || tab == .experimental, !AppState.shared.advancedFeatures {
             AppState.shared.advancedFeatures = true       // trước khi model đọc (init fallback về .general)
@@ -36,6 +37,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         }
         model?.selectedTab = tab
         if let modeFilter { model?.modeFilter = modeFilter }
+        if revealTextTools { model?.revealTextTools = true }
         // NOT in this runloop turn: the .accessory→.regular policy flip above needs a
         // window-server round trip before an activation can stick. Activating in the
         // same turn intermittently loses the race — the window is created but never
@@ -138,6 +140,10 @@ final class SettingsModel: ObservableObject {
     @Published var stickyInputSource: Bool { didSet { AppState.shared.stickyInputSource = stickyInputSource } }
     @Published var switchHotkey: String { didSet { AppState.shared.switchHotkey = switchHotkey } }
     @Published var textToolsInMenu: Bool { didSet { AppState.shared.textToolsInMenu = textToolsInMenu } }
+    /// Công cụ → Dịch: ngôn ngữ đích (TranslatePrefs; chỉ hiện trên macOS 26+).
+    @Published var translateTarget: String { didSet { AppState.shared.translateTarget = translateTarget } }
+    /// Mở sẵn mục Công cụ văn bản (ô báo "chưa tải gói dịch" dẫn tới đây).
+    @Published var revealTextTools = false
     @Published var mathResults: Bool { didSet { AppState.shared.mathResults = mathResults } }
     @Published var numberChips: Bool { didSet { AppState.shared.numberChips = numberChips } }
     @Published var typoHints: Bool { didSet { AppState.shared.typoHints = typoHints } }
@@ -233,6 +239,7 @@ final class SettingsModel: ObservableObject {
         stickyInputSource = AppState.shared.stickyInputSource
         switchHotkey = AppState.shared.switchHotkey
         textToolsInMenu = AppState.shared.textToolsInMenu
+        translateTarget = AppState.shared.translateTarget
         mathResults = AppState.shared.mathResults
         numberChips = AppState.shared.numberChips
         typoHints = AppState.shared.typoHints
@@ -776,6 +783,9 @@ struct GeneralTab: View {
                     Text(model.loc("Select text in any app, then open the VietTelex menu → Tools… and pick (or press 1–6): add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones."))
                         .font(.caption).foregroundStyle(.secondary)
                     Toggle(model.loc("Show text tools in the VietTelex menu"), isOn: $model.textToolsInMenu)
+                    if #available(macOS 26.0, *) {
+                        TranslateSettingsRows()
+                    }
                     Picker(model.loc("Add-tones hotkey"), selection: $model.addTonesHotkey) {
                         ForEach(TextActionHotkey.choices, id: \.id) { c in
                             Text(c.id == "off" ? model.loc("Off") : c.label).tag(c.id)
@@ -833,6 +843,11 @@ struct GeneralTab: View {
         }
         .formStyle(.grouped)
         .onAppear { model.refreshAccessibilityStatus() }
+        .onReceive(model.$revealTextTools) { reveal in
+            guard reveal else { return }
+            textToolsExpanded = true
+            model.revealTextTools = false
+        }
         // Event-driven, like the mode table: the user leaves for System Settings and
         // comes back, which makes this window key again.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in

@@ -50,6 +50,10 @@ targets:
       #    `VietTelex --add-tones`, không bao giờ trong process IME.
       - path: iOS/App/Backup/SyncCore.swift
       - path: iOS/Keyboard/TextTools.swift
+      #  • Công cụ → Dịch (macOS 26+, TranslateAction.swift): chiều dịch + nhận ra tiếng Việt
+      #    không cần NaturalLanguage, ngôn ngữ đích `translateTarget` — cùng luật với iOS.
+      - path: iOS/Keyboard/Translate.swift
+      - path: iOS/Shared/TranslatePrefs.swift
       # L("…") của TextTools (giao diện tiếng Anh, b8da26e) — chỉ Foundation.
       - path: iOS/Shared/L10n.swift
       - path: iOS/Keyboard/AddTones.swift
@@ -134,6 +138,9 @@ targets:
         # TelexCore remains Swift 6 strict-concurrency clean.
         SWIFT_VERSION: "5.0"
         ENABLE_HARDENED_RUNTIME: "YES"
+        # Translation (Công cụ → Dịch) chỉ có từ macOS 15 (dùng từ 26): weak-link để bản
+        # build vẫn khởi động trên macOS 13/14 — thiếu framework thì nút Dịch đã bị ẩn.
+        OTHER_LDFLAGS: ["$(inherited)", "-weak_framework", "Translation", "-weak_framework", "_Translation_SwiftUI"]
       configs:
         Debug:
           # Keep the installed Dev input method distinct from the signed stable build.

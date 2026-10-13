@@ -1243,6 +1243,13 @@ final class AppState: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "addTonesHotkey") }
     }
 
+    /// Công cụ → Dịch: ngôn ngữ đích (cùng khoá + luật với iOS — TranslatePrefs; đồng bộ
+    /// iCloud qua MacSyncStore.textSettings). Mặc định "en"; tiếng Việt không bao giờ là đích.
+    var translateTarget: String {
+        get { TranslatePrefs.target(defaults) }
+        set { TranslatePrefs.setTarget(newValue, defaults) }
+    }
+
     /// Setting đồng bộ iCloud theo key macOS (MacSyncStore.settings). nil = key lạ.
     func syncedSetting(_ key: String) -> Bool? {
         switch key {
