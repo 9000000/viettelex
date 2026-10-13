@@ -980,6 +980,23 @@ final class WordKeyRoutingTests: XCTestCase {
         }
     }
 
+    // #124: numpad digits are never VNI marks (UniKey) — they end the word; the number
+    // row keeps marking.
+    func testKeypadDigitsAreBoundariesEvenInVNI() {
+        for c in "0123456789".utf8 {
+            XCTAssertFalse(isWordKey(c, vniMode: true, keypad: true))
+            XCTAssertFalse(isWordKey(c, vniMode: false, keypad: true))
+        }
+        let keypad = [kVK_ANSI_Keypad0, kVK_ANSI_Keypad1, kVK_ANSI_Keypad2, kVK_ANSI_Keypad3,
+                      kVK_ANSI_Keypad4, kVK_ANSI_Keypad5, kVK_ANSI_Keypad6, kVK_ANSI_Keypad7,
+                      kVK_ANSI_Keypad8, kVK_ANSI_Keypad9]
+        for k in keypad { XCTAssertTrue(isKeypadDigitKeyCode(k), "keycode \(k)") }
+        for k in [kVK_ANSI_1, kVK_ANSI_0, kVK_ANSI_9, kVK_F20, kVK_ANSI_KeypadDecimal,
+                  kVK_ANSI_KeypadEnter, kVK_ANSI_A] {
+            XCTAssertFalse(isKeypadDigitKeyCode(k), "keycode \(k)")
+        }
+    }
+
     func testEverythingElseIsABoundaryInBothModes() {
         for c in " \t.,;:!?-_/\\[]{}()'\"@#$%^&*+=<>|~`".utf8 {
             XCTAssertFalse(isWordKey(c, vniMode: false))
