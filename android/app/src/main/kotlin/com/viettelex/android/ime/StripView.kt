@@ -119,6 +119,8 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
 
     // --- vuốt ⌫: xem trước đoạn sẽ xoá / ô Khôi phục (đè nội dung bar tới khi gỡ) ---
     private var swipePreview: String? = null
+    /** Dòng trạng thái không chạm được (vd "Đang dịch…", nhắc tải gói dịch); null = gỡ. */
+    private var statusText: String? = null
     private var restoreOffer = false
     /** Hoàn tác thêm dấu (SuggestionSlots tầng 1) — vẽ cùng kiểu pill ô Khôi phục. */
     private var actionPill: BarChip? = null
@@ -192,6 +194,13 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
     fun showSwipePreview(text: String?) {
         if (text == swipePreview) return
         swipePreview = text
+        invalidate()
+    }
+
+    /** Trạng thái tạm (không chạm được) đè lên thanh gợi ý; null = gỡ. */
+    fun showStatus(text: String?) {
+        if (text == statusText) return
+        statusText = text
         invalidate()
     }
 
@@ -360,6 +369,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         drawExtras(c, w, cy, o)
         if (o <= 0f || collapsed && anim == null) return
         val alpha = (255 * o).toInt()
+        statusText?.let { drawChip(c, it, alpha, TextUtils.TruncateAt.END); return }
         swipePreview?.let { drawChip(c, "⌫ " + it.replace('\n', ' '), alpha, TextUtils.TruncateAt.START); return }
         if (restoreOffer) { drawChip(c, restoreText, alpha, TextUtils.TruncateAt.END); return }
         actionPill?.let { drawChip(c, it.label, alpha, TextUtils.TruncateAt.END); return }
@@ -497,7 +507,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         if (x >= w - zone) return T_CHEVRON
         if (clipButton && tools && x >= w - zone - theme.dp(CLIP_W)) return T_CLIP
         if (x >= w - zone - extraW()) return T_NONE
-        if (swipePreview != null) return T_NONE
+        if (swipePreview != null || statusText != null) return T_NONE
         if (restoreOffer) return T_RESTORE
         if (actionPill != null) return T_PILL
         if (paste) return T_PASTE

@@ -147,6 +147,10 @@ object Keys {
     const val PLUS_UNLOCKED = "plusUnlocked"
     /** Boolean: giả lập đã mua — chỉ bản debug nghe. */
     const val PLUS_DEBUG_OVERRIDE = "plusDebugOverride"
+    /** Dịch trên máy (Plus): ngôn ngữ đích, mã ML Kit (String, mặc định "en"; xem [TranslateLangs]). */
+    const val TRANSLATE_TARGET = "translateTarget"
+    /** Dịch trên máy: chỉ tải gói ngôn ngữ qua Wi-Fi (Bool, mặc định BẬT). */
+    const val TRANSLATE_WIFI_ONLY = "translateWifiOnly"
 
     // file trong filesDir
     const val USERLM_FILE = "userlm.bin"

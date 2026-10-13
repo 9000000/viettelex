@@ -52,6 +52,10 @@ import com.viettelex.keyboard.PlusGate
 import com.viettelex.keyboard.TextTool
 import com.viettelex.keyboard.TextToolRunner
 import com.viettelex.keyboard.TextTools
+import com.viettelex.keyboard.TranslateController
+import com.viettelex.keyboard.TranslateJob
+import com.viettelex.keyboard.TranslateResult
+import com.viettelex.keyboard.TranslateRunner
 import com.viettelex.keyboard.TelexKeyPrior
 import com.viettelex.keyboard.Templates
 import com.viettelex.keyboard.TouchLog
@@ -93,6 +97,10 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     private var swipeUndo: String? = null
     /** Công cụ văn bản vừa áp ⇒ ô "↩︎ Hoàn tác" / ⌫ ngay sau (một lượt). */
     private var toolUndo: TextTools.Undo? = null
+    /** Dịch trên máy (Plus): controller rẻ; client ML Kit chỉ tạo khi chạm "Dịch", đóng ngay sau. */
+    private val translate by lazy { TranslateController(com.viettelex.android.translate.MlKitEngineFactory(applicationContext)) }
+    private var translateUsed = false
+    private val clearStatusRun = Runnable { strip?.showStatus(null) }
 
     /** Wrapper cache theo InputConnection hiện hành (không cấp phát mỗi phím). */
     private fun port(): EditorPort? {
@@ -212,6 +220,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     }
 
     override fun onDestroy() {
+        cancelTranslate()                              // đóng client ML Kit nếu đang dịch
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
         accessibility?.removeTouchExplorationStateChangeListener(touchExplorationListener)
         accessibility = null
@@ -351,6 +360,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         kb.configureSpaceFlick(settings.spaceSwipeLanguage, session.language)
         if (session.language == com.viettelex.keyboard.KeyboardLanguage.EN) warmEnglish()
         kb.textToolsEnabled = PlusGate.isUnlocked(PlusFeature.TEXT_TOOLS) && !field.isSecure
+        kb.translateEnabled = PlusGate.isUnlocked(PlusFeature.TRANSLATE) && !field.isSecure
         st.setPlane(kb.plane)
         // Giữ lâu "," = gõ giọng nói: chỉ khi máy có IME giọng nói (đọc lại khi vào ô mới —
         // user có thể bật/tắt trong Cài đặt), không ở ô mật khẩu.
@@ -421,6 +431,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
+        cancelTranslate()
         swipeFieldOk = false
         // FUTO Swipe / từ điển Anh / ảnh nền / emoji: GIỮ qua các lần hiện (giải lại mỗi lần hiện
         // tốn ~4.7 MB cấp phát) — nhả khi ẩn lâu ([idleRelease]; onTrimMemory hầu như không tới).
@@ -927,6 +938,70 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         }
         applyAutoShift()
         refreshBar()
+    }
+
+    // MARK: dịch trên máy (Plus) — logic thuần ở keyboard/Translate.kt, ML Kit ở translate/
+
+    /**
+     * Dịch vùng chọn / đoạn trước con trỏ (giống công cụ văn bản) sang ngôn ngữ đích đã chọn
+     * trong app ([Keys.TRANSLATE_TARGET]); đoạn đã là ngôn ngữ đích ⇒ dịch sang tiếng Việt.
+     * Chạy nền (ML Kit), thanh gợi ý hiện "Đang dịch…"; kết quả chỉ ghi nếu ô chưa đổi.
+     */
+    override fun onTranslate() {
+        if (!PlusGate.isUnlocked(PlusFeature.TRANSLATE) || proxy.isSecure) return
+        clearSwipeUndo()
+        handler.removeCallbacks(suggestRun)
+        if (!proxy.begin()) return
+        val job = try {
+            session.commitComposing(proxy)
+            TranslateRunner.prepare(proxy, prefs.getString(Keys.TRANSLATE_TARGET, null), IcProxy.CONTEXT_CAP)
+        } finally { proxy.end() }
+        resetIfEditFailed()
+        if (job == null) { refreshBar(); return }
+        translateUsed = true
+        showTranslateStatus(tr("Đang dịch…"), 0)
+        translate.start(job) { j, r -> onTranslated(j, r) }
+    }
+
+    private fun onTranslated(job: TranslateJob, r: TranslateResult) {
+        when (r) {
+            is TranslateResult.Ok -> {
+                showTranslateStatus(null, 0)
+                if (!proxy.begin()) return
+                val out = try { TranslateRunner.commit(job, r.text, proxy) } finally { proxy.end() }
+                resetIfEditFailed()
+                when (out) {
+                    is TextToolRunner.Outcome.Applied -> {
+                        session.externalSelectionChange()
+                        toolUndo = out.undo
+                        strip?.showRestore(true, tr("Hoàn tác"))
+                    }
+                    TextToolRunner.Outcome.FailSafe -> TouchLog.write("failsafe: translate field changed → drop result")
+                    else -> {}
+                }
+                applyAutoShift()
+                refreshBar()
+            }
+            TranslateResult.MissingModel -> showTranslateStatus(tr("Mở app VietTelex để tải gói dịch"), 3500)
+            is TranslateResult.Failed -> {
+                TouchLog.write("translate failed: ${r.reason}")
+                showTranslateStatus(tr("Không dịch được — thử lại sau"), 2500)
+            }
+        }
+    }
+
+    /** [text] null = gỡ; [ms] > 0 = tự gỡ sau chừng đó. */
+    private fun showTranslateStatus(text: String?, ms: Long) {
+        handler.removeCallbacks(clearStatusRun)
+        strip?.showStatus(text)
+        if (text != null && ms > 0) handler.postDelayed(clearStatusRun, ms)
+    }
+
+    /** Ô đóng / IME huỷ: bỏ lượt đang dịch, đóng client. Chưa từng dịch ⇒ không đụng gì (0 chi phí). */
+    private fun cancelTranslate() {
+        if (!translateUsed) return
+        translate.cancel()
+        showTranslateStatus(null, 0)
     }
 
     private fun undoTextTool() {

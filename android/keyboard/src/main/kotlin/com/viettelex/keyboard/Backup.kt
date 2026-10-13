@@ -72,6 +72,8 @@ object BackupSettings {
         Spec(Keys.KEYBOARD_TRANSPARENCY, SettingKind.IntRange(0, 0..100)),
         Spec(Keys.KEY_LABEL_TRANSPARENCY, SettingKind.IntRange(0, 0..100)),
         Spec(Keys.UI_LANGUAGE, SettingKind.Choice(L10n.DEFAULT, L10n.supported)),
+        // Ngôn ngữ đích của Dịch trên máy (gói model KHÔNG đi theo — máy mới tải lại trong app).
+        Spec(Keys.TRANSLATE_TARGET, SettingKind.Choice(TranslateLangs.DEFAULT_TARGET, TranslateLangs.TARGETS)),
     )
     val byKey: Map<String, Spec> = all.associateBy { it.key }
 }

@@ -95,6 +95,8 @@ data class LayoutConfig(
     val oneHand: OneHandSide = OneHandSide.OFF,
     /** Bảng sửa văn bản có hàng công cụ văn bản cuối (PlusGate TEXT_TOOLS). */
     val editTools: Boolean = false,
+    /** Hàng công cụ có thêm ô "Dịch" (PlusGate TRANSLATE). */
+    val editTranslate: Boolean = false,
 )
 
 object KeyLayout {

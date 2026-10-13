@@ -40,6 +40,7 @@ enum class PlusFeature(val viTitle: String, val viDetail: String) {
     ADVANCED_CLIPBOARD("Clipboard nâng cao", "Ghim không giới hạn, chip tách số tài khoản, số điện thoại, mã OTP."),
     CLOUD_SYNC("Đồng bộ", "Cài đặt, gõ tắt và từ đã học theo bạn sang máy khác."),
     TEXT_TOOLS("Công cụ văn bản", "Đổi HOA/thường, hoa đầu từ/đầu câu, xoá dấu tiếng Việt."),
+    TRANSLATE("Dịch trên máy", "Dịch đoạn vừa gõ hoặc vùng chọn giữa tiếng Việt và ngôn ngữ bạn chọn — ngay trên máy, không gửi chữ đi đâu."),
     THANKS_BADGE("Huy hiệu cảm ơn", "Dấu ★ nhỏ trong app — lời cảm ơn vì đã ủng hộ.");
 
     /** Hiển thị theo ngôn ngữ giao diện ([L10n]). */
@@ -56,6 +57,7 @@ enum class PlusFeature(val viTitle: String, val viDetail: String) {
         ADVANCED_CLIPBOARD -> tr("Cách dùng: bật Lịch sử clipboard (Tính Năng → Riêng tư & clipboard), chạm nút clipboard trên thanh gợi ý. Copy STK/SĐT/OTP → chip “Dán …” hiện trên thanh gợi ý.")
         CLOUD_SYNC -> tr("Cách dùng: tự động qua Sao lưu của Android (Cài đặt hệ thống → Google → Sao lưu). Chuyển máy: Tính Năng → Sao lưu & đồng bộ → Xuất / nhập file.")
         TEXT_TOOLS -> tr("Cách dùng: chạm ☰ trên thanh gợi ý → chip “Aa Công cụ văn bản”, hoặc hàng cuối bảng sửa văn bản (icon con trỏ trên thanh gợi ý).")
+        TRANSLATE -> tr("Cách dùng: chọn ngôn ngữ đích và tải gói dịch ngay bên dưới, rồi chạm ☰ trên thanh gợi ý → “Aa Công cụ văn bản” → “Dịch” (hoặc ô “Dịch” ở hàng cuối bảng sửa văn bản).")
         THANKS_BADGE -> tr("Tự hiện sau khi mua.")
     }
 

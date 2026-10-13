@@ -44,6 +44,9 @@ object EditPanel {
     /** insert của ô công cụ văn bản: TOOL_PREFIX + [TextTool.id]. */
     const val TOOL_PREFIX = "TOOL:"
 
+    /** insert của ô "Dịch" (dịch trên máy, PlusGate TRANSLATE) trên hàng công cụ. */
+    const val TRANSLATE_INSERT = TOOL_PREFIX + "translate"
+
     fun toolOf(insert: String): TextTool? =
         if (insert.startsWith(TOOL_PREFIX)) TextTool.byId(insert.substring(TOOL_PREFIX.length)) else null
 
@@ -91,17 +94,19 @@ object EditPanel {
         val m = KeyLayout.ROW_MARGIN_H * d
         val mv = KeyLayout.ROW_MARGIN_V * d
         val gap = KeyLayout.KEY_SPACING * d
-        val rows = GRID.size + if (c.editTools) 1 else 0
+        val hasTools = c.editTools || c.editTranslate
+        val rows = GRID.size + if (hasTools) 1 else 0
         val rowH = c.keyAreaPx / rows
-        if (c.editTools) {
-            val tools = TextTool.entries
-            val w = (c.widthPx - 2 * m - gap * (tools.size - 1)) / tools.size
+        if (hasTools) {
+            // (nhãn, insert): các TextTool (nếu bật) rồi ô "Dịch" (nếu bật).
+            val cells = (if (c.editTools) TextTool.entries.map { toolTitle(it) to TOOL_PREFIX + it.id } else emptyList()) +
+                (if (c.editTranslate) listOf(tr("Dịch") to TRANSLATE_INSERT) else emptyList())
+            val w = (c.widthPx - 2 * m - gap * (cells.size - 1)) / cells.size
             val t = GRID.size * rowH + mv
             val b = (GRID.size + 1) * rowH - mv
             var x = m
-            for (tool in tools) {
-                val l = toolTitle(tool)
-                out += LaidKey(KeyKind.EDIT, l, l, TOOL_PREFIX + tool.id, x, t, x + w, b)
+            for ((l, ins) in cells) {
+                out += LaidKey(KeyKind.EDIT, l, l, ins, x, t, x + w, b)
                 x += w + gap
             }
         }

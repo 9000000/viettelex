@@ -61,5 +61,11 @@
             </intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/method" />
         </service>
+        <!-- ML Kit: không tự khởi tạo lúc mở process (IME chạy chung process) — khởi tạo lười
+             ở MlKitTranslate.ensureInit khi chạm "Dịch" / mở trang cài đặt dịch. -->
+        <provider
+            android:name="com.google.mlkit.common.internal.MlKitInitProvider"
+            android:authorities="${applicationId}.mlkitinitprovider"
+            tools:node="remove" />
     </application>
 </manifest>

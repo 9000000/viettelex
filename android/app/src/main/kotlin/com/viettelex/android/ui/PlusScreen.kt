@@ -78,6 +78,7 @@ fun PlusScreen(plus: PlusController, onBack: () -> Unit) {
                     Text(f.howTo, style = VTType.footnote, color = c.accent)
                 }
             }
+            if (f == PlusFeature.TRANSLATE && PlusGate.isUnlocked(f)) TranslateSettings()
             if (f.settingKey != null && PlusGate.isUnlocked(f)) {
                 SettingToggle(tr("Bật chip “Thêm dấu”"), null, addTonesChip) { addTonesChip = it }
             }
