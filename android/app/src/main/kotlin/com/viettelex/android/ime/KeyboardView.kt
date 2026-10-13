@@ -90,6 +90,8 @@ class KeyboardView(
         fun onOpenTemplates()
         /** Chạm một thao tác công cụ văn bản (Plus) trong lưới mẫu câu. */
         fun onTextTool(tool: TextTool)
+        /** Chạm "Dịch" (dịch trên máy, Plus) — lưới công cụ hoặc hàng công cụ bảng sửa. */
+        fun onTranslate() {}
         fun onPlaneChanged(plane: Plane)
         /** Recents emoji (đọc/ghi pref). */
         fun emojiRecents(): List<String>
@@ -200,20 +202,32 @@ class KeyboardView(
     var textToolsEnabled = false
         set(v) {
             if (field != v) {
-                field = v; if (!v) textToolsMode = false
+                field = v; if (!v && !translateEnabled) textToolsMode = false
                 refreshTemplatesPane()
                 if (plane == Plane.EDIT) rebuild()
             }
         }
     private var textToolsMode = false
 
+    /** "Dịch" trên máy (PlusGate TRANSLATE) — thêm vào cùng hai lối vào với công cụ văn bản. */
+    var translateEnabled = false
+        set(v) {
+            if (field != v) {
+                field = v; if (!v && !textToolsEnabled) textToolsMode = false
+                refreshTemplatesPane()
+                if (plane == Plane.EDIT) rebuild()
+            }
+        }
+
     private fun refreshTemplatesPane() {
         if (textToolsMode) {
             templatesPane.setItems(emptyList())
-            templatesPane.setExtras(listOf(tr("‹ Mẫu câu") to TOOLS_BACK) + TextTool.entries.map { it.label to it.id }, gear = false)
+            templatesPane.setExtras(listOf(tr("‹ Mẫu câu") to TOOLS_BACK) +
+                (if (textToolsEnabled) TextTool.entries.map { it.label to it.id } else emptyList()) +
+                (if (translateEnabled) listOf(tr("Dịch") to TOOLS_TRANSLATE) else emptyList()), gear = false)
         } else {
             templatesPane.setItems(templates)
-            templatesPane.setExtras(if (textToolsEnabled) listOf(tr("⚒️ Công cụ") to TOOLS_ENTRY) else emptyList(), gear = true)
+            templatesPane.setExtras(if (textToolsEnabled || translateEnabled) listOf(tr("⚒️ Công cụ") to TOOLS_ENTRY) else emptyList(), gear = true)
         }
         if (plane == Plane.TEMPLATES) rebuild()
     }
@@ -551,7 +565,7 @@ class KeyboardView(
     private var numberRowFull = false
     /** Chế độ một tay (IME chỉ đặt khác OFF trên điện thoại). */
     var oneHand = OneHandSide.OFF; private set
-    private fun signature() = "$returnLabel|$inputKind|$needsGlobe|$width|$keyAreaPx|$numberSigned|$numberDecimal|$numberRow|$numberRowFull|$oneHand|$textToolsEnabled"
+    private fun signature() = "$returnLabel|$inputKind|$needsGlobe|$width|$keyAreaPx|$numberSigned|$numberDecimal|$numberRow|$numberRowFull|$oneHand|$textToolsEnabled|$translateEnabled"
 
     private fun rebuild() {
         if (width == 0) return
@@ -563,7 +577,7 @@ class KeyboardView(
         keys = planeCache.getOrPut(plane) {
             KeyLayout.build(LayoutConfig(plane, width.toFloat(), keyAreaPx, d, inputKind, needsGlobe,
                 theme.tablet, returnLabel, numberSigned, numberDecimal, numberRow, oneHand,
-                editTools = textToolsEnabled, numberRowFull = numberRowFull))
+                editTools = textToolsEnabled, numberRowFull = numberRowFull, editTranslate = translateEnabled))
         }
         railSpan = if (OneHand.appliesTo(plane)) OneHand.rail(width.toFloat(), oneHand) else null
         spaceKey = keys.firstOrNull { it.kind == KeyKind.SPACE }
@@ -681,6 +695,7 @@ class KeyboardView(
     private fun editEnabled(a: EditAction) = !a.needsSelection || editHasSelection
 
     private fun fireEdit(k: LaidKey) {
+        if (k.insert == EditPanel.TRANSLATE_INSERT) { listener?.onTranslate(); return }   // ở lại bảng sửa
         EditPanel.toolOf(k.insert)?.let { listener?.onTextTool(it); return }   // ở lại bảng sửa
         val a = EditAction.of(k.insert) ?: return
         when (a) {
@@ -1661,6 +1676,10 @@ class KeyboardView(
                 templatesPane.resetScroll()
                 refreshTemplatesPane()
             }
+            TOOLS_TRANSLATE -> {
+                setPlane(Plane.LETTERS)
+                listener?.onTranslate()
+            }
             else -> {
                 val tool = TextTool.byId(id) ?: return
                 setPlane(Plane.LETTERS)
@@ -1685,6 +1704,7 @@ class KeyboardView(
         const val RETURN_HOLD_MS = 450L
         private const val TOOLS_ENTRY = "\uE000tools"
         private const val TOOLS_BACK = "\uE000back"
+        private const val TOOLS_TRANSLATE = "\uE000translate"
         const val EDIT_HOLD_MS = 400L
         const val EDIT_REPEAT_MS = 70L
     }

@@ -4,4 +4,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "VietTelex"
-include(":telexcore", ":keyboard", ":app")
+include(":telexcore", ":keyboard", ":app", ":translate")

@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Chỉ dùng cho Mẫu câu động (https://) do người dùng tạo — fetch lúc chạm. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Dịch trên máy: "Chỉ tải qua Wi-Fi" kiểm tra mạng hiện tại trước khi tải module/gói. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Nút gõ giọng nói: thấy IME khác (vd Google voice typing) dưới package visibility. -->
     <queries>
         <intent>

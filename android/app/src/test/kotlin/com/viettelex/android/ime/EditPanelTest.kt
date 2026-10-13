@@ -61,6 +61,19 @@ class EditPanelTest {
         assertEquals(16, KeyLayout.build(LayoutConfig(Plane.EDIT, 390f, 280f, 1f)).size)
     }
 
+    /** Dịch trên máy: ô "Dịch" cuối hàng công cụ; chỉ bật dịch ⇒ hàng có đúng một ô. */
+    @Test fun translateCellOnToolsRow() {
+        val both = KeyLayout.build(LayoutConfig(Plane.EDIT, 390f, 280f, 1f, editTools = true, editTranslate = true))
+        assertEquals(16 + com.viettelex.keyboard.TextTool.entries.size + 1, both.size)
+        val tr = both.single { it.insert == EditPanel.TRANSLATE_INSERT }
+        assertEquals(null, EditPanel.toolOf(tr.insert)); assertEquals(null, EditAction.of(tr.insert))
+        assertEquals(both.filter { it.top == tr.top }.maxOf { it.right }, tr.right)
+        for (k in both) assertEquals(k, KeyLayout.hit(both, Plane.EDIT, k.centerX, k.centerY, 4f, 1f))
+        val only = KeyLayout.build(LayoutConfig(Plane.EDIT, 390f, 280f, 1f, editTranslate = true))
+        assertEquals(17, only.size)
+        assertTrue(only.any { it.insert == EditPanel.TRANSLATE_INSERT })
+    }
+
     // MARK: hàm thuần
 
     @Test fun lineStartAndEnd() {

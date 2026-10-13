@@ -95,6 +95,8 @@ data class LayoutConfig(
     val oneHand: OneHandSide = OneHandSide.OFF,
     /** Bảng sửa văn bản có hàng công cụ văn bản cuối (PlusGate TEXT_TOOLS). */
     val editTools: Boolean = false,
+    /** Hàng công cụ có thêm ô "Dịch" (PlusGate TRANSLATE). */
+    val editTranslate: Boolean = false,
     /** Hàng số cao bằng hàng chữ (Settings, mặc định tắt ⇒ phím số 0.8×) — [keyAreaPx] đã tính theo nó. */
     val numberRowFull: Boolean = false,
 )
