@@ -23,6 +23,13 @@ for pair in i686:x86 x86_64:x64 aarch64:arm64; do
   if grep -E "warning:" "$b.log" | grep -v character-conversion | grep -q .; then
     grep -E "warning:" "$b.log" | grep -v character-conversion | sort -u >&2
   fi
+  # Size budget (2026-10: ~440 KB TIP / ~145 KB helper at most per arch). The TIP is loaded
+  # into every process; a jump means libc++abi's demangler (ime/src/no_demangle.cpp) or
+  # dead code (-ffunction-sections / --gc-sections / ThinLTO, CMakeLists.txt) came back.
+  for f in "$b/ime/VietTelexTIP.dll:500000" "$b/app/VietTelexSetupHelper.exe:180000"; do
+    sz=$(wc -c < "${f%%:*}")
+    [ "$sz" -le "${f##*:}" ] || { echo "${f%%:*}: $sz bytes > budget ${f##*:}" >&2; exit 1; }
+  done
   mkdir -p "/out/bin/$arch"
   cp "$b/app/VietTelex.exe" "$b/app/VietTelexSetupHelper.exe" "/out/bin/$arch/"
   cp "$b/ime/VietTelexTIP.dll" "/out/bin/$arch/VietTelexTIP$V.dll"

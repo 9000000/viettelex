@@ -85,6 +85,7 @@ if(WIN32)
     target_link_options(VietTelexTIP PRIVATE /OPT:REF /OPT:ICF $<$<CONFIG:Release,MinSizeRel>:/LTCG>
                         /DEPENDENTLOADFLAG:0x800)
   else()
+    target_sources(VietTelexTIP PRIVATE src/no_demangle.cpp)  # drops libc++abi's demangler
     target_compile_options(VietTelexTIP PRIVATE -Wall -Wextra -fno-exceptions -fno-rtti -Os
                            -ffunction-sections -fdata-sections)
     target_link_options(VietTelexTIP PRIVATE -static -static-libgcc -static-libstdc++ -Wl,--gc-sections -s)

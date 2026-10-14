@@ -8,8 +8,8 @@ target_link_libraries(vtx_app_core PUBLIC vtx_ime_core viettelex_text)
 
 if(VTX_IME_TESTS)
   add_executable(vtx_app_tests ../ime/tests/test_main.cpp tests/app_tests.cpp tests/typo_fix_tests.cpp
-                 tests/onboarding_game_tests.cpp)
-  target_include_directories(vtx_app_tests PRIVATE ../ime/tests)
+                 tests/onboarding_game_tests.cpp src/strings.cpp)  # strings.cpp: portable UI text
+  target_include_directories(vtx_app_tests PRIVATE ../ime/tests src)
   target_link_libraries(vtx_app_tests PRIVATE vtx_app_core)
   target_compile_definitions(vtx_app_tests PRIVATE
                              VTX_KB_RESOURCES="${CMAKE_CURRENT_SOURCE_DIR}/../../iOS/Keyboard/Resources"
@@ -68,13 +68,21 @@ if(WIN32)
                              _WIN32_WINNT=0x0A00 WINVER=0x0A00)
   target_link_libraries(VietTelexSetupHelper PRIVATE vtx_app_core shell32 user32)
   if(NOT MSVC)
+    # no_demangle.cpp: keeps libc++abi's ~128 KB demangler out (see the file).
+    target_sources(VietTelexSetupHelper PRIVATE ../ime/src/no_demangle.cpp)
+    target_compile_options(VietTelexSetupHelper PRIVATE -Wall -Wextra -fno-exceptions -fno-rtti -Os)
     target_link_options(VietTelexSetupHelper PRIVATE -municode -static -static-libgcc -static-libstdc++
                         -Wl,--gc-sections -s)
+  else()
+    target_compile_options(VietTelexSetupHelper PRIVATE /W4 /permissive- /utf-8 /GR- /EHs-c- /D_HAS_EXCEPTIONS=0
+                           /Gy /Gw)
+    target_link_options(VietTelexSetupHelper PRIVATE /OPT:REF /OPT:ICF)
   endif()
   if(MSVC)
     target_compile_options(VietTelex PRIVATE /W4 /permissive- /utf-8 /GR- /EHs-c- /D_HAS_EXCEPTIONS=0 /Gy /Gw)
     target_link_options(VietTelex PRIVATE /OPT:REF /OPT:ICF /MANIFEST:NO)
   else()
+    target_sources(VietTelex PRIVATE ../ime/src/no_demangle.cpp)
     target_compile_options(VietTelex PRIVATE -Wall -Wextra -fno-exceptions -fno-rtti -Os)
     target_link_options(VietTelex PRIVATE -municode -static -static-libgcc -static-libstdc++ -Wl,--gc-sections -s)
   endif()

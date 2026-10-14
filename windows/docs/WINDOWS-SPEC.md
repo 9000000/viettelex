@@ -158,7 +158,7 @@ Mặc định lấy từ `App/Sources/AppState.swift` (1.7.12); nếu macOS đ�
   `SetPreferredAppMode`), DPI-aware per-monitor v2. **Không** WinUI/WPF/.NET (runtime nặng).
   Tự khởi động (Run key HKCU) để giữ khay; tắt app vẫn gõ được (TIP độc lập).
 - Cửa sổ Cài đặt, các tab giống macOS: **Kiểu gõ · Chính tả · Gõ tắt · Ứng dụng · Giới thiệu**
-  (+ **Thử nghiệm** khi bật Debug: log, chế độ in-place/hook theo app).
+  (log gỡ lỗi: Giới thiệu → Chẩn đoán; chế độ in-place/hook theo app: tab Ứng dụng).
 - Một instance (named mutex); lần mở thứ hai → đưa cửa sổ lên (nhường, không kill — như macOS
   `SingleInstance` "yield not kill").
 - Cập nhật: đọc `https://viettelex.com/stable.json` (cùng định dạng `docs/stable.json`, thêm

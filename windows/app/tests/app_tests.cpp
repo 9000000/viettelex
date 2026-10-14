@@ -584,6 +584,11 @@ TEST(ctrl_shift_from_another_keyboard_activates_viettelex) {
     CHECK(foreignChordAction(SwitchHotkey::Off, 0, enUS, false) == ForeignChord::Ignore);
     CHECK(chordWatcherWanted(SwitchHotkey::CtrlShift));
     CHECK(!chordWatcherWanted(SwitchHotkey::AltZ) && !chordWatcherWanted(SwitchHotkey::WinSpace));
+    CHECK(chordToggleAllowed(true, false, false, false));
+    CHECK(!chordToggleAllowed(true, true, false, false));   // fires on release only
+    CHECK(!chordToggleAllowed(true, false, true, false));   // game / fullscreen
+    CHECK(!chordToggleAllowed(true, false, false, true));   // Ctrl+Shift+click / drag
+    CHECK(!chordToggleAllowed(false, false, false, false));
 
     // Which input locale to request.
     const uintptr_t list[] = {0x04090409, 0x042A042A, 0xF0C1042A};
@@ -599,6 +604,26 @@ TEST(ctrl_shift_from_another_keyboard_activates_viettelex) {
     CHECK(defaultInputAdvice(SwitchHotkey::CtrlShift, 0) == DefaultInputAdvice::None);  // unreadable
     CHECK(defaultInputAdvice(SwitchHotkey::WinSpace, enUS) == DefaultInputAdvice::None);
     CHECK_EQ(defaultLayoutOrTipSpec(0x042A, "{A}", "{B}"), std::string("0x042A:{A}{B}"));
+}
+
+// 2026-10 perf audit H1/H2: the default Ctrl+Shift watcher kept WH_MOUSE_LL (and raw
+// input) installed for good — every mouse move woke the high-priority hook thread.
+TEST(hook_needs_mouse_only_while_typing_or_chord_armed) {
+    // Default install: watcher only. Keyboard hook yes, mouse hook no...
+    HookNeeds n = hookNeeds(false, true, false, false);
+    CHECK(n.keyboard && !n.mouse);
+    // ...until Ctrl+Shift are held together (a click must cancel the toggle).
+    n = hookNeeds(false, true, true, false);
+    CHECK(n.keyboard && n.mouse);
+    // Typing (hook / Direct): both, a click resets the word.
+    n = hookNeeds(true, false, false, false);
+    CHECK(n.keyboard && n.mouse);
+    // Nothing wanted: nothing installed (armed state of a dead watcher is irrelevant).
+    n = hookNeeds(false, false, true, false);
+    CHECK(!n.keyboard && !n.mouse);
+    // Game / fullscreen / Chế độ game: unhooked, not just flagged.
+    n = hookNeeds(true, true, true, true);
+    CHECK(!n.keyboard && !n.mouse);
 }
 
 // ---- Công cụ văn bản (text_action_logic.h) ----------------------------------------------
@@ -678,5 +703,46 @@ TEST(main_window_messages_are_distinct) {
         CHECK(kMainWindowMessages[i] >= kWmApp && kMainWindowMessages[i] < 0xC000u);
         for (size_t j = i + 1; j < n; ++j) CHECK(kMainWindowMessages[i] != kMainWindowMessages[j]);
     }
+}
+
+// ---- UI strings (app/src/strings.cpp is portable) ---------------------------------------
+#include <cwchar>
+#include <string>
+
+#include <viettelex/vtx_engine.h>
+
+#include "strings.h"
+
+// 2026-10 UX audit: Windows keyboards have no ⌫ glyph ("Backspace"), the auto-restore
+// example read "retore → retore" (looked like nothing happens), and the tray item that
+// only hides the icon was enumerated as "Quit".
+TEST(ui_strings_windows_wording) {
+    using namespace vtx::app;
+    for (int en = 0; en < 2; ++en) {
+        setEnglish(en != 0);
+        for (int i = 0; i < static_cast<int>(S::Count); ++i) {
+            const wchar_t* s = tr(static_cast<S>(i));
+            CHECK(s != nullptr);
+            if (s) CHECK(std::wcschr(s, L'⌫') == nullptr);  // ⌫
+        }
+        const wchar_t* restore = tr(S::AutoRestoreDesc);
+        CHECK(std::wcsstr(restore, L"retore → retore") == nullptr);
+        CHECK(std::wcsstr(restore, L"“tet” → “text”") != nullptr);  // engine output, checked below
+    }
+    // The example is what the engine does with the default settings: "text" shows "tet"
+    // while typing and is restored to "text" at the word end.
+    vtx_engine* e = vtx_create();
+    vtx_set_flags(e, vtx::Settings().engineFlags());
+    vtx_action a;
+    for (char c : std::string("text")) vtx_feed(e, static_cast<uint32_t>(c), &a);
+    uint16_t buf[VTX_MAX_TEXT + 1];
+    int32_t n = vtx_composed(e, buf, VTX_MAX_TEXT + 1);
+    CHECK(std::u16string(reinterpret_cast<const char16_t*>(buf), static_cast<size_t>(n)) == u"tet");
+    n = vtx_commit_text(e, 1, buf, VTX_MAX_TEXT + 1);
+    CHECK(std::u16string(reinterpret_cast<const char16_t*>(buf), static_cast<size_t>(n)) == u"text");
+    vtx_destroy(e);
+    setEnglish(false);
+    CHECK(std::wcscmp(tr(S::MenuHideTray), L"Ẩn biểu tượng khay") == 0);
+    CHECK(std::wcscmp(tr(S::SecHints), L"Gợi ý cạnh con trỏ") == 0);
 }
 

@@ -15,7 +15,8 @@ bool g_inited = false;
 bool g_secure = false;
 bool g_appContainer = false;
 std::string g_exe;
-Settings g_settings;
+// Immutable once published: readers share it (one shortcuts map per process).
+std::shared_ptr<const Settings> g_settings = std::make_shared<const Settings>();
 AppMode g_mode = AppMode::Composition;
 unsigned long g_gen = 1;
 FILETIME g_stamp = {0, 0};
@@ -85,6 +86,11 @@ bool readFile(const std::wstring& path, std::vector<uint8_t>& out) {
 
 bool canUseRegistry() { return !g_secure && !g_appContainer; }
 
+// AppContainer / low IL: the parsed applang.txt mirror and the file time it was read at.
+SRWLOCK g_mirrorLock = SRWLOCK_INIT;
+AppLanguageStore g_mirror;
+FILETIME g_mirrorStamp = {0, 0};
+
 std::wstring g_activeExeW;  // app identity (WebView2: the owning app's exe)
 std::wstring activeExeW() { return g_activeExeW.empty() ? exeNameW() : g_activeExeW; }
 
@@ -105,17 +111,30 @@ void loadVietnameseLocked() {
             source = "registry";
         }
     } else {
+        // The app's mirror file, parsed again only when VietTelex.exe rewrote it (every
+        // focus change lands here: one stat instead of open + read + parse).
         std::wstring path = settingsPath();
         path = path.substr(0, path.find_last_of(L'\\') + 1) + L"applang.txt";
-        std::vector<uint8_t> bytes;
-        AppLanguageStore store;
-        if (readFile(path, bytes)) {
-            store.parse(std::string(bytes.begin(), bytes.end()));
-            if (store.known(id)) {
-                on = store.vietnamese(id);
-                source = "app mirror (AppContainer)";
+        WIN32_FILE_ATTRIBUTE_DATA fa;
+        const bool exists = GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa) != FALSE;
+        AcquireSRWLockExclusive(&g_mirrorLock);
+        if (!exists) {
+            g_mirror = AppLanguageStore();
+            g_mirrorStamp = {0, 0};
+        } else if (CompareFileTime(&fa.ftLastWriteTime, &g_mirrorStamp) != 0) {
+            std::vector<uint8_t> bytes;
+            AppLanguageStore store;
+            if (readFile(path, bytes)) {
+                store.parse(std::string(bytes.begin(), bytes.end()));
+                g_mirrorStamp = fa.ftLastWriteTime;
             }
+            g_mirror = std::move(store);
         }
+        if (g_mirror.known(id)) {
+            on = g_mirror.vietnamese(id);
+            source = "app mirror (AppContainer)";
+        }
+        ReleaseSRWLockExclusive(&g_mirrorLock);
     }
     InterlockedExchange(&g_vietnamese, on ? 1 : 0);
     if (InterlockedCompareExchange(&g_debug, 0, 0))
@@ -132,7 +151,7 @@ void init(bool secure) {
         g_appContainer = detectAppContainer();
         std::wstring exe = exeNameW();
         g_exe = narrowLower(exe.c_str());
-        g_mode = resolveAppMode(g_exe, g_settings.appModes);
+        g_mode = resolveAppMode(g_exe, g_settings->appModes);
         loadVietnameseLocked();
     } else if (secure) {
         g_secure = true;  // never downgrade from secure within a process
@@ -142,27 +161,32 @@ void init(bool secure) {
 }
 
 unsigned long refresh() {
-    AcquireSRWLockExclusive(&g_lock);
+    // Common case (every focus change): the file is unchanged — one stat under a SHARED
+    // lock, no exclusive section.
+    AcquireSRWLockShared(&g_lock);
     unsigned long gen = g_gen;
-    if (g_secure) {
-        ReleaseSRWLockExclusive(&g_lock);
-        return gen;
-    }
-    std::wstring path = settingsPath();
+    const bool secure = g_secure;
+    const FILETIME stamp = g_stamp;
+    const std::wstring path = secure ? std::wstring() : settingsPath();
+    ReleaseSRWLockShared(&g_lock);
+    if (secure || path.empty()) return gen;
     WIN32_FILE_ATTRIBUTE_DATA fa;
-    if (!path.empty() && GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa)) {
-        if (CompareFileTime(&fa.ftLastWriteTime, &g_stamp) != 0) {
-            std::vector<uint8_t> bytes;
-            Settings s;
-            if (readFile(path, bytes) && deserialize(bytes.data(), bytes.size(), s)) {
-                g_settings = std::move(s);
-                g_mode = resolveAppMode(narrowLower(activeExeW().c_str()), g_settings.appModes);
-                InterlockedExchange(&g_debug, g_settings.debugLogging ? 1 : 0);
-                g_stamp = fa.ftLastWriteTime;
-                gen = ++g_gen;
-            }
-        }
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa) ||
+        CompareFileTime(&fa.ftLastWriteTime, &stamp) == 0)
+        return gen;
+    std::vector<uint8_t> bytes;
+    Settings s;
+    if (!readFile(path, bytes) || !deserialize(bytes.data(), bytes.size(), s)) return gen;
+    auto fresh = std::make_shared<const Settings>(std::move(s));
+    AcquireSRWLockExclusive(&g_lock);
+    if (CompareFileTime(&fa.ftLastWriteTime, &g_stamp) != 0) {  // another thread may have loaded it
+        g_settings = std::move(fresh);
+        g_mode = resolveAppMode(narrowLower(activeExeW().c_str()), g_settings->appModes);
+        InterlockedExchange(&g_debug, g_settings->debugLogging ? 1 : 0);
+        g_stamp = fa.ftLastWriteTime;
+        ++g_gen;
     }
+    gen = g_gen;
     ReleaseSRWLockExclusive(&g_lock);
     return gen;
 }
@@ -174,11 +198,16 @@ unsigned long generation() {
     return g;
 }
 
-Settings copySettings() {
+std::shared_ptr<const Settings> snapshot() {
     AcquireSRWLockShared(&g_lock);
-    Settings s = g_settings;
+    std::shared_ptr<const Settings> s = g_settings;
     ReleaseSRWLockShared(&g_lock);
-    if (g_secure) s.shortcuts.clear();
+    // Secure desktop: never user data (refresh() never loads there; belt and braces).
+    if (g_secure && !s->shortcuts.empty()) {
+        auto copy = std::make_shared<Settings>(*s);
+        copy->shortcuts.clear();
+        return copy;
+    }
     return s;
 }
 
@@ -225,7 +254,7 @@ void setActiveApp(const std::wstring& exeBaseName) {
     const std::string id = appIdentity(g_exe, narrowLower(exeBaseName.c_str()));
     if (id != narrowLower(activeExeW().c_str())) {
         g_activeExeW = id == g_exe ? std::wstring() : exeBaseName;
-        g_mode = resolveAppMode(id, g_settings.appModes);
+        g_mode = resolveAppMode(id, g_settings->appModes);
         loadVietnameseLocked();
     }
     ReleaseSRWLockExclusive(&g_lock);

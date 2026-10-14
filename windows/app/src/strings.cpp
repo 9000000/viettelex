@@ -58,8 +58,8 @@ const Pair kStrings[] = {
     {L"Thói quen UniKey: “th[” → “thơ”, “ng]” → “ngư”. Nếu bạn gõ code thì nên để TẮT.",
      L"The UniKey habit: “th[” → “thơ”, “ng]” → “ngư”. Leave OFF if you type code."},
     {L"Tự khôi phục từ không hợp lệ", L"Auto-restore invalid words"},
-    {L"Từ không phải tiếng Việt hợp lệ sẽ tự trả về đúng phím đã gõ khi kết thúc từ (retore → retore).",
-     L"A word that isn’t valid Vietnamese snaps back to the keys you typed when the word ends (retore → retore)."},
+    {L"Từ không phải tiếng Việt hợp lệ sẽ tự trả về đúng phím đã gõ khi kết thúc từ (gõ text: “tet” → “text”).",
+     L"A word that isn’t valid Vietnamese snaps back to the keys you typed when the word ends (typing text: “tet” → “text”)."},
     {L"Kiểm tra chính tả khi gõ", L"Live spell-check"},
     {L"Ngừng bỏ dấu ngay khi từ không thể là tiếng Việt (google, github…) thay vì đợi hết từ.",
      L"Stop adding tones as soon as a word can’t be Vietnamese (google, github…) instead of waiting for word end."},
@@ -73,8 +73,8 @@ const Pair kStrings[] = {
     {L"Chấp nhận cách viết khi chat: w/z/k thay cho qu/d/c (wá, zui zẻ, kó). Tắt = chỉ chính tả chuẩn.",
      L"Accept chat spellings: w/z/k instead of qu/d/c (wá, zui zẻ, kó). Off = standard spelling only."},
     {L"Gõ thêm dấu cho từ trước con trỏ", L"Add diacritics to the word before the caret"},
-    {L"Đặt con trỏ ngay sau một từ rồi gõ phím dấu (toan + s → toán); ⌫ ngay sau dấu cách sửa tiếp từ vừa gõ.",
-     L"Put the caret right after a word and type a tone key (toan + s → toán); ⌫ right after a space re-opens the word."},
+    {L"Đặt con trỏ ngay sau một từ rồi gõ phím dấu (toan + s → toán); Backspace ngay sau dấu cách sửa tiếp từ vừa gõ.",
+     L"Put the caret right after a word and type a tone key (toan + s → toán); Backspace right after a space re-opens the word."},
     {L"Phím chuyển Việt/Anh", L"Switch hotkey"},
     {L"VietTelex nhớ Việt/Anh riêng cho từng ứng dụng khi bạn chuyển bằng phím này. Đổi bộ gõ bằng Win+Space thì theo tuỳ chọn của Windows bên dưới.",
      L"VietTelex remembers Vietnamese/English per app when you switch with this key. Switching the input method with Win+Space follows the Windows option below."},
@@ -187,8 +187,8 @@ const Pair kStrings[] = {
     {L"Hoa Đầu Từ", L"Title Case"},
     {L"Hoa đầu câu", L"Sentence case"},
     {L"Xoá dấu", L"Remove tones"},
-    {L"Phép tính, chip số, gợi ý sửa lỗi / thêm dấu / ngày giờ, phím tắt Thêm dấu…",
-     L"Maths results, number chips, typo/tone/date suggestions, add-tones hotkey…"},
+    {L"Thêm dấu, HOA/thường, xoá dấu cho vùng chọn: menu khay, phím tắt Thêm dấu…",
+     L"Add tones, UPPER/lowercase, remove tones on the selection: tray menu, add-tones hotkey…"},
     {L"Hiện kết quả phép tính", L"Show maths results"},
     {L"Gõ phép tính rồi “=” (12*3=, 200+10%=) — kết quả hiện cạnh con trỏ, bấm Tab hoặc Enter để chèn.",
      L"Type a calculation followed by “=” (12*3=, 200+10%=) — the result shows next to the cursor; press Tab or "
@@ -304,6 +304,15 @@ const Pair kStrings[] = {
      L"Windows opens new apps with another keyboard, so you need Win+Space back to VietTelex before the switch "
      L"key works. Make VietTelex the default so new apps are ready to type."},
     {L"Đặt làm mặc định", L"Make default"},
+
+    // Spelling page: caret hints; Text tools without the tray icon
+    {L"Gợi ý cạnh con trỏ", L"Suggestions next to the cursor"},
+    {L"Biểu tượng khay đang ẩn nên không có menu Công cụ văn bản. Dùng phím tắt Thêm dấu (mở mục này để đặt), "
+     L"hoặc bật “Hiện biểu tượng ở khay hệ thống” ở trang Kiểu gõ rồi bấm chuột phải biểu tượng.",
+     L"The tray icon is hidden, so there is no Text tools menu. Use the add-tones hotkey (open this section to set "
+     L"it), or turn on “Show icon in the notification area” on the Typing page and right-click the icon."},
+    // Tray menu
+    {L"Chế độ game", L"Game mode"},
 };
 static_assert(sizeof(kStrings) / sizeof(kStrings[0]) == static_cast<size_t>(S::Count), "string table size");
 }  // namespace

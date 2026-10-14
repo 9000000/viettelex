@@ -289,22 +289,47 @@ void TextService::unhookTextEditSink() {
 
 void TextService::applyConfig(bool force) {
     unsigned long gen = config::refresh();
-    if (!force && gen == settingsGen_) return;
-    settingsGen_ = gen;
-    settings_ = config::copySettings();
+    if (force || gen != settingsGen_ || !settings_) {
+        settingsGen_ = gen;
+        settings_ = config::snapshot();
+        const Settings& s = *settings_;
+
+        SessionOptions o;
+        o.engineFlags = s.engineFlags();
+        o.autoRestore = s.autoRestore;
+        o.reEditWord = s.reEditWord && !config::secureMode();
+        o.underlineMisspelled = s.underlineMisspelled;
+        o.shortcuts = config::secureMode() ? nullptr : &s.shortcuts;
+        o.log = config::log;
+        session_.configure(o);
+
+        hintsOn_.math = s.mathResults;
+        hintsOn_.number = s.numberChips;
+        hintsOn_.typo = s.typoHints;
+        hintsOn_.tones = s.toneHints;
+        hintsOn_.date = s.dateHints;
+        hintsAny_ = hintsOn_.any() && !config::secureMode();
+        if (!hintsAny_) {
+            hideHint();
+            dropHintWork();
+            hintTracker_.reset();
+        }
+
+        hotkey_ = parseSwitchHotkey(s.switchHotkey);
+        chord_.disarm();
+        updatePreservedKey();
+        focusNotify_.reset();  // the tray may have been switched on or off
+    }
+    applyFocusState();
+}
+
+// Per focus / config change, cheap: the output mode of this app (WebView2: the owning
+// app's rule) and Chế độ game.
+void TextService::applyFocusState() {
     // Chế độ game is VietTelex.exe's runtime state (cleared at its start). If the app is
     // gone (crashed, autostart off), a stale "on" in the snapshot must not leave every
-    // key passing through forever. Checked here only (focus change / config change).
-    if (settings_.gameMode && !appRunning()) settings_.gameMode = false;
-
-    SessionOptions o;
-    o.engineFlags = settings_.engineFlags();
-    o.autoRestore = settings_.autoRestore;
-    o.reEditWord = settings_.reEditWord && !config::secureMode();
-    o.underlineMisspelled = settings_.underlineMisspelled;
-    o.shortcuts = config::secureMode() ? nullptr : &settings_.shortcuts;
-    o.log = config::log;
-    session_.configure(o);
+    // key passing through forever (FindWindow only while the snapshot says on).
+    gameMode_ = effectiveGameMode(settings_->gameMode, [this] { return appRunning(); });
 
     const OutputMode want = config::appMode() == AppMode::InPlace ? OutputMode::InPlace : OutputMode::Composition;
     // (AppMode::Direct maps to Composition only for the case the app is not running.)
@@ -312,22 +337,6 @@ void TextService::applyConfig(bool force) {
         if (composition_) endCompositionAsync();
         session_.setOutputMode(want);
     }
-
-    hintsOn_.math = settings_.mathResults;
-    hintsOn_.number = settings_.numberChips;
-    hintsOn_.typo = settings_.typoHints;
-    hintsOn_.tones = settings_.toneHints;
-    hintsOn_.date = settings_.dateHints;
-    hintsAny_ = hintsOn_.any() && !config::secureMode();
-    if (!hintsAny_) {
-        hideHint();
-        dropHintWork();
-        hintTracker_.reset();
-    }
-
-    hotkey_ = parseSwitchHotkey(settings_.switchHotkey);
-    chord_.disarm();
-    updatePreservedKey();
 }
 
 bool TextService::vietnamese() const { return config::vietnamese(); }
@@ -480,6 +489,7 @@ void TextService::setVietnamese(bool on) {
 
 // The optional tray icon in VietTelex.exe is the only Việt/Anh indicator (1.0.8): tell it.
 void TextService::notifyAppState(bool on) {
+    focusNotify_.notePosted(on, reinterpret_cast<uintptr_t>(langPropWnd_));
     if (HWND h = FindWindowW(kAppWindowClass, nullptr))
         PostMessageW(h, kAppCommandMsg, static_cast<WPARAM>(AppCommand::StateChanged), on ? 1 : 0);
 }
@@ -567,6 +577,20 @@ bool isTransitory(ITfContext* ctx) {
     return ctx && SUCCEEDED(ctx->GetStatus(&st)) && (st.dwStaticFlags & TF_SS_TRANSITORY) != 0;
 }
 }  // namespace
+
+// At a word start: classify the host, then settle a pending / lost Direct handover.
+void TextService::evaluateHostAtWordStart(ITfContext* ctx) {
+    evaluateHost(ctx);
+    // A handed-over field the app since marked NoDirect (or elevated): compose.
+    if (directActive_ && !directServesHere()) {
+        directActive_ = false;
+        config::log("direct mode unusable in this field -> composition");
+        session_.setCompositionOnlyContext(true);
+    } else if (directWanted_ && !directActive_ && directServesHere()) {
+        directActive_ = true;  // the hook acked since the request
+        config::log("handover acked: the hook types in this field");
+    }
+}
 
 // Classifies the context a word is about to start in (see app_policy.h ContextInfo) and,
 // for classic Edit/RichEdit, finds the full transitory-extension PARENT context.
@@ -691,13 +715,19 @@ STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) {
         if (HWND h = FindWindowW(kAppWindowClass, nullptr))
             PostMessageW(h, kAppCommandMsg, static_cast<WPARAM>(AppCommand::DirectMode), 0);
     }
+    hostEval_.invalidate();
     resolveActiveApp();
     config::reloadVietnamese();
-    applyConfig(true);
+    applyConfig(false);  // settings copied only when settings.bin changed
     readSuspendProp();
     if (focus) {
         publishLangProp();
-        notifyAppState(vietnamese());
+        // Only the optional tray icon listens; it is told only what changed.
+        const bool on = vietnamese();
+        if (focusNotify_.shouldPost(settings_->showTrayIcon && !config::secureMode(), on,
+                                    reinterpret_cast<uintptr_t>(langPropWnd_)))
+            if (HWND h = FindWindowW(kAppWindowClass, nullptr))
+                PostMessageW(h, kAppCommandMsg, static_cast<WPARAM>(AppCommand::StateChanged), on ? 1 : 0);
     }
     hookTextEditSink(focus);
     return S_OK;
@@ -778,7 +808,10 @@ STDMETHODIMP TextService::OnEndEdit(ITfContext* ctx, TfEditCookie ecReadOnly, IT
     }
     // (Via the transitory-extension parent, this context is not the one holding our word;
     // the session re-verifies against the parent at every key instead.)
-    if (session_.wordActive() && session_.wordMode() == OutputMode::InPlace && host_ != HostText::NormalViaParent) {
+    // Skipped for OUR key's edit session (ownKeyEdit_): it just verified the text before
+    // the caret itself, and nothing else can edit while it holds the document.
+    if (session_.wordActive() && session_.wordMode() == OutputMode::InPlace && host_ != HostText::NormalViaParent &&
+        !ownKeyEdit_) {
         // Our own edits and the app inserting a key we passed keep the word right
         // before the caret; anything else (click, arrow, app rewrite) does not.
         // A forward selection (omnibox autocomplete suffix) is the app's, not a change.
@@ -904,16 +937,8 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL
         return S_OK;
     }
     if (!session_.wordActive()) {
-        evaluateHost(ctx);
-        // A handed-over field the app since marked NoDirect (or elevated): compose.
-        if (directActive_ && !directServesHere()) {
-            directActive_ = false;
-            config::log("direct mode unusable in this field -> composition");
-            session_.setCompositionOnlyContext(true);
-        } else if (directWanted_ && !directActive_ && directServesHere()) {
-            directActive_ = true;  // the hook acked since the request
-            config::log("handover acked: the hook types in this field");
-        }
+        evaluateHostAtWordStart(ctx);
+        hostEval_.noteTest(keyGen_, ctx);  // OnKeyDown of this key reuses it
     }
     if (directActive_) {  // the hook types in this field
         noteHintKey(k, ctx, false);
@@ -964,18 +989,8 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL* ea
         *eaten = retypeAsUs(ctx, wp, true) ? TRUE : FALSE;  // #121
         return S_OK;
     }
-    if (!session_.wordActive()) {
-        evaluateHost(ctx);
-        // A handed-over field the app since marked NoDirect (or elevated): compose.
-        if (directActive_ && !directServesHere()) {
-            directActive_ = false;
-            config::log("direct mode unusable in this field -> composition");
-            session_.setCompositionOnlyContext(true);
-        } else if (directWanted_ && !directActive_ && directServesHere()) {
-            directActive_ = true;  // the hook acked since the request
-            config::log("handover acked: the hook types in this field");
-        }
-    }
+    const bool evaluatedInTest = hostEval_.takeForKeyDown(keyGen_, ctx);
+    if (!session_.wordActive() && !evaluatedInTest) evaluateHostAtWordStart(ctx);
     if (directActive_ || host_ == HostText::Ignore || host_ == HostText::Literal || !session_.wantsKey(k)) {
         *eaten = retypeAsUs(ctx, wp, true) ? TRUE : FALSE;  // #121; else the key goes to the app
         return S_OK;
@@ -993,6 +1008,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL* ea
             return S_OK;
         });
     };
+    ownKeyEdit_ = true;  // OnEndEdit inside this synchronous session is our own edit
     HRESULT hr = run(target);
     if (hr != S_OK && target != ctx && !session_.wordActive()) {
         // Guard: the parent context refused a synchronous edit session. Stop using it
@@ -1004,6 +1020,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL* ea
         session_.setCompositionOnlyContext(true);
         hr = run(ctx);
     }
+    ownKeyEdit_ = false;
     if (hr != S_OK) {
         // The app refused a synchronous edit session: type literally, never guess.
         session_.reset();
@@ -1647,7 +1664,7 @@ void TextService::askApp(HintJob job, const std::u16string& text) {
     HintMessage m;
     m.request = hintGen_;
     m.job = static_cast<uint32_t>(job);
-    m.flags = settings_.engineFlags();
+    m.flags = settings_->engineFlags();
     m.text = text;
     const std::vector<uint8_t> b = packHintMessage(m);
     COPYDATASTRUCT cds;

@@ -6,6 +6,7 @@
 // from AppContainers). Reload is event-driven: activation, focus changes, and right
 // after a menu command — a cheap file-time check, no timer, no polling thread.
 #pragma once
+#include <memory>
 #include <string>
 
 #include "app_policy.h"
@@ -19,10 +20,12 @@ namespace vtx::tip::config {
 void init(bool secure);
 
 // Re-read settings.bin if its timestamp changed. Returns the settings generation
-// (incremented on every successful change); callers copy settings when it moves.
+// (incremented on every successful change); callers take a new snapshot when it moves.
 unsigned long refresh();
 unsigned long generation();
-Settings copySettings();
+// The current settings: an immutable snapshot shared by every thread manager of this
+// process (never null). A reload makes a new one; holders keep theirs alive.
+std::shared_ptr<const Settings> snapshot();
 
 bool secureMode();
 bool inAppContainer();
