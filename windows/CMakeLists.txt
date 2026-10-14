@@ -20,6 +20,20 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Static CRT everywhere: the TIP is loaded into every process and must not depend on
 # a VC++ redistributable being installed.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# Size (non-MSVC: llvm-mingw cross builds, host builds): one section per function / data
+# item in EVERY library (engine, cores), so the binaries' -Wl,--gc-sections drops what they
+# do not call — VietTelexSetupHelper.exe pulls one JSON helper from the IME core, not the
+# whole object. MSVC gets the same from /Gy /Gw + /OPT:REF on its targets.
+if(NOT MSVC)
+  add_compile_options(-ffunction-sections -fdata-sections)
+endif()
+# ThinLTO for the llvm-mingw cross build (clang + lld; scripts/cross-build.sh). Checked for
+# x86 (--kill-at exports), x64 and ARM64.
+option(VTX_THIN_LTO "ThinLTO for clang/lld Windows (MinGW) builds" ON)
+if(VTX_THIN_LTO AND WIN32 AND MINGW AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-flto=thin)
+  add_link_options(-flto=thin)
+endif()
 
 # Release version (x.y.z) stamped into both binaries' version resources and the updater.
 set(VTX_VERSION "" CACHE STRING "Release version x.y.z (empty = ime/version.h default)")
