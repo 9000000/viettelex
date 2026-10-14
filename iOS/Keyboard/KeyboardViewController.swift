@@ -108,6 +108,8 @@ final class KeyboardViewController: UIInputViewController {
     private var addTonesCache: (before: String, plan: AddTones.Plan?)?
     /// Vuốt phím cách đổi Tiếng Việt ↔ Tiếng Anh (công tắc trong app; tắt ⇒ luôn .vi).
     private var spaceFlickSetting = false
+    /// "Vuốt phím để sao chép/dán" (Phím & cử chỉ, mặc định TẮT) — KeyCommandGesture.
+    private var keyCommandsSetting = false
     private var language: KeyboardLanguage = .vi
 
     override func viewDidLoad() {
@@ -158,6 +160,7 @@ final class KeyboardViewController: UIInputViewController {
             if on { self.pasteOnce.displayed(self.pasteSeenChange) } else { self.pasteOnce.ended() }
         }
         keyboard.onSpaceFlick = { [weak self] in self?.toggleLanguage() }
+        wireKeyCommands()
         keyboard.translatesAutoresizingMaskIntoConstraints = false
         // Như KeyboardView: nền trong suốt = touch xuyên sang app host (rớt phím).
         view.backgroundColor = KeyboardView.touchableClear
@@ -256,6 +259,7 @@ final class KeyboardViewController: UIInputViewController {
         emojiSuggestSetting = settings.emojiSuggest
         pasteButtonSetting = settings.pasteButton
         spaceFlickSetting = settings.spaceSwipeLanguage
+        keyCommandsSetting = settings.swipeKeyCommands
         language = KeyboardLanguage.effective(
             stored: UserDefaults.standard.string(forKey: KeyboardLanguage.storageKey),
             flickEnabled: spaceFlickSetting)
@@ -1726,6 +1730,33 @@ final class KeyboardViewController: UIInputViewController {
         return pasteCached
     }
 
+    /// Dán chữ trong clipboard vào ô — nút Dán trên thanh gợi ý VÀ vuốt V lên (KeyCommand).
+    /// Trả chữ đã chèn (nil = clipboard không có chữ). Gọi trong applyingEdit.
+    @discardableResult
+    fileprivate func pasteFromClipboard() -> String? {
+        let pb = UIPasteboard.general
+        // Không có API hỏi "đã cho phép dán chưa": khi iOS hiện "Allow Paste?",
+        // lệnh đọc BỊ CHẶN tới lúc user chọn (≥ vài trăm ms); đã Cho phép thì gần
+        // như tức thì. Ghi kết quả vào App Group để app ẩn hướng dẫn (user 25/09/2026).
+        let t0 = CACurrentMediaTime()
+        let str = pb.string
+        let noPrompt = str != nil && CACurrentMediaTime() - t0 < 0.25
+        UserDefaults(suiteName: "group.com.viettelex")?.set(noPrompt, forKey: "pasteNoPrompt")
+        var pasted: String?
+        if let s = str, !s.isEmpty {
+            textDocumentProxy.insertText(s)
+            clip.captured(s, change: pb.changeCount, now: Date().timeIntervalSince1970,
+                          secureField: fieldTraits?.secure == true,
+                          concealed: Self.isConcealed(pb))
+            pasted = s
+        }
+        pasteUsedChange = pb.changeCount
+        pasteOnce.used(pasteUsedChange)
+        pasteCached = false
+        bridge.reset(); lastWord = nil; lastWord2 = nil
+        return pasted
+    }
+
     /// Tap gợi ý (hành vi QuickType): emoji thay hẳn từ; từ tiếng Việt thay
     /// từ + thêm space để gõ tiếp luôn.
     private func acceptSuggestion(_ item: String) {
@@ -1743,24 +1774,7 @@ final class KeyboardViewController: UIInputViewController {
             return
         }
         if item == KeyboardView.pasteToken {
-            let pb = UIPasteboard.general
-            // Không có API hỏi "đã cho phép dán chưa": khi iOS hiện "Allow Paste?",
-            // lệnh đọc BỊ CHẶN tới lúc user chọn (≥ vài trăm ms); đã Cho phép thì gần
-            // như tức thì. Ghi kết quả vào App Group để app ẩn hướng dẫn (user 25/09/2026).
-            let t0 = CACurrentMediaTime()
-            let str = pb.string
-            let noPrompt = str != nil && CACurrentMediaTime() - t0 < 0.25
-            UserDefaults(suiteName: "group.com.viettelex")?.set(noPrompt, forKey: "pasteNoPrompt")
-            if let s = str, !s.isEmpty {
-                textDocumentProxy.insertText(s)
-                clip.captured(s, change: pb.changeCount, now: Date().timeIntervalSince1970,
-                              secureField: fieldTraits?.secure == true,
-                              concealed: Self.isConcealed(pb))
-            }
-            pasteUsedChange = pb.changeCount
-            pasteOnce.used(pasteUsedChange)
-            pasteCached = false
-            bridge.reset(); lastWord = nil; lastWord2 = nil
+            pasteFromClipboard()
             KeyboardView.clickModifier()
             updateSuggestions()
             return
@@ -2018,6 +2032,66 @@ extension KeyboardViewController {
     }
 }
 
+// MARK: vuốt phím lên = sao chép / cắt / dán (KeyCommandGesture — mặc định TẮT)
+extension KeyboardViewController {
+    private final class CommandHost: KeyCommandHost {
+        let p: UITextDocumentProxy
+        init(_ p: UITextDocumentProxy) { self.p = p }
+        var selectedText: String? { p.selectedText }
+        func insertText(_ text: String) { p.insertText(text) }
+        func deleteBackward() { p.deleteBackward() }
+    }
+    private final class SystemClipboard: KeyCommandClipboard {
+        var string: String? {
+            get { UIPasteboard.general.string }
+            set { UIPasteboard.general.string = newValue }
+        }
+    }
+
+    fileprivate func wireKeyCommands() {
+        keyboard.keyCommandHasSelection = { [weak self] in
+            guard let self else { return false }
+            return self.textDocumentProxy.selectedText?.isEmpty == false
+        }
+        keyboard.keyCommandLabel = { [weak self] cmd in
+            guard let self else { return L(cmd.viLabel) }
+            let sel = cmd == .paste ? nil : self.textDocumentProxy.selectedText
+            let blocked = KeyCommandRunner.precheck(cmd, selectedText: sel, fullAccess: self.hasFullAccess)
+            return L(blocked.flatMap(KeyCommandRunner.hint) ?? cmd.viLabel)
+        }
+        keyboard.onKeyCommand = { [weak self] cmd, deferred in self?.runKeyCommand(cmd, letterDeferred: deferred) }
+    }
+
+    /// Nhấc tay sau vuốt lên: huỷ chữ phím vừa chèn (trừ khi đã hoãn), chốt từ đang gõ, chạy lệnh.
+    fileprivate func runKeyCommand(_ cmd: KeyCommand, letterDeferred: Bool) {
+        if externalChangePending { syncComposition("keycmd") }
+        applyingEdit = true
+        defer { applyingEdit = false }
+        let proxy = Proxy(p: textDocumentProxy)
+        if !letterDeferred, !bridge.undoLastLetter(proxy: proxy) { bridge.backspace(proxy: proxy) }
+        // Chốt từ đang gõ như nút Dán / mục menu: chữ đã nằm trên màn hình, engine quên từ dở.
+        learnSettledSwipe()
+        bridge.reset(); lastWord = nil; lastWord2 = nil
+        restoreUndo = nil; undoOfferActive = false
+        swipeTyped = nil; swipeTypedUndo = nil
+        let outcome = KeyCommandRunner.run(cmd, host: CommandHost(textDocumentProxy), clipboard: SystemClipboard(),
+                                           fullAccess: hasFullAccess,
+                                           paste: { [weak self] in self?.pasteFromClipboard() })
+        if TouchLog.enabled { TouchLog.write("keycmd \(cmd.rawValue) → \(KeyCommandRunner.logKind(outcome))") }   // không ghi nội dung
+        switch outcome {
+        case .copied:
+            keyboard.flashKeyCommandHint(L("Đã sao chép"))
+        case .cut, .pasted:
+            break
+        default:
+            if let h = KeyCommandRunner.hint(outcome) { keyboard.flashKeyCommandHint(L(h)) }
+        }
+        KeyboardView.clickModifier()
+        updateAutoShift()
+        updateSuggestions()
+    }
+}
+
 // MARK: gõ vuốt (thử nghiệm) — glue SwipeTyping ↔ bridge ↔ thanh gợi ý
 extension KeyboardViewController {
     fileprivate func wireSwipeTyping() {
@@ -2049,10 +2123,14 @@ extension KeyboardViewController {
                                      voiceOver: UIAccessibility.isVoiceOverRunning)
         keyboard.swipeEnabled = on
         keyboard.altAccessibility = UIAccessibility.isVoiceOverRunning
+        // Vuốt phím lên = lệnh: không ở ô mật khẩu, không khi VoiceOver (router khác).
+        let keyCmds = KeyCommandPolicy.enabled(setting: keyCommandsSetting, traits: fieldTraits,
+                                               voiceOver: UIAccessibility.isVoiceOverRunning)
+        keyboard.keyCommandsEnabled = keyCmds
         // Checkpoint huỷ phím chữ chỉ có người dùng khi gõ vuốt / iPad vuốt xuống / giữ phím
-        // ra ký tự phụ.
+        // ra ký tự phụ / vuốt phím lên ra lệnh.
         bridge.letterUndoEnabled = on || UIDevice.current.userInterfaceIdiom == .pad
-            || keyboard.altHoldActive
+            || keyboard.altHoldActive || keyCmds
         if on, swipe == nil { swipe = SwipeTyping() }
         if on { pushSwipeLayout(prepare: true) }
         if on, swipeEnglishSetting { swipe?.preloadEnglish() }

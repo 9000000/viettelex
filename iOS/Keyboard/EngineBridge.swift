@@ -107,6 +107,8 @@ struct KeyboardSettings {
     var spaceSwipeLanguage = false
     /// Tự thêm dấu cách sau . , ? ! ; : (AutoSpace) — mặc định TẮT; tắt ⇒ không đọc context.
     var autoSpaceAfterPunct = false
+    /// "Vuốt phím để sao chép/dán" (KeyCommandGesture) — mặc định TẮT ⇒ router không theo dõi gì thêm.
+    var swipeKeyCommands = false
     /// Tự sửa từ gõ sai ở dấu cách (AutoCorrect) — thử nghiệm, mặc định TẮT. Giống Android.
     var autoCorrect = false
     /// Giữ q…p ra 1…0 (chỉ khi hàng phím số TẮT) — mặc định BẬT. KeyAlternates.
@@ -153,7 +155,8 @@ struct KeyboardSettings {
             ("emojiSuggest", \.emojiSuggest), ("pasteButton", \.pasteButton),
             ("autoCapitalize", \.autoCapitalize), ("spaceSwipeLanguage", \.spaceSwipeLanguage),
             ("longPressNumbers", \.longPressNumbers), ("longPressSymbols", \.longPressSymbols),
-            ("autoCorrect", \.autoCorrect), ("autoSpaceAfterPunct", \.autoSpaceAfterPunct)]
+            ("autoCorrect", \.autoCorrect), ("autoSpaceAfterPunct", \.autoSpaceAfterPunct),
+            ("swipeKeyCommands", \.swipeKeyCommands)]
         for (k, kp) in flags where d.object(forKey: k) != nil { s[keyPath: kp] = d.bool(forKey: k) }
         s.learnWords = s.showSuggestions   // bật gợi ý = bật học (quyết định 2026-07-24)
         return s

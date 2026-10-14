@@ -70,6 +70,7 @@ enum BackupSettings {
         Spec(key: "autoCorrect", kind: .bool(false)),
         Spec(key: "autoCapitalize", kind: .bool(true)),
         Spec(key: "spaceSwipeLanguage", kind: .bool(false)),
+        Spec(key: "swipeKeyCommands", kind: .bool(false)),   // "Vuốt phím để sao chép/dán"
         Spec(key: "longPressNumbers", kind: .bool(true)),
         Spec(key: "longPressSymbols", kind: .bool(false)),
         Spec(key: "autoSpaceAfterPunct", kind: .bool(false)),

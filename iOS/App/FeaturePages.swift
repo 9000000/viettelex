@@ -121,6 +121,7 @@ struct FeatureSearchEntry: Identifiable {
             .init(viTitle: LK("Hàng số cao bằng hàng chữ"), keywords: "number row height cao số", page: .phim),
             .init(viTitle: LK("Giữ phím ra ký tự đặc biệt"), keywords: "ký hiệu symbol @ # giữ lâu", page: .phim),
             .init(viTitle: LK("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh"), keywords: "space ngôn ngữ english language", page: .phim),
+            .init(viTitle: LK("Vuốt phím để sao chép/dán"), keywords: "copy paste cut sao chép dán cắt clipboard vuốt lên swipe", page: .phim),
             .init(viTitle: LK("Phóng to chữ khi bấm"), keywords: "key preview popup", page: .phim),
             .init(viTitle: LK("Phím sẫm khi bấm"), keywords: "pressed key highlight", page: .phim),
             .init(viTitle: LK("Rung phím"), keywords: "haptic rung vibrate", page: .phim),
@@ -262,6 +263,7 @@ struct TinhNangSections: View {
     @AppStorage("numberRow", store: featureDefaults) private var numberRow = false
     @AppStorage(KeyGeometry.numberRowFullHeightKey, store: featureDefaults) private var numberRowFullHeight = false
     @AppStorage("spaceSwipeLanguage", store: featureDefaults) private var spaceSwipeLanguage = false
+    @AppStorage("swipeKeyCommands", store: featureDefaults) private var swipeKeyCommands = false
     @AppStorage("autoSpaceAfterPunct", store: featureDefaults) private var autoSpaceAfterPunct = false
     @AppStorage("hapticFeedback", store: featureDefaults) private var hapticFeedback = false
     @AppStorage("keySound", store: featureDefaults) private var keySound = false
@@ -296,6 +298,7 @@ struct TinhNangSections: View {
         case .phim:
             return Self.join([(numberRow, numberRowFullHeight ? L("Hàng số cao") : L("Hàng số")),
                               (spaceSwipeLanguage, L("Vuốt phím cách")),
+                              (swipeKeyCommands, L("Vuốt sao chép/dán")),
                               (autoSpaceAfterPunct, L("Cách sau dấu câu")),
                               (hapticFeedback, L("Rung")), (keySound, L("Âm phím")),
                               (oneHandMode != "off", L("Một tay"))], none: L("Mặc định"))
@@ -558,6 +561,8 @@ struct PhimPage: View {
     @AppStorage("longPressSymbols", store: featureDefaults) private var longPressSymbols = false
     /// Vuốt phím cách đổi Tiếng Việt ↔ Tiếng Anh — mặc định TẮT (KeyboardSettings.spaceSwipeLanguage).
     @AppStorage("spaceSwipeLanguage", store: featureDefaults) private var spaceSwipeLanguage = false
+    /// Vuốt phím C / X / V lên ra lệnh sao chép / cắt / dán — mặc định TẮT (KeyCommandGesture).
+    @AppStorage("swipeKeyCommands", store: featureDefaults) private var swipeKeyCommands = false
     /// Tự thêm dấu cách sau . , ? ! ; : — mặc định TẮT (KeyboardSettings.autoSpaceAfterPunct).
     @AppStorage("autoSpaceAfterPunct", store: featureDefaults) private var autoSpaceAfterPunct = false
     /// "off" | "left" | "right" — bàn phím đọc lúc hiện (OneHand.resolve).
@@ -599,6 +604,7 @@ struct PhimPage: View {
             } header: { Text(L("Phím")) }
             Section {
                 settingToggle(L("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh"), L("Vuốt nhanh phím cách sang trái/phải. Góc phím cách hiện VI / EN. Tiếng Anh gõ nguyên văn. Giữ rồi kéo vẫn là di con trỏ."), isOn: $spaceSwipeLanguage)
+                settingToggle(L("Vuốt phím để sao chép/dán"), L("Chạm C, X hoặc V rồi vuốt thẳng lên quá hàng phím trên cùng và nhấc tay: C sao chép, X cắt, V dán. Kéo ngón trở xuống để huỷ. iOS không cho bàn phím chọn chữ, chọn hết hay hoàn tác/làm lại; sao chép, cắt và dán cần bật Truy cập đầy đủ."), isOn: $swipeKeyCommands)
                 if isPhone {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(L("Chế độ một tay"))

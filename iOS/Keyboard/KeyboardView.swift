@@ -3500,7 +3500,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             self.showBalloon(over: b, text: b.currentTitle ?? title)
             self.shiftBeforeLastLetter = self.shift
             let cased: Character = (self.shift == .off) ? Character(s) : Character(s.uppercased())
-            self.tapped(.letter(cased))
+            if let d = self.deferredLetterID {        // vuốt-lên-lệnh + vùng chọn: chèn lúc nhấc
+                self.commits.arm(d) { [weak self] in self?.tapped(.letter(cased)) }
+            } else {
+                self.tapped(.letter(cased))
+            }
             if self.shift == .on { self.shift = .off; self.applyShiftAppearance() }
         }, for: .touchDown)
         b.addAction(UIAction { [weak self] _ in
@@ -4488,6 +4492,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             classifier?.secondTouch()
             stopClassifying()
         }
+        if keyCmd != nil { cancelKeyCommand() }  // ngón thứ hai ⇒ không còn là cử chỉ lệnh
         routedTouches[id] = b
         if Self.isPad { routedStart[id] = raw }
         let since = lastLetterDownTime.map { time - $0 }
@@ -4498,7 +4503,24 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                 report(Float((p.x - r.midX) / r.width), Float((p.y - r.midY) / r.height))
             }
         }
+        // Vuốt phím lên = lệnh (tắt ⇒ một phép so bool). Đang có vùng chọn ⇒ HOÃN chữ tới lúc
+        // nhấc (KeyCommitQueue) — chèn ngay sẽ thay mất vùng chọn trước khi kịp sao chép/cắt.
+        var cmd: KeyCommandGesture?
+        if keyCommandsEnabled, plane == .letters, routedTouches.count == 1 {
+            cmd = beginKeyCommand(b, at: raw)
+        }
+        let deferLetter = cmd != nil && keyCommandHasSelection?() == true
+        if deferLetter { deferredLetterID = id }
         b.sendActions(for: .touchDown)
+        deferredLetterID = nil
+        if let cmd {
+            keyCmd = cmd
+            keyCmdTouchID = id
+            keyCmdButton = b
+            keyCmdDeferred = deferLetter
+        }
+        // Chữ hoãn: không gõ vuốt / ký tự phụ cho chạm này (cả hai huỷ "chữ vừa chèn").
+        guard !deferLetter else { return }
         if swipeEnabled, plane == .letters, !builtSplit, routedTouches.count == 1, let kw = letterKeyPitch() {
             startClassifying(id, at: p, time: time, key: convert(b.bounds, from: b),
                              keyWidth: kw, since: since)
@@ -4522,6 +4544,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         guard var h = altHold, !swipeActive, h.hold.fire() else { return }
         altHold = h
         if swipeTouchID == h.id { stopClassifying() }   // đã là giữ: trôi sau đó không thành vuốt
+        if keyCmdTouchID == h.id { cancelKeyCommand() } // popup ký tự phụ thắng vuốt-lên
         Self.flickFeedback()
         showBalloon(over: h.button, text: h.hold.alt, force: true)
     }
@@ -4768,6 +4791,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                 if altHold?.hold.move(to: t.location(in: self)) == true { dropAltHold() }
             }
         }
+        if let kid = keyCmdTouchID {
+            for t in touches where ObjectIdentifier(t) == kid { keyCommandMoved(to: t.location(in: self)) }
+        }
         guard let id = swipeTouchID else { return }     // tắt / không theo dõi ⇒ 0 việc
         for t in touches where ObjectIdentifier(t) == id {
             for c in event?.coalescedTouches(for: t) ?? [t] {
@@ -4784,11 +4810,22 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
 
     private func routeUp(_ id: ObjectIdentifier, at raw: CGPoint, time: TimeInterval, cancelled: Bool) {
+        var command: KeyCommand?
+        var letterDeferred = false
+        if id == keyCmdTouchID { (command, letterDeferred) = keyCommandUp(at: raw, time: time, cancelled: cancelled) }
         let swiped = swipeUp(id, at: raw, time: time)
         let b = routedTouches.removeValue(forKey: id)
         let start = routedStart.removeValue(forKey: id)
         TouchLog.touchEnded(cancelled: cancelled, routed: b != nil)
+        if letterDeferred, command != nil { commits.disarm(id) }   // chữ hoãn: bỏ, không chèn
+        if letterDeferred { commits.release(id) }      // không thành lệnh ⇒ chữ hoãn chèn lúc nhấc
         guard let b else { return }
+        if let command {
+            if altHold?.id == id { dropAltHold() }
+            b.sendActions(for: .touchUpInside)
+            onKeyCommand?(command, letterDeferred)
+            return
+        }
         var alt: String?
         if let h = altHold, h.id == id { alt = h.hold.commit; dropAltHold() }
         b.sendActions(for: .touchUpInside)
@@ -4816,6 +4853,140 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             routeUp(ObjectIdentifier(t), at: t.location(in: self), time: t.timestamp, cancelled: true)
         }
     }
+
+    // MARK: vuốt phím lên = lệnh sao chép / cắt / dán (KeyCommandGesture, mặc định TẮT)
+    // Chỉ phím chữ ở plane chữ, một ngón. Chữ vẫn chèn lúc chạm (trừ khi đang có vùng chọn ⇒
+    // hoãn tới lúc nhấc); thành lệnh thì controller huỷ chữ đó (onKeyCommand, letterDeferred
+    // = false) rồi chạy lệnh. Tắt công tắc ⇒ không tạo gì, touchesMoved không thêm việc.
+
+    /// Controller bật theo công tắc "Vuốt phím để sao chép/dán".
+    var keyCommandsEnabled = false {
+        didSet { if !keyCommandsEnabled, oldValue { cancelKeyCommand() } }
+    }
+    /// Ô đang có vùng chọn khác rỗng — chỉ hỏi khi chạm phím C / X / V lúc công tắc bật.
+    var keyCommandHasSelection: (() -> Bool)?
+    /// Nhãn xem trước lúc cử chỉ đang bật: tên lệnh, hoặc lý do không chạy được.
+    var keyCommandLabel: ((KeyCommand) -> String)?
+    /// Nhấc tay lúc đang bật: lệnh + chữ của phím đã bị HOÃN (chưa chèn) hay chưa.
+    var onKeyCommand: ((KeyCommand, Bool) -> Void)?
+
+    private var keyCmd: KeyCommandGesture?
+    private var keyCmdTouchID: ObjectIdentifier?
+    private weak var keyCmdButton: UIButton?
+    private var keyCmdDeferred = false
+    /// Đặt trong lúc router gửi touchDown cho phím chữ ⇒ phím đó HOÃN chữ (commits.arm).
+    private var deferredLetterID: ObjectIdentifier?
+    private var keyCmdPill: UILabel?
+
+    private func beginKeyCommand(_ b: UIButton, at raw: CGPoint) -> KeyCommandGesture? {
+        guard let base = letterKeys.first(where: { $0.button === b })?.base.first,
+              let kw = letterKeyPitch() else { return nil }
+        return KeyCommandGesture.begin(enabled: true, key: base, start: raw,
+                                       keyAreaTop: rowsContainer.frame.minY, keyPitch: kw)
+    }
+
+    private func keyCommandMoved(to raw: CGPoint) {
+        guard var g = keyCmd else { return }
+        let e = g.move(to: raw)
+        keyCmd = g
+        switch e {
+        case .armed:
+            Self.flickFeedback()
+            hideBalloon()
+            (keyCmdButton as? KeyButton)?.showPressed(false)
+            showKeyCommandPill(keyCommandLabel?(g.command) ?? L(g.command.viLabel))
+        case .disarmed:
+            hideKeyCommandPill()
+        case .rejected:
+            cancelKeyCommand()
+        case .none:
+            break
+        }
+    }
+
+    /// Nhấc tay của touch đang theo dõi: (lệnh nếu đang bật, chữ đã hoãn?). Chưa bật mà gõ vuốt
+    /// đang chờ ⇒ cho bộ phân loại xét điểm cuối (vuốt dọc "xe" vẫn thành từ).
+    private func keyCommandUp(at raw: CGPoint, time: TimeInterval, cancelled: Bool) -> (KeyCommand?, Bool) {
+        let deferred = keyCmdDeferred
+        guard var g = keyCmd else { endKeyCommand(); return (nil, deferred) }
+        let fired = cancelled ? nil : g.end(at: raw)
+        endKeyCommand()
+        if fired == nil, !cancelled, !swipeActive, var c = classifier {
+            let d = c.move(to: TouchGeometry.keySelectionPoint(raw), time: time)
+            classifier = c
+            if d == .swipe { beginSwipe() }
+        }
+        return (fired, deferred)
+    }
+
+    private func endKeyCommand() {
+        keyCmd = nil
+        keyCmdTouchID = nil
+        keyCmdButton = nil
+        keyCmdDeferred = false
+        hideKeyCommandPill()
+    }
+
+    /// Huỷ cử chỉ (ngón thứ hai, popup ký tự phụ, đường đi lệch). Chữ hoãn VẪN chờ nhấc tay
+    /// (routeUp còn phải chèn nó) ⇒ giữ id touch khi đang hoãn.
+    private func cancelKeyCommand() {
+        keyCmd = nil
+        hideKeyCommandPill()
+        if !keyCmdDeferred { keyCmdTouchID = nil; keyCmdButton = nil }
+    }
+
+    private func showKeyCommandPill(_ text: String) {
+        keyCmdFlash?.cancel(); keyCmdFlash = nil
+        let pill: UILabel
+        if let p = keyCmdPill { pill = p } else {
+            pill = UILabel()
+            pill.font = .systemFont(ofSize: 15, weight: .semibold)
+            pill.textAlignment = .center
+            pill.layer.cornerRadius = 8
+            pill.layer.masksToBounds = true
+            pill.isUserInteractionEnabled = false
+            keyCmdPill = pill
+        }
+        pill.text = text
+        pill.textColor = palette.ink.ui
+        pill.backgroundColor = palette.balloon.ui
+        if pill.superview == nil { addSubview(pill) }
+        bringSubviewToFront(pill)
+        // Ngay dưới đỉnh vùng phím, thẳng phím xuất phát — ngón đang ở trên nên không che.
+        let key = keyCmdButton.map { convert($0.bounds, from: $0) }
+            ?? CGRect(x: bounds.midX - 22, y: rowsContainer.frame.minY, width: 44, height: 42)
+        let w = pill.intrinsicContentSize.width + 20, h: CGFloat = 32
+        pill.frame = CGRect(x: max(4, min(key.midX - w / 2, bounds.width - w - 4)),
+                            y: rowsContainer.frame.minY + 4, width: w, height: h)
+        pill.isHidden = false
+    }
+
+    private func hideKeyCommandPill() {
+        keyCmdFlash?.cancel(); keyCmdFlash = nil
+        keyCmdPill?.isHidden = true
+    }
+
+    /// Thông báo ngắn sau lệnh ("Đã sao chép", "Chưa chọn chữ"…) ở chỗ nhãn xem trước, ~1.2s.
+    func flashKeyCommandHint(_ text: String) {
+        showKeyCommandPill(text)
+        let w = DispatchWorkItem { [weak self] in self?.keyCmdPill?.isHidden = true }
+        keyCmdFlash?.cancel()
+        keyCmdFlash = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: w)
+    }
+    private var keyCmdFlash: DispatchWorkItem?
+
+    #if DEBUG
+    /// Test hook: cử chỉ đang bật (nhãn xem trước đang hiện) — nil = không theo dõi.
+    var debugKeyCommandPill: String? { keyCmdPill?.isHidden == false ? keyCmdPill?.text : nil }
+    /// Test hook: số cú vuốt đã giao cho controller.
+    private(set) var debugSwipeUps = 0
+    /// Test hook: đỉnh vùng phím (toạ độ KeyboardView) — ngưỡng bật của vuốt-lên-lệnh.
+    func debugKeyAreaTop() -> CGFloat {
+        layoutIfNeeded()
+        return rowsContainer.frame.minY
+    }
+    #endif
 
     // MARK: gõ vuốt (thử nghiệm) — router + vệt vuốt
     // Chỉ từ phím chữ ở plane chữ (space/⌫/shift là button riêng, không tới đây).
@@ -4887,6 +5058,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             return
         }
         guard var c = classifier else { return }
+        if keyCmd?.isCandidate == true { return }    // vuốt-lên-lệnh còn sống ⇒ chưa quyết vuốt
         let d = c.move(to: p, time: time)
         classifier = c
         switch d {
@@ -4932,6 +5104,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         classifier = nil
         trail?.fadeOut(reduceMotion: UIAccessibility.isReduceMotionEnabled)
         if shift == .on { shift = .off; applyShiftAppearance() }
+        #if DEBUG
+        debugSwipeUps += 1
+        #endif
         onSwipeEnded?(path, sc)
         return true
     }
@@ -5117,12 +5292,14 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         var swiped = false
         for p in points {
             t += dt
+            if keyCmdTouchID == id { keyCommandMoved(to: p) }
             if swipeTouchID == id { swipeMoved(to: p, time: t) }
             if swipeActive { swiped = true }
         }
+        let ups = debugSwipeUps
         routeUp(id, at: points.last ?? p0, time: t, cancelled: false)
         withExtendedLifetime(token) {}
-        return swiped
+        return swiped || debugSwipeUps != ups   // vuốt có thể được quyết lúc nhấc (vuốt-lên-lệnh)
     }
     /// Test hook giữ phím ký tự phụ: chạm tâm phím `s`, trôi `drift` pt, (tuỳ) hết giờ giữ
     /// (gọi thẳng như timer bắn), rồi nhấc — đường router thật. Trả có hẹn giờ không.

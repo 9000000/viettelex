@@ -185,6 +185,7 @@ targets:
       - Keyboard/SwipeDecoder.swift
       - Keyboard/SwipeLexicon.swift
       - Keyboard/SwipeGesture.swift
+      - Keyboard/KeyCommandGesture.swift
       - Keyboard/SwipeTyping.swift
       - Keyboard/SpaceFlick.swift
       - Keyboard/KeyAlternates.swift
