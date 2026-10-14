@@ -2,6 +2,7 @@ package com.viettelex.keyboard
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -233,5 +234,24 @@ class SpaceFlickTests {
         assertEquals("helo", p.text)
         val set = s.suggestionsNow(p)!!
         assertEquals("helo", set.literal)
+    }
+
+    /**
+     * Gợi ý sau dấu cách ở chế độ Tiếng Anh chạy trên MAIN: không được nạp từ điển Anh (~1.4 MB
+     * parse) đồng bộ khi hâm nóng nền chưa xong / vừa nhả lúc ẩn lâu — coi như chưa biết.
+     */
+    @Test fun englishSuggestionsDoNotLoadLexiconOnMain() {
+        val s = session(true); val p = MockProxy()
+        s.restoreLanguage("en", p)
+        for (ch in "hello world ") if (ch == ' ') s.handle(Key.Space, p) else s.handle(Key.Letter(ch), p)
+        SwipeEnglish.release()
+        assertNotNull(s.suggestionsNow(p))
+        assertFalse(SwipeEnglish.isLoaded)
+        assertFalse(SwipeEnglish.containsIfLoaded("hello"))
+        // Hâm nóng xong ⇒ tra được như contains.
+        assertTrue(SwipeEnglish.contains("hello"))
+        assertTrue(SwipeEnglish.containsIfLoaded("hello"))
+        assertFalse(SwipeEnglish.containsIfLoaded("xqzv"))
+        assertEquals(12, SwipeEnglish.topIfReady?.size ?: SwipeEnglish.top.size)
     }
 }

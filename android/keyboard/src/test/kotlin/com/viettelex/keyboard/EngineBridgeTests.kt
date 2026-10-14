@@ -21,6 +21,33 @@ class EngineBridgeTests {
         return proxy.text
     }
 
+    /**
+     * composeTrial dùng lại MỘT engine mỗi luồng (RAM-AUDIT #8): kết quả phải y hệt engine mới
+     * tinh, bất kể lượt trước để lại gì (từ dài tràn, VNI, hủy dấu, chữ hoa…).
+     */
+    @Test fun testComposeTrialReuseMatchesFreshEngine() {
+        val raws = listOf("tieengs", "Ddaay", "hello", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "dduwowngf",
+            "his", "khoer", "thuys", "ass", "", "wf", "Deffault", "Vieetj", "nguoiwf", "tieengs")
+        for (vni in listOf(false, true)) for (simple in listOf(false, true)) {
+            val st = KeyboardSettings(vniMode = vni, simpleTelex = simple)
+            val bridge = EngineBridge(st)
+            for (r in raws + raws.reversed()) {
+                val fresh = com.viettelex.telexcore.TelexEngine().also {
+                    it.vniMode = vni; it.simpleTelex = simple
+                    it.freeMarking = st.freeMarking; it.liveSpellCheck = st.liveSpellCheck
+                    it.quickTelex = st.quickTelex; it.modernTone = st.modernTone; it.teencode = st.teencode
+                }
+                for (ch in r) fresh.feed(ch)
+                assertEquals("vni=$vni simple=$simple «$r»", fresh.composed, bridge.composeTrial(r))
+            }
+        }
+        // Luồng khác: engine riêng, cùng kết quả.
+        val bridge = EngineBridge()
+        var other: String? = null
+        Thread { other = bridge.composeTrial("tieengs") }.apply { start(); join() }
+        assertEquals("tiếng", other)
+    }
+
     @Test fun testBasicVietnamese() {
         assertEquals("việt ", type("vieetj "))
         assertEquals("Tiếng Việt rất hay ", type("Tieengs Vieetj raats hay "))

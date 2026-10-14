@@ -183,5 +183,4 @@ object Keys {
     /** Trie chọn phím thông minh dựng sẵn (KeyPriorBlob; sinh bằng KeyPriorBlobTests). */
     const val ASSET_KEY_PRIOR = "keyprior.bin"
     const val ASSET_TEMPLATES_YAML = "ios-mau-cau.yml"
-    const val ASSET_SPACE_LOGO = "spacelogo.png"
 }

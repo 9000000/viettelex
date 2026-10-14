@@ -21,6 +21,8 @@ import android.view.inputmethod.InputMethodManager
 import androidx.core.view.WindowInsetsControllerCompat
 import com.viettelex.android.BuildConfig
 import com.viettelex.android.shared.DebugLog
+import com.viettelex.android.shared.DiskStamp
+import com.viettelex.android.shared.PrefSync
 import com.viettelex.android.shared.VTPrefs
 import com.viettelex.keyboard.ThemeSettings
 import com.viettelex.keyboard.AutoCorrect
@@ -97,7 +99,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     private var swipeUndo: String? = null
     /** Công cụ văn bản vừa áp ⇒ ô "↩︎ Hoàn tác" / ⌫ ngay sau (một lượt). */
     private var toolUndo: TextTools.Undo? = null
-    /** Dịch trên máy (Plus): controller rẻ; client ML Kit chỉ tạo khi chạm "Dịch", đóng ngay sau. */
+    /** Dịch trên máy (Plus): controller rẻ; client ML Kit chỉ tạo khi chạm "Dịch", đóng 30 s sau lượt cuối (MlKitBackend). */
     private val translate by lazy { TranslateController(com.viettelex.android.translate.TranslateFeature.engineFactory(this)) }
     private var translateUsed = false
     private val clearStatusRun = Runnable { strip?.showStatus(null) }
@@ -143,8 +145,12 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     private var swipeDecoder: SwipeDecoder? = null
     private val swipeLock = Any()
     private var swipeSetting = false
-    /** FUTO Swipe (thử nghiệm, mặc định tắt): null = tắt ⇒ không tải model. Khoá swipeLock. */
-    private var futo: FutoSwipe? = null
+    /**
+     * FUTO Swipe (thử nghiệm, mặc định tắt): null = tắt ⇒ không tải model. Decode/setLayout dưới
+     * swipeLock; TẢI weights thì KHÔNG (FutoSwipe tự khoá riêng) ⇒ vuốt lúc đang tải không chặn
+     * main — decode thấy model chưa sẵn ⇒ SHARK2.
+     */
+    @Volatile private var futo: FutoSwipe? = null
     private var futoSetting = false
     private var swipeFieldOk = false
     private var accessibility: AccessibilityManager? = null
@@ -152,8 +158,9 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     /**
      * Cache setting (prefs.all + parse gõ tắt ≈ vài trăm µs–ms) — trước đây đọc lại 2–3 lần mỗi
-     * lần focus ô (onStartInput + onStartInputView + theme). App/IME cùng process nên mọi thay
-     * đổi pref đi qua [prefListener] ⇒ xoá cache ở đó.
+     * lần focus ô (onStartInput + onStartInputView + theme). App cài đặt chạy process ":settings"
+     * riêng: thay đổi của nó tới qua [PrefSync] (broadcast ⇒ [onPrefChanged]) và lưới an toàn
+     * [syncPrefsFromDisk] mỗi lần hiện; thay đổi của chính IME qua [prefListener].
      */
     private var settingsCache: KeyboardSettings? = null
     private fun settings(): KeyboardSettings = settingsCache ?: VTPrefs.settings(prefs).also { settingsCache = it }
@@ -165,12 +172,21 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     /** Ngôn ngữ giao diện lúc dựng input view hiện tại ([L10n]). */
     private var viewLang = L10n.DEFAULT
 
-    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key -> onPrefChanged(key) }
+    /** Broadcast của process cài đặt ([PrefSync.listen]) — null khi chưa đăng ký. */
+    private var prefReceiver: android.content.BroadcastReceiver? = null
+    /** Mốc file prefs — đổi mà lỡ broadcast ⇒ đọc lại + bỏ cache lúc hiện bàn phím. */
+    private val prefStamp by lazy { val f = PrefSync.file(this); DiskStamp { f.lastModified() to f.length() } }
+    /** Mốc "Xóa từ đã học"/sửa từ điển (USERLM_RESET_AT) đã áp cho model trong RAM. */
+    private var userLmResetSeen = 0L
+
+    /** Một key prefs đổi (process này hoặc process cài đặt): bỏ cache + áp ngay phần cần áp. */
+    private fun onPrefChanged(key: String?) {
         settingsCache = null
         themeStale = true
         if (key == Keys.USER_TEMPLATES || key == Keys.TEMPLATES_ENABLED) templatesCache = null
         // App vừa "Xóa từ đã học": bỏ model trong RAM NGAY (không bao giờ ghi đè lại).
-        if (key == Keys.USERLM_RESET_AT) model.reloadAfterExternalErase()
+        if (key == Keys.USERLM_RESET_AT) checkUserLmReset()
         // Bật/tắt gõ vuốt trong app khi bàn phím đang mở (ô Thử gõ).
         else if (key == Keys.SWIPE_TYPING) { swipeSetting = settings().swipeTyping; updateSwipeTyping() }
         else if (key == Keys.SWIPE_ENGLISH) session.swipeEnglish = settings().swipeEnglish
@@ -185,6 +201,33 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         else if (key == Keys.CLIPBOARD_HISTORY) syncClipHistory(settings().clipboardHistory)
         // Bật/tắt thả nổi trong app khi bàn phím đang mở (ô Thử gõ) → áp ngay.
         else if (key == Keys.FLOATING_KEYBOARD && inputShown) applyFloating(settings().floatingKeyboard)
+    }
+
+    /**
+     * Ghi prefs cài đặt từ IME (thả nổi, một tay, thu gọn bar): đọc lại file trước (process cài
+     * đặt có thể vừa ghi) — SharedPreferences ghi CẢ map, map cũ sẽ đè thay đổi của app.
+     */
+    private fun editPrefs(): SharedPreferences.Editor = PrefSync.reload(this).edit()
+
+    /** Mốc sửa từ điển đổi ⇒ nạp lại model từ file (app đã ghi/xoá); trùng mốc ⇒ không làm gì. */
+    private fun checkUserLmReset() {
+        val at = prefs.getLong(Keys.USERLM_RESET_AT, 0L)
+        if (at == userLmResetSeen) return
+        userLmResetSeen = at
+        model.reloadAfterExternalErase()
+    }
+
+    /**
+     * Lưới an toàn đa process: file prefs đổi từ lần hiện trước (process cài đặt ghi lúc IME
+     * không nhận được broadcast) ⇒ đọc lại từ đĩa, bỏ mọi cache cài đặt/theme/mẫu câu. 2 stat.
+     */
+    private fun syncPrefsFromDisk() {
+        if (!prefStamp.changed()) return
+        PrefSync.reload(this)
+        settingsCache = null
+        themeStale = true
+        templatesCache = null
+        checkUserLmReset()
     }
 
     override fun onCreate() {
@@ -213,6 +256,10 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         session.pasteOnce.persist = { stateStore().edit().putLong(Keys.PASTE_OFFERED_ID, it).apply() }
         model.onReady = { refreshBar() }
         prefs.registerOnSharedPreferenceChangeListener(prefListener)
+        userLmResetSeen = prefs.getLong(Keys.USERLM_RESET_AT, 0L)
+        prefStamp.changed()                                  // ghi nhận mốc ban đầu
+        PrefSync.forward(this)                               // thay đổi của IME (thả nổi, một tay…) ⇒ app
+        prefReceiver = PrefSync.listen(this) { keys -> keys.forEach { onPrefChanged(it) } }
         accessibility = (getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager)?.also {
             it.addTouchExplorationStateChangeListener(touchExplorationListener)
         }
@@ -222,6 +269,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     override fun onDestroy() {
         cancelTranslate()                              // đóng client ML Kit nếu đang dịch
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
+        prefReceiver?.let { PrefSync.unlisten(this, it) }; prefReceiver = null
         accessibility?.removeTouchExplorationStateChangeListener(touchExplorationListener)
         accessibility = null
         clipboard.release()
@@ -299,6 +347,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         val t0 = SystemClock.elapsedRealtime()
         super.onStartInputView(info, restarting)
         handler.removeCallbacks(idleRelease)
+        syncPrefsFromDisk()
         // Đổi theme/ảnh nền trong app → dựng lại input view (màu/Paint tạo sẵn trong view).
         // Chỉ dựng ImeTheme để so khi pref đổi hoặc sáng/tối hệ thống đổi (không mỗi lần focus ô).
         val uiMode = resources.configuration.uiMode
@@ -495,7 +544,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     /**
      * Hiện lại sau [releaseIdle]: nạp lại những gì đã nhả trên MỘT luồng nền ưu tiên thấp riêng
-     * (không chen hàng đợi gợi ý của worker ⇒ phím/gợi ý đầu không chờ). Hiếm: ≤ 1 lần / 45 s ẩn.
+     * (không chen hàng đợi gợi ý của worker ⇒ phím/gợi ý đầu không chờ). Hiếm: ≤ 1 lần / 3 phút ẩn.
      */
     private fun rewarmAfterIdle() {
         val english = englishReleased; val wall = wallpaperReleased
@@ -563,7 +612,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     /** Ghi công tắc (app + sao lưu thấy) rồi áp ngay. */
     private fun setFloatingPref(on: Boolean) {
-        prefs.edit().putBoolean(Keys.FLOATING_KEYBOARD, on).apply()
+        editPrefs().putBoolean(Keys.FLOATING_KEYBOARD, on).apply()
         applyFloating(on)
     }
 
@@ -606,6 +655,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         fieldReady = false
         hwTyped = false
         hwConsumed.clear()
+        syncPrefsFromDisk()
         val settings = settings()
         hwSetting = settings.hardwareTelex
         if (hwSetting && hardKeyboardPresent()) configureField(attribute, settings)
@@ -816,7 +866,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
                 futo = f
             }
         }
-        worker().post { synchronized(swipeLock) { if (futo === f) f.load() } }
+        worker().post { if (futo === f) f.load() }
     }
 
     override fun onSwipeLayout(layout: SwipeLayout) {
@@ -851,7 +901,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             // FUTO Swipe (thử nghiệm): null khi tắt / model chưa sẵn ⇒ SHARK2 như cũ
             futo?.decode(path, SwipeSuggest.TOP_K, ctx.folded, ctx.english, enCtx, dec)
                 ?: dec.decode(path, SwipeSuggest.TOP_K, ctx.folded, ctx.english, enCtx).also {
-                    futo?.let { f -> worker().post { synchronized(swipeLock) { if (futo === f) f.load() } } }
+                    futo?.let { f -> worker().post { if (futo === f) f.load() } }
                 }
         }
         // chọn từ + (nếu có) sửa lại từ vuốt trước theo ngữ cảnh hai phía (SwipeRevise)
@@ -1063,11 +1113,16 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         if (inputShown && fieldReady && PlanePolicy.reevaluatesShift(plane)) applyAutoShift()
     }
 
-    override fun emojiRecents(): List<String> = EmojiRecents.decode(prefs.getString(Keys.EMOJI_RECENTS, null))
+    /** Recents emoji ở prefs trạng thái (không kích listener cài đặt/theme); bản cũ chuyển một lần. */
+    override fun emojiRecents(): List<String> = EmojiRecents.load(
+        state = { stateStore().getString(Keys.EMOJI_RECENTS, null) },
+        legacy = { prefs.getString(Keys.EMOJI_RECENTS, null) },
+        store = { stateStore().edit().putString(Keys.EMOJI_RECENTS, it).apply() },
+        dropLegacy = { editPrefs().remove(Keys.EMOJI_RECENTS).apply() })
 
     override fun noteEmojiUsed(e: String) {
         val next = EmojiRecents.noteUsed(emojiRecents(), e)
-        prefs.edit().putString(Keys.EMOJI_RECENTS, EmojiRecents.encode(next)).apply()
+        stateStore().edit().putString(Keys.EMOJI_RECENTS, EmojiRecents.encode(next)).apply()
     }
 
     // MARK: mẫu câu
@@ -1260,7 +1315,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     override fun onOneHandChange(side: OneHandSide) {
         if (theme?.tablet == true) return
-        val e = prefs.edit().putString(Keys.ONE_HAND_MODE, side.pref)
+        val e = editPrefs().putString(Keys.ONE_HAND_MODE, side.pref)
         if (side != OneHandSide.OFF) e.putString(Keys.ONE_HAND_LAST, side.pref)
         e.apply()
         if (floatingNow) return             // một tay tắt khi thả nổi (lưu lại, áp khi gắn lại)
@@ -1269,7 +1324,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     override fun onBarToggled(collapsed: Boolean) {
         this.collapsed = collapsed
-        prefs.edit().putBoolean(Keys.SUGGESTION_BAR_COLLAPSED, collapsed).apply()
+        editPrefs().putBoolean(Keys.SUGGESTION_BAR_COLLAPSED, collapsed).apply()
         session.barCollapsed = collapsed
         if (!collapsed) refreshBar()
     }
@@ -1330,13 +1385,19 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     companion object {
         private const val TAG = "VTKB"
         const val SUGGEST_DELAY_MS = 30L
-        /** Bàn phím ẩn liền bấy lâu ⇒ [releaseIdle] (RAM-AUDIT #6: 30–60 s). */
-        const val IDLE_RELEASE_MS = 45_000L
+        /** Bàn phím ẩn liền bấy lâu ⇒ [releaseIdle] — xem [ImeTrim.IDLE_RELEASE_MS]. */
+        const val IDLE_RELEASE_MS = ImeTrim.IDLE_RELEASE_MS
     }
 }
 
 /** Chính sách onTrimMemory (hàm thuần để test; số = hằng ComponentCallbacks2). */
 object ImeTrim {
+    /**
+     * Ẩn liền bấy lâu ⇒ nhả dữ liệu nạp lại được. 3 phút (trước 45 s — RAM-AUDIT #6): 45 s làm
+     * người gõ ngắt quãng (chat) parse lại enlexicon 1.4 MB + giải lại weights FUTO gần như mỗi
+     * lần mở bàn phím; 3 phút vẫn trả RAM khi thực sự thôi gõ.
+     */
+    const val IDLE_RELEASE_MS = 180_000L
     private const val RUNNING_LOW = 10
     private const val RUNNING_CRITICAL = 15
     private const val BACKGROUND = 40

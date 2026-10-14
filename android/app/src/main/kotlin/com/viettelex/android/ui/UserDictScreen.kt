@@ -40,9 +40,10 @@ import com.viettelex.keyboard.tr
 /**
  * Từ điển cá nhân: xem/tìm/xoá từ bàn phím đã học, thêm tay tên riêng/thuật ngữ.
  *
- * App và IME CÙNG process + cùng filesDir: app mở userlm.bin bằng một UserLangModel đồng bộ
- * (IO tại chỗ), sửa, ghi lại, rồi đổi mốc [Keys.USERLM_RESET_AT] — IME nghe mốc này (pref
- * listener + startInput) ⇒ bỏ bảng trong RAM (huỷ ghi chờ, không ghi đè) và nạp lại file.
+ * App (process ":settings") và IME chung filesDir: app mở userlm.bin bằng một UserLangModel đồng
+ * bộ (IO tại chỗ), sửa, ghi lại, rồi đổi mốc [Keys.USERLM_RESET_AT] — IME nhận qua PrefSync
+ * (broadcast; lỡ thì so mốc file prefs lúc hiện bàn phím) ⇒ bỏ bảng trong RAM (huỷ ghi chờ,
+ * không ghi đè) và nạp lại file.
  */
 private object UserDictStore {
     private val direct = Executor { it.run() }

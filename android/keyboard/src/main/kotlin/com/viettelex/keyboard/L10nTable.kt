@@ -467,5 +467,20 @@ object L10nTable {
         put("Đang cài tính năng Dịch…", "Installing the Translate feature…")
         put("Đã tải tính năng Dịch — mở lại app để dùng.", "Translate feature downloaded — reopen the app to use it.")
         put("Tải tính năng Dịch (~7 MB)", "Download the Translate feature (~7 MB)")
+        // 10/2026: xác nhận xoá từ đã học, dòng khoá Plus, cách dùng mới, TalkBack từng phím
+        put("Xóa từ đã học?", "Erase learned words?")
+        put("Bàn phím quên mọi từ đã học trên máy này, kể cả từ thêm tay trong từ điển cá nhân. Không hoàn tác được.", "The keyboard forgets every word it learned on this device, including words you added to the personal dictionary. This can't be undone.")
+        put("Đã xoá", "Erased")
+        put("🔒 Plus", "🔒 Plus")
+        put("Cách dùng: bật chip “Thêm dấu” ở Tính Năng → Gợi ý & từ điển, gõ không dấu cả câu (hom nay troi dep), gõ dấu cách rồi chạm chip ở đầu thanh gợi ý.", "How to use: turn on the “Add tones” chip in Features → Suggestions & dictionary, type a whole sentence without tones (hom nay troi dep), press space, then tap the chip at the start of the suggestion bar.")
+        put("Cách dùng: Tính Năng → Gõ tắt & mẫu câu → Dịch trên máy: chọn ngôn ngữ đích, tải gói dịch; rồi chạm ☰ trên thanh gợi ý → “⚒️ Công cụ” → “Dịch” (hoặc ô “Dịch” ở hàng cuối bảng sửa văn bản).", "How to use: Features → Shortcuts & templates → On-device translation: pick the target language and download the packs; then tap ☰ on the suggestion bar → “⚒️ Tools” → “Translate” (or the “Translate” cell in the last row of the text-editing panel).")
+        put("Shift", "Shift")
+        put("Dấu cách", "Space")
+        put("Xuống dòng", "Return")
+        put("Emoji", "Emoji")
+        put("Ẩn bàn phím", "Hide keyboard")
+        put("Chữ cái", "Letters")
+        put("Số", "Numbers")
+        put("Ký hiệu", "Symbols")
     }
 }

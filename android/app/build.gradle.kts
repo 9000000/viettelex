@@ -42,12 +42,18 @@ android {
 dependencies {
     implementation(project(":telexcore")); implementation(project(":keyboard"))
     implementation("androidx.core:core-ktx:1.13.1")
+    // ExploreByTouchHelper (TalkBack cho từng phím) — đã có sẵn qua phụ thuộc bắc cầu, khai rõ.
+    implementation("androidx.customview:customview:1.0.0")
+    // Process ":settings" tự khởi tạo EmojiCompat (androidx.startup chỉ chạy ở process chính) —
+    // cùng bản đã có sẵn qua Compose, chỉ khai rõ để gọi được.
+    implementation("androidx.startup:startup-runtime:1.1.1")
+    implementation("androidx.emoji2:emoji2:1.3.0")
     implementation(platform("androidx.compose:compose-bom:2024.10.01"))
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("androidx.compose.ui:ui-tooling-preview")
+    debugImplementation("androidx.compose.ui:ui-tooling-preview")   // không có @Preview trong main ⇒ chỉ bản debug
     // VietTelex Plus + ủng hộ: Google Play Billing (thư viện chính chủ của Google).
     implementation("com.android.billingclient:billing:8.0.0")
     // Dịch trên máy (Plus): ML Kit nằm ở module on-demand :translate (APK gốc không có);

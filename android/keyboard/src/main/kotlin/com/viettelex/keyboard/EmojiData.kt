@@ -188,8 +188,24 @@ object EmojiData {
     }
 }
 
-/** Recents emoji (tối đa 30, mới nhất đầu) — lưu pref [Keys.EMOJI_RECENTS]. */
+/**
+ * Recents emoji (tối đa 30, mới nhất đầu) — lưu [Keys.EMOJI_RECENTS] ở prefs TRẠNG THÁI IME
+ * ("ime_state"), không ở prefs cài đặt: ghi vào prefs cài đặt kích listener ⇒ xoá cache setting
+ * + dựng lại theme mỗi lần chọn emoji.
+ */
 object EmojiRecents {
+    /**
+     * Đọc recents; bản cũ còn ở prefs cài đặt ⇒ chuyển MỘT lần sang prefs trạng thái rồi xoá
+     * bản cũ. [state]/[legacy] đọc chuỗi, [store] ghi trạng thái, [dropLegacy] xoá bản cũ.
+     */
+    fun load(state: () -> String?, legacy: () -> String?, store: (String) -> Unit, dropLegacy: () -> Unit): List<String> {
+        state()?.let { return decode(it) }
+        val old = legacy() ?: return emptyList()
+        store(old)
+        dropLegacy()
+        return decode(old)
+    }
+
     const val MAX = 30
     fun noteUsed(recents: List<String>, e: String): List<String> {
         val r = ArrayList<String>(recents.size + 1)

@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        SettingsProcess.install(this)
         PlusPrefs.install(this)
         com.viettelex.android.shared.UiLang.install(this)   // ngôn ngữ giao diện (mặc định Tiếng Việt)
         plus = PlusController(
@@ -84,6 +85,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        SettingsProcess.refresh(this)    // bàn phím (process khác) có thể vừa ghi prefs
         refreshIme()
         // Đồng bộ giao dịch (mua ở máy khác / hoàn tiền / pending vừa xong).
         lifecycleScope.launch { plus.refresh(loadProducts = false) }
@@ -113,11 +115,11 @@ class MainActivity : ComponentActivity() {
     // MARK: dọn RAM khi rời app (RAM-AUDIT #5)
 
     /**
-     * App cài đặt chạy CÙNG process với bàn phím (prefs listener cùng process) — từ API 31 Back
-     * không finish activity gốc nên Compose/HWUI của nó (+16.7 MB) nằm lại trong process IME mãi
-     * (process IME không bao giờ bị dọn). ⇒ finish ở onStop, TRỪ khi chính app vừa mở activity
-     * khác mà user sẽ quay về (chọn ảnh/file, Play Billing, Cài đặt bàn phím, chia sẻ, link) —
-     * kết quả trả về cần activity còn sống.
+     * Trước đây app cài đặt chạy CÙNG process với bàn phím — từ API 31 Back không finish activity
+     * gốc nên Compose/HWUI (+16.7 MB) nằm lại mãi trong process IME. Giờ app ở process ":settings"
+     * (hệ thống dọn được); vẫn finish ở onStop để process cache nhẹ, TRỪ khi chính app vừa mở
+     * activity khác mà user sẽ quay về (chọn ảnh/file, Play Billing, Cài đặt bàn phím, chia sẻ,
+     * link) — kết quả trả về cần activity còn sống.
      */
     private var launchedChild = false
 
@@ -164,4 +166,36 @@ object SettingsExit {
      */
     fun shouldFinish(changingConfig: Boolean, launchedChild: Boolean, interactive: Boolean, finishing: Boolean): Boolean =
         !changingConfig && !launchedChild && interactive && !finishing
+}
+
+/**
+ * Process ":settings" (RAM-AUDIT #5): dữ liệu bàn phím dùng trong app (Luyện vuốt, từ điển…) cài
+ * riêng ở đây; prefs đồng bộ hai chiều với process bàn phím qua [PrefSync].
+ */
+object SettingsProcess {
+    private var installed = false
+
+    fun install(ctx: android.content.Context) {
+        if (installed) return
+        installed = true
+        val app = ctx.applicationContext
+        // androidx.startup (InitializationProvider) chỉ chạy ở process chính ⇒ tự khởi tạo ở đây
+        // những gì UI Compose dùng như trước khi tách process (emoji màu mới, ProcessLifecycleOwner).
+        runCatching {
+            androidx.startup.AppInitializer.getInstance(app)
+                .initializeComponent(androidx.emoji2.text.EmojiCompatInitializer::class.java)
+        }
+        if (!com.viettelex.keyboard.KeyboardData.installed)
+            com.viettelex.keyboard.KeyboardData.install(com.viettelex.android.ime.AssetBlobs.provider(app.assets))
+        com.viettelex.android.shared.PrefSync.forward(app)   // thay đổi trong app ⇒ bàn phím
+        // Bàn phím ghi (thả nổi, một tay, thu gọn bar…) ⇒ đọc lại + cập nhật ô cài đặt đang hiện.
+        com.viettelex.android.shared.PrefSync.listen(app) { keys -> PrefRefresh.dispatch(app, keys) }
+    }
+
+    /** Đọc lại prefs từ đĩa (lỡ broadcast lúc process bị đóng băng) rồi làm mới mọi ô đang hiện. */
+    fun refresh(ctx: android.content.Context) {
+        val app = ctx.applicationContext
+        com.viettelex.android.shared.PrefSync.reload(app)
+        PrefRefresh.dispatch(app, null)
+    }
 }

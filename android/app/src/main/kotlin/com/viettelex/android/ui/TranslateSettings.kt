@@ -36,14 +36,14 @@ import com.viettelex.keyboard.TranslateLangs
 import com.viettelex.keyboard.tr
 
 /**
- * Cài đặt "Dịch trên máy" (Plus) — dưới dòng tính năng trên màn Plus: chọn ngôn ngữ đích
+ * Cài đặt "Dịch trên máy" (Plus) — Tính Năng → Gõ tắt & mẫu câu: chọn ngôn ngữ đích
  * (mọi ngôn ngữ ML Kit hỗ trợ), chỉ-Wi-Fi, rồi hai bước tải do người dùng bấm:
  *  1. module `:translate` (Play Feature Delivery, on-demand — ML Kit không có trong APK gốc);
  *  2. gói ngôn ngữ (~30 MB mỗi thứ tiếng).
  * Gọi chỉ khi [TranslateFeature.offered] (APK ngoài Play: ẩn hẳn).
  */
 @Composable
-fun TranslateSettings() {
+fun TranslateSettings(leadingDivider: Boolean = true) {
     val c = LocalVT.current
     val ctx = LocalContext.current
     var targetRaw by rememberStringPref(Keys.TRANSLATE_TARGET, TranslateLangs.DEFAULT_TARGET)
@@ -99,7 +99,7 @@ fun TranslateSettings() {
         onDispose { splits.unregisterListener(l) }
     }
 
-    RowDivider()
+    if (leadingDivider) RowDivider()
     VTRow(onClick = { picking = true }) {
         Text(tr("Dịch sang"), style = VTType.body, color = c.label, modifier = Modifier.weight(1f))
         Text(TranslateLangs.displayName(target, ui) + " ›", style = VTType.body, color = c.secondary)

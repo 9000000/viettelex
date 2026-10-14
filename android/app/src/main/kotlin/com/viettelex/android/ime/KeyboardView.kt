@@ -471,7 +471,66 @@ class KeyboardView(
 
     init {
         isHapticFeedbackEnabled = true
-        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+
+    // MARK: trợ năng (TalkBack)
+
+    /** Phím TalkBack vừa kích hoạt — [down] dùng thẳng, không hit-test/chọn phím thông minh. */
+    private var a11yKey: LaidKey? = null
+    private val a11y = KeyA11yHelper()
+
+    init {
+        // TalkBack: mỗi phím là một nút ảo (ExploreByTouchHelper) — chỉ chạy khi dịch vụ trợ năng
+        // hỏi (hover / node), 0 chi phí mỗi phím khi tắt.
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(this, a11y)
+    }
+
+    override fun dispatchHoverEvent(event: MotionEvent): Boolean =
+        a11y.dispatchHoverEvent(event) || super.dispatchHoverEvent(event)
+
+    /** Chạm ảo đúng phím [k] (nhấn rồi nhả ở tâm) — cùng đường với ngón tay thật. */
+    private fun a11yTap(k: LaidKey) {
+        val t = SystemClock.uptimeMillis()
+        val pid = MAX_PTR - 1
+        val x = k.centerX; val y = k.centerY
+        val ev = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0)
+        try {
+            a11yKey = k
+            down(pid, x, y, ev)
+        } finally { a11yKey = null; ev.recycle() }
+        up(pid, x, y, cancelled = false, t = t)
+    }
+
+    private inner class KeyA11yHelper : androidx.customview.widget.ExploreByTouchHelper(this@KeyboardView) {
+        private fun keyAt(id: Int): LaidKey? = keys.getOrNull(id)
+
+        override fun getVirtualViewAt(x: Float, y: Float): Int {
+            for (i in keys.indices) if (keys[i].contains(x, y)) return i
+            return INVALID_ID
+        }
+
+        override fun getVisibleVirtualViews(ids: MutableList<Int>) { for (i in keys.indices) ids.add(i) }
+
+        override fun onPopulateNodeForVirtualView(id: Int, node: androidx.core.view.accessibility.AccessibilityNodeInfoCompat) {
+            val k = keyAt(id)
+            if (k == null) {   // danh sách phím vừa đổi: nút rỗng hợp lệ
+                node.contentDescription = ""
+                node.setBoundsInParent(android.graphics.Rect(0, 0, 1, 1))
+                return
+            }
+            node.contentDescription = KeyA11y.describe(k.kind, k.label, k.upper, k.insert, shift != Shift.OFF, returnLabel)
+            node.className = android.widget.Button::class.java.name
+            node.setBoundsInParent(android.graphics.Rect(k.left.toInt(), k.top.toInt(), k.right.toInt(), k.bottom.toInt()))
+            node.addAction(androidx.core.view.accessibility.AccessibilityNodeInfoCompat.ACTION_CLICK)
+        }
+
+        override fun onPerformActionForVirtualView(id: Int, action: Int, args: android.os.Bundle?): Boolean {
+            if (action != androidx.core.view.accessibility.AccessibilityNodeInfoCompat.ACTION_CLICK) return false
+            val k = keyAt(id) ?: return false
+            a11yTap(k)
+            invalidateRoot()           // nhãn có thể đổi (shift, plane)
+            return true
+        }
     }
 
     // MARK: cấu hình
@@ -580,6 +639,7 @@ class KeyboardView(
                 editTools = textToolsEnabled, numberRowFull = numberRowFull, editTranslate = translateEnabled))
         }
         railSpan = if (OneHand.appliesTo(plane)) OneHand.rail(width.toFloat(), oneHand) else null
+        a11y.invalidateRoot()             // TalkBack tắt ⇒ trả về ngay (manager không bật)
         spaceKey = keys.firstOrNull { it.kind == KeyKind.SPACE }
         spaceKey?.let {
             val sz = theme.dp(22f)
@@ -992,7 +1052,8 @@ class KeyboardView(
                 return
             }
         }
-        val hit = KeyLayout.hit(keys, plane, x, y, TouchGeometry.yOffset * d, d, e.eventTime - lastLetterDownT)
+        val forced = a11yKey
+        val hit = forced ?: KeyLayout.hit(keys, plane, x, y, TouchGeometry.yOffset * d, d, e.eventTime - lastLetterDownT)
         cancelCommaHold()                 // ngón khác chạm ⇒ "," đang giữ là gõ thường
         if (TouchLog.enabled) {
             val lag = (SystemClock.uptimeMillis() - e.eventTime).toDouble()
@@ -1003,7 +1064,7 @@ class KeyboardView(
         // ĐẦU TIÊN: chốt các phím nhấc-mới-chốt đang đè (thứ tự khi gõ chồng ngón).
         commits.flush(hit)
         // Chọn phím theo ngữ cảnh (thử nghiệm) — SAU flush để prior thấy từ đang gõ mới nhất.
-        val prior = if (hit.kind == KeyKind.LETTER && plane == Plane.LETTERS) letterPrior?.invoke() else null
+        val prior = if (forced == null && hit.kind == KeyKind.LETTER && plane == Plane.LETTERS) letterPrior?.invoke() else null
         val k = if (prior != null) SmartTouch.refine(keys, hit, x, y - TouchGeometry.yOffset * d, prior) else hit
         ptrKey[pid] = k
         when (k.kind) {

@@ -45,7 +45,11 @@ class FutoSwipe(private val source: () -> ByteBuffer?) {
 
     val params = Params()
     @Volatile private var model: FutoSwipeModel? = null
-    private var loadFailed = false
+    @Volatile private var loadFailed = false
+    /** Khoá RIÊNG cho việc tải (không dùng khoá decode của IME ⇒ vuốt không chờ tải weights). */
+    private val loadLock = Any()
+    /** Tăng ở [release]: lượt tải đang dở lúc nhả thì bỏ kết quả (không hồi sinh model đã nhả). */
+    @Volatile private var loadGen = 0
     private var layout: SwipeLayout? = null
     private val keyXY = FloatArray(52)
     /** chữ a…z → cột trong đầu ra model (−1 = layout không có phím). */
@@ -70,18 +74,28 @@ class FutoSwipe(private val source: () -> ByteBuffer?) {
 
     val isLoaded: Boolean get() = model != null
 
-    /** Tải model (gọi ở luồng nền). An toàn gọi lại; hỏng thì không thử lại tới [release]. */
+    /**
+     * Tải model (gọi ở luồng nền). An toàn gọi lại; hỏng thì không thử lại tới [release].
+     * Thread-safe với [decode] mà KHÔNG cần khoá decode: decode thấy model null ⇒ trả null
+     * (caller dùng SHARK2) thay vì chờ tải xong.
+     */
     fun load(): Boolean {
         if (model != null) return true
-        if (loadFailed) return false
-        val m = try { source()?.let { FutoSwipeModel.load(it) } } catch (e: Exception) { null }
-        if (m == null) { loadFailed = true; return false }
-        model = m
-        return true
+        synchronized(loadLock) {
+            if (model != null) return true
+            if (loadFailed) return false
+            val gen = loadGen
+            val m = try { source()?.let { FutoSwipeModel.load(it) } } catch (e: Exception) { null }
+            if (m == null) { loadFailed = true; return false }
+            if (gen != loadGen) return false          // đã nhả trong lúc tải
+            model = m
+            return true
+        }
     }
 
-    /** Nhả model (ẩn bàn phím / áp lực bộ nhớ / tắt công tắc). */
+    /** Nhả model (ẩn bàn phím / áp lực bộ nhớ / tắt công tắc). Không chờ lượt tải đang chạy. */
     fun release() {
+        loadGen++
         model = null
         loadFailed = false
         hasEmissions = false

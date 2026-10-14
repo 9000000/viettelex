@@ -44,13 +44,11 @@ fun PlusEntryRow(plus: PlusController, onOpen: () -> Unit) {
 
 /** Màn "VietTelex Plus": quyền lợi, mua, khôi phục, trạng thái, ủng hộ. */
 @Composable
-fun PlusScreen(plus: PlusController, onBack: () -> Unit) {
+fun PlusScreen(plus: PlusController, onBack: () -> Unit, onOpenFeature: (FeaturePage) -> Unit = {}) {
     val c = LocalVT.current
     val s by plus.state.collectAsState()
     val scope = rememberCoroutineScope()
     var debugOverride by rememberBoolPref(Keys.PLUS_DEBUG_OVERRIDE, false)
-    var addTonesChip by rememberBoolPref(Keys.ADD_TONES_CHIP, Prefs.D.addTonesChip)
-    var textToolsEnabled by rememberBoolPref(Keys.TEXT_TOOLS_ENABLED, Prefs.D.textToolsEnabled)
     val isPlus = PlusGate.resolve(s.purchased, debugOverride, BuildConfig.DEBUG)
 
     LaunchedEffect(Unit) { plus.refresh() }
@@ -76,20 +74,15 @@ fun PlusScreen(plus: PlusController, onBack: () -> Unit) {
         val translateOffered = TranslateFeature.offered(LocalContext.current)
         PlusFeature.entries.filter { it != PlusFeature.TRANSLATE || translateOffered }.forEachIndexed { i, f ->
             if (i > 0) RowDivider()
-            VTRow {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // Màn Plus chỉ là trang mua: công tắc/cài đặt nằm ở trang tính năng — chạm để mở.
+            val page = plusFeaturePage(f)
+            VTRow(onClick = page?.let { p -> { onOpenFeature(p) } }) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(f.title, style = VTType.body, color = c.label)
                     Text(f.detail, style = VTType.footnote, color = c.secondary)
                     Text(f.howTo, style = VTType.footnote, color = c.accent)
                 }
-            }
-            if (f == PlusFeature.TRANSLATE && PlusGate.isUnlocked(f)) TranslateSettings()
-            if (f.settingKey != null && PlusGate.isUnlocked(f)) {
-                if (f == PlusFeature.TEXT_TOOLS) {
-                    SettingToggle(f.settingTitle, f.settingCaption, textToolsEnabled) { textToolsEnabled = it }
-                } else {
-                    SettingToggle(f.settingTitle, f.settingCaption, addTonesChip) { addTonesChip = it }
-                }
+                if (page != null) Text("›", style = VTType.title3, color = c.tertiary)
             }
         }
     }
@@ -135,4 +128,14 @@ fun PlusScreen(plus: PlusController, onBack: () -> Unit) {
             SettingToggle(tr("Giả lập đã mua Plus"), null, debugOverride) { debugOverride = it }
         }
     }
+}
+
+/** Trang Tính Năng chứa cài đặt / lối vào của quyền lợi Plus (null = không có trang riêng). */
+internal fun plusFeaturePage(f: PlusFeature): FeaturePage? = when (f) {
+    PlusFeature.PREMIUM_THEMES -> FeaturePage.GiaoDien
+    PlusFeature.SENTENCE_DIACRITICS -> FeaturePage.GoiY
+    PlusFeature.ADVANCED_CLIPBOARD -> FeaturePage.RiengTu
+    PlusFeature.CLOUD_SYNC -> FeaturePage.SaoLuu
+    PlusFeature.TEXT_TOOLS, PlusFeature.TRANSLATE -> FeaturePage.GoTat
+    PlusFeature.THANKS_BADGE -> null
 }

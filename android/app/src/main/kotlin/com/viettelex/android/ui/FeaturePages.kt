@@ -106,10 +106,11 @@ internal data class FeatureSearchEntry(val viTitle: String, val keywords: String
             FeatureSearchEntry("Bảng gõ tắt", "shortcut yaml import export", FeaturePage.GoTat), // l10n-key
             FeatureSearchEntry("Mẫu câu", "template câu soạn sẵn", FeaturePage.GoTat), // l10n-key
             FeatureSearchEntry("Công cụ văn bản", "text tools hoa thường bỏ dấu dịch translate plus", FeaturePage.GoTat), // l10n-key
+            FeatureSearchEntry("Dịch trên máy", "translate dịch ngôn ngữ language ml kit plus", FeaturePage.GoTat), // l10n-key
             FeatureSearchEntry("Hàng phím số", "number row số", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Hàng số cao bằng hàng chữ", "number row tall height cao số", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Giữ phím hàng trên để ra số", "số giữ lâu number long press", FeaturePage.Phim), // l10n-key
-            FeatureSearchEntry("Giữ phím ra ký tự đặc biệt", "ký hiệu symbol @ # giữ lâu long press", FeaturePage.Phim), // l10n-key
+            FeatureSearchEntry("Giữ phím hàng 2, 3 để ra ký tự đặc biệt", "ký hiệu symbol @ # giữ lâu long press", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh", "space ngôn ngữ english language", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Chế độ một tay", "one hand một tay", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Bàn phím thả nổi", "floating nổi kéo di chuyển float", FeaturePage.Phim), // l10n-key
@@ -244,8 +245,10 @@ internal fun GuideLinkSection(p: FeaturePage) {
 // ---------------------------------------------------------------- trang chính
 
 @Composable
-fun TinhNangTab() {
+fun TinhNangTab(openRequest: FeaturePage? = null, onOpened: () -> Unit = {}) {
     var open by rememberSaveable { mutableStateOf<String?>(null) }
+    // Màn Plus chạm một quyền lợi ⇒ mở thẳng trang chứa cài đặt của nó.
+    androidx.compose.runtime.LaunchedEffect(openRequest) { if (openRequest != null) { open = openRequest.name; onOpened() } }
     val page = open?.let { n -> FeaturePage.entries.firstOrNull { it.name == n } }
     if (page != null) {
         val back = { open = null }
@@ -409,11 +412,28 @@ private fun GoiYPage(onBack: () -> Unit) {
         }
         if (showDict) UserDictDialog { showDict = false }
         RowDivider()
-        VTRow(onClick = {
-            java.io.File(ctx.filesDir, Keys.USERLM_FILE).delete()
-            // IME (cùng process) thấy mốc đổi ⇒ bỏ model trong RAM, seed lại, không ghi đè.
-            Prefs.of(ctx).edit().putLong(Keys.USERLM_RESET_AT, System.currentTimeMillis()).apply()
-        }) { Text(tr("Xóa từ đã học"), style = VTType.body, color = c.red) }
+        // Xoá không hoàn tác được ⇒ hỏi lại; xong thì báo ngay tại dòng.
+        var confirmErase by remember { mutableStateOf(false) }
+        var erased by remember { mutableStateOf(false) }
+        VTRow(onClick = { confirmErase = true }) {
+            Text(tr("Xóa từ đã học"), style = VTType.body, color = c.red, modifier = Modifier.weight(1f))
+            if (erased) Text(tr("Đã xoá"), style = VTType.footnote, color = c.secondary)
+        }
+        if (confirmErase) androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmErase = false },
+            title = { Text(tr("Xóa từ đã học?")) },
+            text = { Text(tr("Bàn phím quên mọi từ đã học trên máy này, kể cả từ thêm tay trong từ điển cá nhân. Không hoàn tác được.")) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirmErase = false
+                    java.io.File(ctx.filesDir, Keys.USERLM_FILE).delete()
+                    // IME (process khác) nhận mốc đổi qua PrefSync ⇒ bỏ model trong RAM, seed lại, không ghi đè.
+                    Prefs.of(ctx).edit().putLong(Keys.USERLM_RESET_AT, System.currentTimeMillis()).apply()
+                    erased = true
+                }) { Text(tr("Xoá"), color = c.red) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmErase = false }) { Text(tr("Huỷ"), color = c.accent) } },
+        )
     }
     GuideLinkSection(FeaturePage.GoiY)
 }
@@ -467,13 +487,34 @@ private fun GoTatPage(onBack: () -> Unit) {
     ShortcutsSection { showShortcuts = true }
     VTSection(header = tr("Mẫu câu")) {
         BoolToggle(Keys.TEMPLATES_ENABLED, Prefs.D.templatesEnabled, tr("Mẫu câu"), tr("Nút ☰ trên bàn phím chèn câu soạn sẵn — quản lý ở tab Mẫu Câu."))
+        RowDivider()
+        // Luôn hiện (tìm "Công cụ văn bản" phải tới được đây); chưa có Plus ⇒ dòng khoá.
         if (PlusGate.isUnlocked(PlusFeature.TEXT_TOOLS)) {
-            RowDivider()
             BoolToggle(Keys.TEXT_TOOLS_ENABLED, Prefs.D.textToolsEnabled, tr("Công cụ văn bản"),
                 tr("Chip ⚒️ Công cụ trong lưới mẫu câu: đổi HOA/thường, bỏ dấu, dịch…"))
+        } else PlusLockedRow(tr("Công cụ văn bản"), tr("Chip ⚒️ Công cụ trong lưới mẫu câu: đổi HOA/thường, bỏ dấu, dịch…"))
+    }
+    // Dịch trên máy (Plus): cài đặt ở đây (cạnh Công cụ) — APK ngoài Play không tải được module ⇒ ẩn.
+    if (com.viettelex.android.translate.TranslateFeature.offered(LocalContext.current)) {
+        VTSection(header = PlusFeature.TRANSLATE.title) {
+            if (PlusGate.isUnlocked(PlusFeature.TRANSLATE)) TranslateSettings(leadingDivider = false)
+            else PlusLockedRow(PlusFeature.TRANSLATE.title, PlusFeature.TRANSLATE.detail)
         }
     }
     GuideLinkSection(FeaturePage.GoTat)
+}
+
+/** Tính năng Plus chưa mở khoá: vẫn hiện (tìm kiếm tới được) với nhãn khoá, không công tắc. */
+@Composable
+private fun PlusLockedRow(title: String, caption: String) {
+    val c = LocalVT.current
+    VTRow {
+        Column(Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = VTType.body, color = c.secondary)
+            Text(caption, style = VTType.footnote, color = c.secondary)
+        }
+        Text(tr("🔒 Plus"), style = VTType.footnote, color = c.accent)
+    }
 }
 
 @Composable

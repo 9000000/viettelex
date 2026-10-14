@@ -13,7 +13,7 @@ import com.viettelex.keyboard.Keys
 import com.viettelex.keyboard.TemplateItem
 import com.viettelex.keyboard.Templates
 
-/** SharedPreferences dùng chung với IME (cùng process) — key/tên file ở [Keys] (module :keyboard). */
+/** SharedPreferences dùng chung với IME (process khác — đồng bộ qua PrefSync) — key/tên file ở [Keys] (module :keyboard). */
 object Prefs {
     fun of(ctx: Context): SharedPreferences = ctx.getSharedPreferences(Keys.PREFS, Context.MODE_PRIVATE)
     /** Mặc định y iOS — lấy từ KeyboardSettings để app và IME không lệch nhau. */
@@ -46,7 +46,10 @@ private fun <T> rememberPref(
             if (k == key) backing.value = p.read()
         }
         sp.registerOnSharedPreferenceChangeListener(l)
-        onDispose { sp.unregisterOnSharedPreferenceChangeListener(l) }
+        // Bàn phím (process khác) ghi key này ⇒ PrefSync đọc lại file ⇒ cập nhật ô.
+        val r: (Set<String>?) -> Unit = { keys -> if (keys == null || key in keys) { val v = sp.read(); if (v != backing.value) backing.value = v } }
+        PrefRefresh.add(r)
+        onDispose { sp.unregisterOnSharedPreferenceChangeListener(l); PrefRefresh.remove(r) }
     }
     return remember(key) {
         object : MutableState<T> {
@@ -56,6 +59,20 @@ private fun <T> rememberPref(
             override fun component1() = value
             override fun component2(): (T) -> Unit = { value = it }
         }
+    }
+}
+
+/**
+ * Ô cài đặt đang hiện cần đọc lại khi process bàn phím ghi prefs (reload không kích listener
+ * SharedPreferences). keys null = có thể đổi bất kỳ (onResume).
+ */
+object PrefRefresh {
+    private val listeners = LinkedHashSet<(Set<String>?) -> Unit>()
+    fun add(l: (Set<String>?) -> Unit) { listeners.add(l) }
+    fun remove(l: (Set<String>?) -> Unit) { listeners.remove(l) }
+    fun dispatch(ctx: Context, keys: Set<String>?) {
+        listeners.toList().forEach { it(keys) }
+        if (keys == null || Keys.UI_LANGUAGE in keys) com.viettelex.android.shared.UiLang.refreshFromPrefs(Prefs.of(ctx))
     }
 }
 

@@ -56,6 +56,8 @@ fun RootScreen(
     var tab by rememberSaveable { mutableStateOf(AppTab.KieuGo) }
     // Màn VietTelex Plus (mở từ tab Giới Thiệu) — thay nội dung tab, ◁ để quay lại.
     var showPlus by rememberSaveable { mutableStateOf(false) }
+    /** Màn Plus vừa chạm một quyền lợi ⇒ tab Tính Năng mở trang đó. */
+    var featureRequest by remember { mutableStateOf<FeaturePage?>(null) }
     BackHandler(showPlus) { showPlus = false }
     var templatesEnabled by rememberBoolPref(Keys.TEMPLATES_ENABLED, Prefs.D.templatesEnabled)
     val tabs = if (templatesEnabled) AppTab.entries else AppTab.entries.filter { it != AppTab.MauCau }
@@ -100,10 +102,11 @@ fun RootScreen(
         ) {
             Text(title, style = VTType.largeTitle, color = c.label,
                 modifier = Modifier.padding(start = 20.dp, top = 8.dp, bottom = 10.dp))
-            if (showPlus) PlusScreen(plus) { showPlus = false }
+            if (showPlus) PlusScreen(plus, onBack = { showPlus = false },
+                onOpenFeature = { p -> featureRequest = p; showPlus = false; tab = AppTab.TinhNang })
             else when (tab) {
                 AppTab.KieuGo -> KieuGoTab(ime, onOpenImeSettings, onPickIme)
-                AppTab.TinhNang -> TinhNangTab()
+                AppTab.TinhNang -> TinhNangTab(featureRequest) { featureRequest = null }
                 AppTab.MauCau -> MauCauTab()
                 AppTab.GioiThieu -> GioiThieuTab(plus) { showPlus = true }
             }

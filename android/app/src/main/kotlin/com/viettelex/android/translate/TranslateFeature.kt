@@ -9,7 +9,9 @@ import com.viettelex.keyboard.TranslateEngineFactory
 import com.viettelex.keyboard.TranslateResult
 
 /**
- * Phần máy dịch (ML Kit, ~16 MB native/arm64) nằm ở module Play Feature Delivery `:translate`
+ * Phần máy dịch (ML Kit: libtranslate_jni.so 16.4 MB khi cài trên arm64, 11.6 MB armv7; Play chỉ
+ * giao đúng ABI, nén ⇒ TẢI ~7 MB: arm64 6.8 + dex 0.3 MB, armv7 6.0 MB — đo AAB 1.5.5, khớp nhãn
+ * "Tải tính năng Dịch (~7 MB)") nằm ở module Play Feature Delivery `:translate`
  * (on-demand) — APK gốc KHÔNG có ML Kit. Module chỉ tải khi người dùng bấm "Tải tính năng Dịch"
  * trong app; sau đó class [IMPL] được nạp bằng reflection (SplitCompat cho process đang chạy).
  *

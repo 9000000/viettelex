@@ -1,6 +1,8 @@
 package com.viettelex.android.translate.mlkit
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.google.mlkit.common.MlKit
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.common.model.RemoteModelManager
@@ -9,6 +11,9 @@ import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import com.viettelex.android.translate.TranslateBackend
+import com.viettelex.keyboard.Cancellable
+import com.viettelex.keyboard.KeepAlive
+import com.viettelex.keyboard.MainThread
 import com.viettelex.keyboard.TranslateDirection
 import com.viettelex.keyboard.TranslateEngine
 import com.viettelex.keyboard.TranslateEngineFactory
@@ -29,7 +34,15 @@ class MlKitBackend(ctx: Context) : TranslateBackend {
 
     private fun model(code: String) = TranslateRemoteModel.Builder(code).build()
 
-    override val engineFactory = TranslateEngineFactory { plan -> MlKitEngine(plan) }
+    /**
+     * Translator theo cặp ngôn ngữ, giữ [TRANSLATOR_TTL_MS] sau lượt dịch cuối (dịch vài câu liên
+     * tiếp không nạp lại model mỗi lần), rồi đóng. Mọi truy cập trên main thread.
+     */
+    private val translators = KeepAlive<TranslateDirection.Plan, Translator>(TRANSLATOR_TTL_MS, MainLooper,
+        create = { p -> Translation.getClient(TranslatorOptions.Builder().setSourceLanguage(p.from).setTargetLanguage(p.to).build()) },
+        close = { it.close() })
+
+    override val engineFactory = TranslateEngineFactory { plan -> MlKitEngine(plan, translators) }
 
     override fun downloadedModels(onDone: (Set<String>?) -> Unit) {
         RemoteModelManager.getInstance().getDownloadedModels(TranslateRemoteModel::class.java)
@@ -54,8 +67,11 @@ class MlKitBackend(ctx: Context) : TranslateBackend {
     }
 }
 
-/** Mỗi lượt một Translator, đóng khi xong ([TranslateEngine.close]). */
-private class MlKitEngine(private val plan: TranslateDirection.Plan) : TranslateEngine {
+/** Một lượt dịch; Translator lấy từ cache theo cặp ngôn ngữ, [close] trả lại (đóng sau TTL). */
+private class MlKitEngine(
+    private val plan: TranslateDirection.Plan,
+    private val translators: KeepAlive<TranslateDirection.Plan, Translator>,
+) : TranslateEngine {
     private var translator: Translator? = null
     private var closed = false
 
@@ -67,8 +83,7 @@ private class MlKitEngine(private val plan: TranslateDirection.Plan) : Translate
                 // English: ML Kit coi là luôn có (pivot) — có thể không nằm trong danh sách ⇒ không đòi.
                 val have = ms.map { it.language }.toSet() + "en"
                 if (plan.from !in have || plan.to !in have) { onDone(TranslateResult.MissingModel); return@addOnSuccessListener }
-                val t = Translation.getClient(TranslatorOptions.Builder()
-                    .setSourceLanguage(plan.from).setTargetLanguage(plan.to).build())
+                val t = translators.acquire(plan)
                 translator = t
                 t.translate(text)          // executor nền của ML Kit; listener về main thread
                     .addOnSuccessListener { if (!closed) onDone(TranslateResult.Ok(it)) }
@@ -79,7 +94,19 @@ private class MlKitEngine(private val plan: TranslateDirection.Plan) : Translate
 
     override fun close() {
         closed = true
-        translator?.close()
+        translator?.let { translators.release(plan, it) }
         translator = null
     }
 }
+
+/** Main looper cho hẹn giờ đóng Translator. */
+private object MainLooper : MainThread {
+    private val h = Handler(Looper.getMainLooper())
+    override fun post(r: Runnable) { h.post(r) }
+    override fun postDelayed(delayMs: Long, r: Runnable): Cancellable {
+        h.postDelayed(r, delayMs); return Cancellable { h.removeCallbacks(r) }
+    }
+}
+
+/** Giữ Translator bấy lâu sau lượt dịch cuối. */
+internal const val TRANSLATOR_TTL_MS = 30_000L
