@@ -4,6 +4,9 @@
 // xếp hạng: trùng nguyên khoá có dấu > trùng nguyên khoá không dấu > tiền tố có dấu
 // > tiền tố đầu khoá > tiền tố ở từ sau; cùng hạng thì khoá ngắn trước.
 // Quét tuyến tính ~6.5k khoá trên blob mmap (không dựng dictionary) — < 1 ms/phím.
+// Khoá tiếng Anh (section SKEN, CLDR en) chỉ quét khi câu tìm KHÔNG dấu, và mọi hạng
+// tiếng Anh đứng sau hạng tiếng Việt tương ứng (trùng nguyên khoá → hạng 1, tiền tố → 5/6)
+// — thứ tự kết quả tiếng Việt không đổi. Gợi ý khi gõ: `typing` (khớp NGUYÊN khoá).
 import Foundation
 import TelexCore
 
@@ -43,6 +46,14 @@ enum EmojiSearch {
     private static let origBase = foldBase + EmojiData.u32(base + 4 + keyCount * 4)
     private static let idBase = origBase + EmojiData.u32(base + 4 + (keyCount + 1) * 4 + keyCount * 4)
 
+    // SKEN: u32 m | u16 foldOff[m+1] | u16 idOff[m+1] | fold utf8 | u16 ids
+    private static let enBase = EmojiData.section("SKEN")
+    static let enKeyCount = EmojiData.u32(enBase)
+    private static let enFoldBase = enBase + 4 + 4 * (enKeyCount + 1)
+    private static let enIdBase = enFoldBase + EmojiData.u16(enBase + 4 + enKeyCount * 2)
+    @inline(__always) private static func enFoldOff(_ k: Int) -> Int { EmojiData.u16(enBase + 4 + k * 2) }
+    @inline(__always) private static func enIdOff(_ k: Int) -> Int { EmojiData.u16(enBase + 4 + (enKeyCount + 1) * 2 + k * 2) }
+
     /// Emoji khớp `query` (đã theo thứ tự hạng, không trùng, chỉ emoji vẽ được).
     static func search(_ query: String, limit: Int = 60,
                        supported: (Int) -> Bool = EmojiData.isSupported) -> [String] {
@@ -73,14 +84,27 @@ enum EmojiSearch {
                 else { rank = 4 }
                 hits.append((rank, fe - fs, k))
             }
+            // Tiếng Anh: chỉ khi câu tìm không dấu (gõ "cá" không kéo "cat"/"cake" vào).
+            guard qo == qf else { return }
+            func u16(_ o: Int) -> Int { Int(UInt16(littleEndian: raw.loadUnaligned(fromByteOffset: o, as: UInt16.self))) }
+            let offBase = enBase + 4
+            for k in 0..<enKeyCount {
+                let fs = enFoldBase + u16(offBase + k * 2)
+                let fe = enFoldBase + u16(offBase + k * 2 + 2)
+                guard let pos = wordPrefix(raw, fs, fe, qf) else { continue }
+                let rank = pos == 0 && fe - fs == qf.count ? 1 : pos == 0 ? 5 : 6
+                hits.append((rank, fe - fs, keyCount + k))
+            }
         }
         hits.sort { ($0.rank, $0.len, $0.key) < ($1.rank, $1.len, $1.key) }
         var out: [Int] = []
         var seen = Set<Int>()
         for h in hits {
-            let s = EmojiData.u32(idOffBase + h.key * 4), e = EmojiData.u32(idOffBase + h.key * 4 + 4)
+            let en = h.key >= keyCount
+            let s = en ? enIdOff(h.key - keyCount) : EmojiData.u32(idOffBase + h.key * 4)
+            let e = en ? enIdOff(h.key - keyCount + 1) : EmojiData.u32(idOffBase + h.key * 4 + 4)
             for j in s..<e {
-                let id = EmojiData.u16(idBase + j * 2)
+                let id = EmojiData.u16((en ? enIdBase : idBase) + j * 2)
                 if seen.insert(id).inserted, supported(id) {
                     out.append(id)
                     if out.count >= limit { return out }
@@ -88,6 +112,97 @@ enum EmojiSearch {
             }
         }
         return out
+    }
+
+    // MARK: gợi ý khi gõ (thanh gợi ý) — chỉ gọi khi bảng EmojiSuggest không có từ này
+
+    /// Khoá tiếng Anh có nhiều emoji hơn mức này là quá chung ("face", "flag"…) — không gợi ý khi gõ.
+    static let typingMaxIds = 24
+
+    /// Emoji cho từ đang gõ từ khoá tiếng Anh (SKEN) + mã nước in hoa (FLG2).
+    /// - "JP"/"VN"/"US" (đúng 2 chữ IN HOA, Telex không biến đổi) → cờ. Chữ thường/"Jp"
+    ///   không tra: 65/259 mã trùng âm tiết Việt không dấu (la, ma, to, do, ca, co…).
+    /// - Từ chỉ gồm chữ ASCII (tiếng Việt có dấu thì thôi): khớp NGUYÊN khoá, thử cụm
+    ///   "từ trước + từ này" ("hot dog", "united states") rồi từ này, rồi raw. Khoá trùng âm
+    ///   tiết Việt không dấu / ngắn < 3 chữ đã bị script lọc nên "an", "ban", "me" không ra.
+    static func typing(prev: String?, composed: String, raw: String, limit: Int = 3,
+                       supported: (Int) -> Bool = EmojiData.isSupported) -> [String] {
+        let cu = Array(composed.utf8)
+        if cu.count == 2, composed == raw, cu.allSatisfy({ $0 >= 0x41 && $0 <= 0x5A }) {
+            return flag(cu).flatMap { supported($0) ? [EmojiData.emoji($0)] : nil } ?? []
+        }
+        guard isAsciiWord(cu) else { return [] }
+        let c = composed.lowercased()
+        if let prev, isAsciiWord(Array(prev.utf8)) {
+            let r = exact(Array((prev.lowercased() + " " + c).utf8), limit: limit, supported: supported)
+            if !r.isEmpty { return r }
+        }
+        if cu.count >= 3 {
+            let r = exact(Array(c.utf8), limit: limit, supported: supported)
+            if !r.isEmpty { return r }
+        }
+        let ru = Array(raw.lowercased().utf8)
+        if raw != composed, ru.count >= 3, isAsciiWord(ru) {
+            return exact(ru, limit: limit, supported: supported)
+        }
+        return []
+    }
+
+    private static func isAsciiWord(_ u: [UInt8]) -> Bool {
+        !u.isEmpty && u.allSatisfy { ($0 >= 0x41 && $0 <= 0x5A) || ($0 >= 0x61 && $0 <= 0x7A) }
+    }
+
+    /// Binary search khớp nguyên khoá trong SKEN (sort theo byte của fold).
+    private static func exact(_ q: [UInt8], limit: Int, supported: (Int) -> Bool) -> [String] {
+        var lo = 0, hi = enKeyCount
+        let k: Int? = EmojiData.blob.withUnsafeBytes { raw in
+            func off(_ k: Int) -> Int {
+                Int(UInt16(littleEndian: raw.loadUnaligned(fromByteOffset: enBase + 4 + k * 2, as: UInt16.self)))
+            }
+            func cmp(_ k: Int) -> Int {
+                let s = enFoldBase + off(k), e = enFoldBase + off(k + 1)
+                var i = s, j = 0
+                while i < e && j < q.count {
+                    let a = raw[i], b = q[j]
+                    if a != b { return a < b ? -1 : 1 }
+                    i += 1; j += 1
+                }
+                return i < e ? 1 : j < q.count ? -1 : 0
+            }
+            while lo < hi {
+                let mid = (lo + hi) / 2
+                if cmp(mid) < 0 { lo = mid + 1 } else { hi = mid }
+            }
+            return lo < enKeyCount && cmp(lo) == 0 ? lo : nil
+        }
+        guard let k else { return [] }
+        let s = enIdOff(k), e = enIdOff(k + 1)
+        guard e - s <= typingMaxIds else { return [] }
+        var out: [String] = []
+        for j in s..<e {
+            let id = EmojiData.u16(enIdBase + j * 2)
+            if supported(id) {
+                out.append(EmojiData.emoji(id))
+                if out.count >= limit { break }
+            }
+        }
+        return out
+    }
+
+    /// FLG2: u32 n | n × 2B mã in hoa (sort) | u16 id[n] → id cờ.
+    private static let flagBase = EmojiData.section("FLG2")
+    private static func flag(_ code: [UInt8]) -> Int? {
+        let n = EmojiData.u32(flagBase)
+        var lo = 0, hi = n
+        return EmojiData.blob.withUnsafeBytes { raw -> Int? in
+            while lo < hi {
+                let mid = (lo + hi) / 2
+                let a = raw[flagBase + 4 + mid * 2], b = raw[flagBase + 5 + mid * 2]
+                if a == code[0] && b == code[1] { return EmojiData.u16(flagBase + 4 + n * 2 + mid * 2) }
+                if a < code[0] || (a == code[0] && b < code[1]) { lo = mid + 1 } else { hi = mid }
+            }
+            return nil
+        }
     }
 
     /// Vị trí (byte) nơi `q` là tiền tố của một từ trong [s, e) — đầu khoá hoặc sau space.

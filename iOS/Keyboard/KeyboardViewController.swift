@@ -1644,6 +1644,9 @@ final class KeyboardViewController: UIInputViewController {
             if emojis.isEmpty { emojis = EmojiSuggest.emojis(for: composed) }
             // raw ≡ composed (từ không dấu) ⇒ tra lần ba là thừa.
             if emojis.isEmpty, raw != composed { emojis = EmojiSuggest.emojis(for: raw.lowercased()) }
+            // Bảng biên soạn không có → từ khoá tiếng Anh CLDR ("japan", "pizza") + mã nước
+            // IN HOA ("JP"). Từ có dấu / âm tiết Việt không dấu không bao giờ khớp (EmojiSearch.typing).
+            if emojis.isEmpty { emojis = EmojiSearch.typing(prev: lastWord, composed: composed, raw: raw) }
         }
         set.emojis = emojis
         // Không có emoji lấp slot 3 → đệm word/word2 cho đủ (literal + 2 từ).

@@ -617,14 +617,23 @@ gist hieuthi: maintainer đã rà soát 27/09/2026 — được sử dụng tự
 
 ## emoji.bin — bàn phím emoji: bộ emoji, tìm kiếm tiếng Việt, kaomoji
 
-`iOS/Keyboard/Resources/emoji.bin` = `android/app/src/main/assets/emoji.bin` (~258 KB:
-1.914 emoji Emoji 17.0, 6.493 khoá tìm, 136 kaomoji). Sinh bởi `Scripts/gen-emoji-data.py`
-(python3 stdlib, tự tải nguồn về `~/.cache/viettelex-emoji/`); không sửa tay.
+`iOS/Keyboard/Resources/emoji.bin` = `android/app/src/main/assets/emoji.bin` (~349 KB:
+1.914 emoji Emoji 17.0, 6.493 khoá tìm tiếng Việt, 5.136 khoá tiếng Anh, 260 mã cờ ISO,
+136 kaomoji). Sinh bởi `Scripts/gen-emoji-data.py` (python3 stdlib, tự tải nguồn về
+`~/.cache/viettelex-emoji/`); không sửa tay.
+
+Khoá tiếng Anh (section SKEN, thêm 14/10/2026: gõ "Japan"/"pizza" ra emoji trên thanh gợi ý
+và ô tìm) đã lọc nhiễu tiếng Việt: bỏ khoá một từ < 3 chữ, trùng âm tiết Việt không dấu
+(danh sách âm tiết lấy từ `vnlexicon.bin`, xem mục vnlexicon ở trên) hoặc là tiền tố của âm
+tiết đó, và cụm gồm toàn âm tiết Việt. Mã nước ISO 3166-1 alpha-2 (section FLG2) lấy từ
+chính chuỗi regional-indicator của emoji cờ (không phải dữ liệu ngoài), thêm bí danh "UK" → 🇬🇧;
+chỉ tra khi gõ IN HOA vì 65/259 mã trùng âm tiết Việt (la, ma, to, do, ca, co…).
 
 | Nguồn | Bản dùng | Giấy phép | Dùng cho |
 |---|---|---|---|
 | [Unicode emoji-test.txt](https://unicode.org/Public/17.0.0/emoji/emoji-test.txt) | Emoji 17.0 (2025-08-04) | [Unicode License v3](https://www.unicode.org/license.txt) | danh sách, thứ tự, phiên bản emoji |
 | [CLDR annotations vi](https://github.com/unicode-org/cldr/tree/release-48/common/annotations) + annotationsDerived vi | CLDR release-48 | Unicode License v3 | tên / từ khoá tiếng Việt để tìm |
+| [CLDR annotations en](https://github.com/unicode-org/cldr/blob/release-48/common/annotations/en.xml) + [annotationsDerived en](https://github.com/unicode-org/cldr/blob/release-48/common/annotationsDerived/en.xml) | CLDR release-48 | Unicode License v3 | tên / từ khoá tiếng Anh (kể cả tên nước "flag: Japan" → "japan") để tìm + gợi ý khi gõ |
 | EmojiSuggest (khoá gợi ý emoji sẵn có, `emojisuggest.bin`) | trong repo | MIT (dự án) | từ khoá tiếng Việt biên soạn |
 | Kaomoji / bảng ký hiệu | biên soạn tay trong script | MIT (dự án) | tab ^‿^ |
 
