@@ -145,6 +145,30 @@ class FutoSwipeTests {
         assertNull(fs.decode(p, 5, null, null, null, null))
     }
 
+    /**
+     * Vuốt trong lúc worker đang tải weights: decode KHÔNG chờ (trước: main chặn trên swipeLock
+     * suốt lúc tải) — trả null ngay để IME dùng SHARK2. Nhả giữa lúc tải ⇒ không hồi sinh model.
+     */
+    @Test fun decodeDoesNotWaitForLoad() {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val fs = FutoSwipe { started.countDown(); gate.await(); KeyboardData.buffer(Keys.ASSET_FUTO) }
+        fs.setLayout(layout)
+        val p = SwipeSim(1).path("khong", layout)
+        var loaded: Boolean? = null
+        val t = Thread { loaded = fs.load() }.apply { start() }
+        assertTrue(started.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        val t0 = System.nanoTime()
+        assertNull(fs.decode(p, 5, null, null, null, null))       // chưa sẵn ⇒ null ngay
+        assertTrue("decode không được chờ tải", (System.nanoTime() - t0) / 1e6 < 1000)
+        fs.release()                                               // nhả khi đang tải
+        gate.countDown(); t.join(10_000)
+        assertEquals(false, loaded)
+        assertFalse(fs.isLoaded)
+        assertTrue(fs.load())                                      // tải lại bình thường
+        assertNotNull(fs.decode(p, 5, null, null, null, null))
+    }
+
     @Test fun switchDefaultsOff() {
         assertFalse(KeyboardSettings().swipeFuto)
         assertEquals("swipeFuto", Keys.SWIPE_FUTO)

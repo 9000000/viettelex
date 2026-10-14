@@ -97,7 +97,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     private var swipeUndo: String? = null
     /** Công cụ văn bản vừa áp ⇒ ô "↩︎ Hoàn tác" / ⌫ ngay sau (một lượt). */
     private var toolUndo: TextTools.Undo? = null
-    /** Dịch trên máy (Plus): controller rẻ; client ML Kit chỉ tạo khi chạm "Dịch", đóng ngay sau. */
+    /** Dịch trên máy (Plus): controller rẻ; client ML Kit chỉ tạo khi chạm "Dịch", đóng 30 s sau lượt cuối (MlKitBackend). */
     private val translate by lazy { TranslateController(com.viettelex.android.translate.TranslateFeature.engineFactory(this)) }
     private var translateUsed = false
     private val clearStatusRun = Runnable { strip?.showStatus(null) }
@@ -143,8 +143,12 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     private var swipeDecoder: SwipeDecoder? = null
     private val swipeLock = Any()
     private var swipeSetting = false
-    /** FUTO Swipe (thử nghiệm, mặc định tắt): null = tắt ⇒ không tải model. Khoá swipeLock. */
-    private var futo: FutoSwipe? = null
+    /**
+     * FUTO Swipe (thử nghiệm, mặc định tắt): null = tắt ⇒ không tải model. Decode/setLayout dưới
+     * swipeLock; TẢI weights thì KHÔNG (FutoSwipe tự khoá riêng) ⇒ vuốt lúc đang tải không chặn
+     * main — decode thấy model chưa sẵn ⇒ SHARK2.
+     */
+    @Volatile private var futo: FutoSwipe? = null
     private var futoSetting = false
     private var swipeFieldOk = false
     private var accessibility: AccessibilityManager? = null
@@ -495,7 +499,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
 
     /**
      * Hiện lại sau [releaseIdle]: nạp lại những gì đã nhả trên MỘT luồng nền ưu tiên thấp riêng
-     * (không chen hàng đợi gợi ý của worker ⇒ phím/gợi ý đầu không chờ). Hiếm: ≤ 1 lần / 45 s ẩn.
+     * (không chen hàng đợi gợi ý của worker ⇒ phím/gợi ý đầu không chờ). Hiếm: ≤ 1 lần / 3 phút ẩn.
      */
     private fun rewarmAfterIdle() {
         val english = englishReleased; val wall = wallpaperReleased
@@ -816,7 +820,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
                 futo = f
             }
         }
-        worker().post { synchronized(swipeLock) { if (futo === f) f.load() } }
+        worker().post { if (futo === f) f.load() }
     }
 
     override fun onSwipeLayout(layout: SwipeLayout) {
@@ -851,7 +855,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             // FUTO Swipe (thử nghiệm): null khi tắt / model chưa sẵn ⇒ SHARK2 như cũ
             futo?.decode(path, SwipeSuggest.TOP_K, ctx.folded, ctx.english, enCtx, dec)
                 ?: dec.decode(path, SwipeSuggest.TOP_K, ctx.folded, ctx.english, enCtx).also {
-                    futo?.let { f -> worker().post { synchronized(swipeLock) { if (futo === f) f.load() } } }
+                    futo?.let { f -> worker().post { if (futo === f) f.load() } }
                 }
         }
         // chọn từ + (nếu có) sửa lại từ vuốt trước theo ngữ cảnh hai phía (SwipeRevise)
@@ -1063,11 +1067,16 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         if (inputShown && fieldReady && PlanePolicy.reevaluatesShift(plane)) applyAutoShift()
     }
 
-    override fun emojiRecents(): List<String> = EmojiRecents.decode(prefs.getString(Keys.EMOJI_RECENTS, null))
+    /** Recents emoji ở prefs trạng thái (không kích listener cài đặt/theme); bản cũ chuyển một lần. */
+    override fun emojiRecents(): List<String> = EmojiRecents.load(
+        state = { stateStore().getString(Keys.EMOJI_RECENTS, null) },
+        legacy = { prefs.getString(Keys.EMOJI_RECENTS, null) },
+        store = { stateStore().edit().putString(Keys.EMOJI_RECENTS, it).apply() },
+        dropLegacy = { prefs.edit().remove(Keys.EMOJI_RECENTS).apply() })
 
     override fun noteEmojiUsed(e: String) {
         val next = EmojiRecents.noteUsed(emojiRecents(), e)
-        prefs.edit().putString(Keys.EMOJI_RECENTS, EmojiRecents.encode(next)).apply()
+        stateStore().edit().putString(Keys.EMOJI_RECENTS, EmojiRecents.encode(next)).apply()
     }
 
     // MARK: mẫu câu
@@ -1330,13 +1339,19 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     companion object {
         private const val TAG = "VTKB"
         const val SUGGEST_DELAY_MS = 30L
-        /** Bàn phím ẩn liền bấy lâu ⇒ [releaseIdle] (RAM-AUDIT #6: 30–60 s). */
-        const val IDLE_RELEASE_MS = 45_000L
+        /** Bàn phím ẩn liền bấy lâu ⇒ [releaseIdle] — xem [ImeTrim.IDLE_RELEASE_MS]. */
+        const val IDLE_RELEASE_MS = ImeTrim.IDLE_RELEASE_MS
     }
 }
 
 /** Chính sách onTrimMemory (hàm thuần để test; số = hằng ComponentCallbacks2). */
 object ImeTrim {
+    /**
+     * Ẩn liền bấy lâu ⇒ nhả dữ liệu nạp lại được. 3 phút (trước 45 s — RAM-AUDIT #6): 45 s làm
+     * người gõ ngắt quãng (chat) parse lại enlexicon 1.4 MB + giải lại weights FUTO gần như mỗi
+     * lần mở bàn phím; 3 phút vẫn trả RAM khi thực sự thôi gõ.
+     */
+    const val IDLE_RELEASE_MS = 180_000L
     private const val RUNNING_LOW = 10
     private const val RUNNING_CRITICAL = 15
     private const val BACKGROUND = 40

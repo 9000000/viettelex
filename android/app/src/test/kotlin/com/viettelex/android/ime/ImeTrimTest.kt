@@ -25,4 +25,10 @@ class ImeTrimTest {
         assertTrue(ImeTrim.releaseIdle(ComponentCallbacks2.TRIM_MEMORY_BACKGROUND, inputShown = false))
         assertFalse("đang gõ: không nhả dữ liệu đang dùng", ImeTrim.releaseIdle(ComponentCallbacks2.TRIM_MEMORY_COMPLETE, inputShown = true))
     }
+
+    /** Hẹn giờ ẩn 3 phút: 45 s cũ ⇒ parse lại enlexicon + FUTO gần như mỗi lần mở lại khi chat ngắt quãng. */
+    @Test fun idleReleaseIsMinutesNotSeconds() {
+        assertTrue(ImeTrim.IDLE_RELEASE_MS in 180_000L..300_000L)
+        assertTrue(VietTelexIME.IDLE_RELEASE_MS == ImeTrim.IDLE_RELEASE_MS)
+    }
 }

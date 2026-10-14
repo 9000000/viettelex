@@ -1,6 +1,7 @@
 package com.viettelex.keyboard
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -198,5 +199,22 @@ class TemplatesEditTests {
         kotlin.test.assertNull(Templates.edit(base, 1, "", "Chào"))
         kotlin.test.assertNull(Templates.edit(base, 5, "", "x"))
         kotlin.test.assertNotNull(Templates.edit(base, 0, "", "Chào"))   // giữ nguyên câu của chính nó
+    }
+
+    /** Recents emoji chuyển MỘT lần từ prefs cài đặt sang prefs trạng thái (không kích listener theme). */
+    @Test fun emojiRecentsMigrateOnce() {
+        var state: String? = null
+        var legacy: String? = "😀\n🎉"
+        var legacyReads = 0
+        fun load() = EmojiRecents.load({ state }, { legacyReads++; legacy }, { state = it }, { legacy = null })
+        assertEquals(listOf("😀", "🎉"), load())
+        assertEquals("😀\n🎉", state)
+        assertNull(legacy)
+        assertEquals(listOf("😀", "🎉"), load())
+        assertEquals(1, legacyReads)                     // lần sau chỉ đọc prefs trạng thái
+        // Chưa từng có ⇒ rỗng, không ghi gì.
+        var wrote = false
+        assertEquals(emptyList<String>(), EmojiRecents.load({ null }, { null }, { wrote = true }, { wrote = true }))
+        assertFalse(wrote)
     }
 }
