@@ -432,7 +432,6 @@ fun GioiThieuTab(plus: com.viettelex.android.plus.PlusController, onOpenPlus: ()
     val c = LocalVT.current
     val ctx = LocalContext.current
     // Sao lưu & đồng bộ chuyển sang Tính Năng (27/09/2026).
-    DebugSection()
     VTSection(plain = true) {
         Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -476,6 +475,8 @@ fun GioiThieuTab(plus: com.viettelex.android.plus.PlusController, onOpenPlus: ()
                 style = VTType.footnote, color = c.secondary)
         }
     }
+    // Gỡ lỗi ở CUỐI tab (maintainer 14/10/2026) — công cụ cho tester.
+    DebugSection()
 }
 
 /** "1.1 · build dd/MM/yyyy" — Android không có mtime binary ⇒ dùng lần cài/cập nhật. */

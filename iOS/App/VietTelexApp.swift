@@ -229,7 +229,6 @@ struct RootView: View {
 
     @ViewBuilder private var gioiThieuTab: some View {
         // Sao lưu & đồng bộ chuyển sang Tính Năng (27/09/2026).
-        DebugSection()
         // Logo + tên app trên đầu tab (user 2026-07-24), như About của macOS.
         Section {
             VStack(spacing: 10) {
@@ -288,6 +287,9 @@ struct RootView: View {
             Text(L("Toàn quyền Truy cập là tuỳ chọn — chỉ cần cho Rung phím, Âm thanh phím, Nút Dán, Lịch sử clipboard, Mẫu câu động (https://) và lưu từ đã học; VietTelex không dùng quyền này cho bất kỳ việc gì khác."))
                 .font(.footnote).foregroundStyle(.secondary)
         } header: { Text(L("Giới thiệu")) }
+        // Gỡ lỗi ở CUỐI tab (maintainer 14/10/2026) — công cụ cho tester, không phải
+        // thứ user thấy đầu tiên.
+        DebugSection()
     }
 }
 
