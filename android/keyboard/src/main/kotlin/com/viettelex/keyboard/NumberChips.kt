@@ -264,6 +264,28 @@ object NumberChips {
         return NumberChip(t, token + sp, t + sp)
     }
 
+    /**
+     * Hai token cuối (sau khi bỏ MỘT dấu cách cuối — đúng phạm vi [chip] xét) có chữ số không.
+     * false ⇒ không phím chữ/cách nào sau đó tạo được chip ⇒ session ngừng đọc context tới khi
+     * gõ chữ số/ký hiệu hoặc ⌫ (không copy chuỗi ngữ cảnh mỗi phím). Không cấp phát.
+     */
+    fun tailHasDigit(before: CharSequence): Boolean {
+        var i = before.length
+        if (i > 0 && before[i - 1] == ' ') i--
+        var tokens = 0
+        var inToken = false
+        while (i > 0) {
+            val c = before[--i]
+            if (c.isWhitespace()) {
+                if (inToken) { inToken = false; if (++tokens == 2) return false }
+            } else {
+                inToken = true
+                if (isDigit(c)) return true
+            }
+        }
+        return false
+    }
+
     fun atSentenceStart(prefix: String): Boolean {
         if (prefix.endsWith("\n")) return true
         val c = prefix.trimEnd(' ', '\t').lastOrNull() ?: return true

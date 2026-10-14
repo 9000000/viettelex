@@ -397,7 +397,7 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
         engine.forgetLastCommit()                 // ⌫ không mở lại chữ tắt qua engine
         engine.noteExternalWord(false)
         val n = Cp.count(typed)
-        TouchLog.edit(n, Cp.count(expansion), expansion)
+        if (TouchLog.enabled) TouchLog.edit(n, Cp.count(expansion), expansion)
         proxy.deleteCodePoints(n)
         proxy.insertText(expansion)
         put(text)
@@ -486,10 +486,19 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
      * (như iOS: KHÔNG set contextualEnglish). Gọi được ngoài main thread.
      */
     fun composeTrial(raw: String): String {
-        val e = TelexEngine()
+        // Một engine scratch MỖI LUỒNG (main + vt-suggest), đưa về đúng trạng thái engine mới
+        // bằng copyInto từ bản gốc — không cấp phát ~12 IntArray mỗi ứng viên (RAM-AUDIT #8).
+        val e = trialEngine.get()!!
+        PRISTINE.copyInto(e)
         configure(e, false)
         for (ch in raw) e.feed(ch)
         return e.composed
+    }
+
+    private companion object {
+        /** Engine chưa từng gõ — chỉ đọc (copyInto không ghi vào nguồn). */
+        val PRISTINE = TelexEngine()
+        val trialEngine: ThreadLocal<TelexEngine> = ThreadLocal.withInitial { TelexEngine() }
     }
 
     /** Từ boundary SẼ chốt (peek non-mutating). */
@@ -498,12 +507,12 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
     private fun apply(action: TelexAction, literal: String, proxy: TextProxy) {
         when (action) {
             is TelexAction.Replace -> {
-                TouchLog.edit(action.backspaces, Cp.count(action.insert), action.insert)
+                if (TouchLog.enabled) TouchLog.edit(action.backspaces, Cp.count(action.insert), action.insert)
                 if (action.backspaces > 0) proxy.deleteCodePoints(action.backspaces)
                 if (action.insert.isNotEmpty()) proxy.insertText(action.insert)
             }
             TelexAction.Passthrough -> {
-                TouchLog.edit(0, Cp.count(literal), literal)
+                if (TouchLog.enabled) TouchLog.edit(0, Cp.count(literal), literal)
                 if (literal.isNotEmpty()) proxy.insertText(literal)
             }
             TelexAction.None -> {}

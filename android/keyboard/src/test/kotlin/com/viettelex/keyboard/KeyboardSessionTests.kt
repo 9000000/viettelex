@@ -463,6 +463,58 @@ class KeyboardSessionTests {
         assertEquals("2+2=5", p.text)
     }
 
+    /**
+     * ⌫ mở cổng chip số (không biết vừa xoá gì) — nhưng sau một lượt đọc không thấy chữ số thì
+     * phím chữ tiếp theo KHÔNG đọc lại context cho chip số (trước: copy ≤256 ký tự mỗi phím).
+     */
+    @Test fun testNumberChipGateClosesWithoutDigits() {
+        val s = session(traits = FieldTraits()); val p = MockProxy()
+        s.typeMixed(p, "xin chao ban ")
+        s.handle(Key.Backspace, p)
+        s.suggestionsNow(p)
+        val nums = session(KeyboardSettings(numberChips = false), FieldTraits()); val q = MockProxy()
+        nums.typeMixed(q, "xin chao ban ")
+        nums.handle(Key.Backspace, q)
+        nums.suggestionsNow(q)
+        // Cùng chuỗi phím chữ: số lần đọc context phải bằng phiên TẮT chip số (0 đọc thêm vì chip).
+        p.contextReads = 0; q.contextReads = 0
+        for (c in "nhe") {
+            s.handle(Key.Letter(c), p); s.suggestionsNow(p)
+            nums.handle(Key.Letter(c), q); nums.suggestionsNow(q)
+        }
+        assertEquals(q.contextReads, p.contextReads)
+        // Chữ số mới ⇒ cổng mở lại; ⌫ về sát số ⇒ chip hiện lại.
+        s.typeMixed(p, " 12")
+        assertEquals("mười hai", s.suggestionsNow(p)!!.number)
+        s.typeMixed(p, "a")
+        s.handle(Key.Backspace, p)
+        assertEquals("mười hai", s.suggestionsNow(p)!!.number)
+    }
+
+    /** autoShiftFor duyệt ngược (không trim copy) — y hệt bản cũ trên mọi đuôi. */
+    @Test fun testAutoShiftForMatchesTrimVersion() {
+        fun old(before: String): Boolean {
+            val t = before.trim(' ', '\t')
+            return before.isEmpty() ||
+                (before.endsWith(" ") && (t.endsWith(".") || t.endsWith("!") || t.endsWith("?"))) ||
+                before.endsWith("\n")
+        }
+        val parts = listOf("", " ", "\t", ".", "!", "?", "a", "\n", ",")
+        for (a in parts) for (b in parts) for (c in parts) for (d in parts) {
+            val s = a + b + c + d
+            assertEquals("«$s»", old(s), KeyboardSession.autoShiftFor(s))
+        }
+    }
+
+    @Test fun testNumberChipTailHasDigit() {
+        assertTrue(NumberChips.tailHasDigit("gia 12"))
+        assertTrue(NumberChips.tailHasDigit("12 tr "))
+        assertTrue(NumberChips.tailHasDigit("50k"))
+        assertFalse(NumberChips.tailHasDigit("12 xin chao"))
+        assertFalse(NumberChips.tailHasDigit(""))
+        assertFalse(NumberChips.tailHasDigit("abc "))
+    }
+
     @Test fun testNumberChipGoneAfterNextWord() {
         val s = session(traits = FieldTraits()); val p = MockProxy()
         s.typeMixed(p, "2 ")

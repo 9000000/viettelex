@@ -97,6 +97,20 @@ object SwipeEnglish {
     fun contains(word: String): Boolean = indexOf(word) >= 0
 
     /**
+     * Như [contains] nhưng KHÔNG nạp (main thread: parse ~1.4 MB mất hàng chục ms). Chưa nạp
+     * (đang hâm nóng nền / vừa nhả lúc ẩn lâu) ⇒ coi như chưa biết = false.
+     */
+    fun containsIfLoaded(word: String): Boolean {
+        val a = (loaded ?: return false).words
+        var lo = 0; var hi = a.size
+        while (lo < hi) {
+            val mid = (lo + hi) / 2
+            if (a[mid] < word) lo = mid + 1 else hi = mid
+        }
+        return lo < a.size && a[lo] == word
+    }
+
+    /**
      * Chế độ Tiếng Anh (vuốt phím cách): từ bắt đầu bằng [typed] (a–z, không phân biệt hoa
      * thường), tần suất giảm dần, tối đa [limit], bỏ chính từ đang gõ. Chữ hoa theo chữ đang
      * gõ ("Hel" → "Hello", "HEL" → "HELLO"). Chữ ngoài a–z ⇒ rỗng. Giống iOS.
@@ -120,7 +134,11 @@ object SwipeEnglish {
         return lex.freq.indices.sortedWith { x, y -> if (lex.freq[x] != lex.freq[y]) lex.freq[y] - lex.freq[x] else x - y }
             .take(limit).map { lex.words[it] }
     }
-    val top: List<String> by lazy { topWords(12) }
+    @Volatile private var topCache: List<String>? = null
+    /** 12 từ phổ biến nhất — nạp từ điển nếu cần (gọi trên luồng nền: [warm]). Giữ qua [release] (12 String). */
+    val top: List<String> get() = topCache ?: topWords(12).also { topCache = it }
+    /** [top] nếu đã có, KHÔNG nạp/sắp xếp (main thread); null = chưa hâm nóng xong. */
+    val topIfReady: List<String>? get() = topCache
 
     fun matchCase(w: String, typed: String): String {
         val f = typed.firstOrNull() ?: return w

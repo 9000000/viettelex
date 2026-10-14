@@ -1012,7 +1012,8 @@ class KeyboardSession(
 
     private fun padWords(base: List<String>, need: Int, typed: String = ""): List<String> {
         if (base.size >= need) return base.take(need)
-        val top = if (bridge.englishMode) SwipeEnglish.top else langModel.topWords(need + 12)
+        // Tiếng Anh: không chặn main chờ nạp/sắp từ điển (IME hâm nóng nền khi vào EN) — chưa có ⇒ không đệm.
+        val top = if (bridge.englishMode) SwipeEnglish.topIfReady ?: emptyList() else langModel.topWords(need + 12)
         val cands = SensitiveWords.filter(top, filterSensitive)
             .map { caseForContext(displayCase(it), typed) }
         return SuggestionFill.pad(base, cands, need, typed)
@@ -1056,7 +1057,7 @@ class KeyboardSession(
         val next: List<String> = if (bridge.englishMode) {
             // Tiếng Anh: từ kế tiếp cá nhân chỉ giữ từ tiếng Anh; đệm bằng từ Anh phổ biến
             val personal = if (prev != null) langModel.nextWords(prev, lastWord2, 12) else emptyList()
-            padWords(SensitiveWords.filter(personal.filter { SwipeEnglish.contains(it.lowercase()) }, filterSensitive)
+            padWords(SensitiveWords.filter(personal.filter { SwipeEnglish.containsIfLoaded(it.lowercase()) }, filterSensitive)
                 .take(3).map { caseForContext(it) }, 3)
         } else if (prev != null) {
             // SuggestRank.nextFill: có trigram tĩnh (prev2, prev) ⇒ bộ ba người dùng đã gõ, rồi trigram,
@@ -1122,6 +1123,9 @@ class KeyboardSession(
         if (!numberChipsOn || numberSpaces > 1) return null
         val before = proxy.contextBeforeInput() ?: return null
         numberChip = NumberChips.chip(before)
+        // Không còn chữ số trong 2 token cuối ⇒ phím chữ/cách sau đó không thể tạo chip: thôi
+        // đọc context (copy ≤256 ký tự) mỗi phím cho tới chữ số/ký hiệu/⌫ kế ([handle]).
+        if (numberChip == null && !NumberChips.tailHasDigit(before)) numberSpaces = 99
         return numberChip?.display
     }
 
@@ -1515,10 +1519,14 @@ class KeyboardSession(
 
         /** Auto-shift thuần: ô trống, hoặc " " sau .!?, hoặc sau \n. */
         fun autoShiftFor(before: String): Boolean {
-            val t = before.trim(' ', '\t')
-            return before.isEmpty() ||
-                (before.endsWith(" ") && (t.endsWith(".") || t.endsWith("!") || t.endsWith("?"))) ||
-                before.endsWith("\n")
+            if (before.isEmpty() || before.endsWith("\n")) return true
+            if (!before.endsWith(" ")) return false
+            // Duyệt ngược qua ' '/'\t' (không copy chuỗi bằng trim — RAM-AUDIT #8).
+            var i = before.length - 1
+            while (i >= 0 && (before[i] == ' ' || before[i] == '\t')) i--
+            if (i < 0) return false
+            val c = before[i]
+            return c == '.' || c == '!' || c == '?'
         }
 
         /** Mode mạnh nhất của ô (≈ bitmask TextUtils.getCapsMode: có bit nào là shift). */
