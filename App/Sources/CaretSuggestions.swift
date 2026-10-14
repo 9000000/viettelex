@@ -320,6 +320,30 @@ enum ToneRunLogic {
         return String(u)
     }
 
+    /// Cụm đã chạy Thêm dấu mà KHÔNG ra gợi ý (process con trả nil / không đổi gì): mỗi lần
+    /// dừng gõ ≥ `pauseDelay` sau một âm tiết mới từng kích hoạt lại cả hai lần đọc AX lẫn
+    /// spawn nguyên executable VietTelex — cho cùng một câu đã biết là vô ích. Chỉ thử lại
+    /// khi cụm dài thêm ≥ `retryAfterSyllables` âm tiết (thêm ngữ cảnh mới đáng một lần
+    /// spawn), khi sang cụm khác, hoặc ở cuối câu (". ! ?" — kích hoạt chủ ý).
+    static let retryAfterSyllables = 2
+
+    /// Số chunk (âm tiết) của một cụm — tách theo khoảng trắng.
+    static func syllableCount(_ run: String) -> Int {
+        run.split(whereSeparator: { $0.isWhitespace }).count
+    }
+
+    struct FruitlessMemo: Equatable {
+        private(set) var run: String?
+        mutating func note(fruitless run: String) { self.run = run }
+        mutating func clear() { run = nil }
+
+        /// Có nên chạy Thêm dấu cho `run` không.
+        func allows(_ run: String, trigger: Trigger) -> Bool {
+            guard trigger == .pause, let last = self.run, run.hasPrefix(last) else { return true }
+            return syllableCount(run) - syllableCount(last) >= retryAfterSyllables
+        }
+    }
+
     /// Gợi ý từ kết quả Thêm dấu (cùng độ dài scalar — AddTones giữ nguyên dấu câu/khoảng
     /// trắng). nil nếu không đổi gì hay kết quả lạ.
     static func suggestion(run: String, restored: String) -> CaretSuggestion? {

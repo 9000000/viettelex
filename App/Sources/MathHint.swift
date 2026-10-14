@@ -308,30 +308,35 @@ final class CaretHint {
     /// Từ người dùng đã Esc gợi ý sửa (chữ thường, trong phiên) / cụm không dấu đã Esc.
     private let rejectedTypos = AutoCorrect.Rejected()      // guarded by lock
     private var declinedTones: String?                      // guarded by lock
+    private var fruitlessTones = ToneRunLogic.FruitlessMemo()   // guarded by lock
     private let work = DispatchQueue(label: "com.viettelex.caretsuggest", qos: .userInitiated)
-    /// Đọc nhiều lần mỗi phím (TAP-thread + main) — chỉ đọc cờ, không đụng UserDefaults.
-    private(set) var mathEnabled: Bool
-    private(set) var numberEnabled: Bool
-    private(set) var typoEnabled: Bool
-    private(set) var tonesEnabled: Bool
-    private(set) var dateEnabled: Bool
+    /// Cờ bật/tắt: GHI trên main (reloadSetting), ĐỌC nhiều lần mỗi phím ở TAP-thread lẫn
+    /// main — trước là var trơn (data race giữa hai thread). Giờ là một snapshot dưới khoá
+    /// RIÊNG (`flagsLock`, không phải `lock`: không bao giờ lồng khoá NSLock không đệ quy);
+    /// mỗi lần đọc một lần lock không tranh chấp (~tens of ns), không đụng UserDefaults.
+    struct Flags: Equatable {
+        var math = false, number = false, typo = false, tones = false, date = false
+        static func current() -> Flags {
+            Flags(math: AppState.shared.mathResults, number: AppState.shared.numberChips,
+                  typo: AppState.shared.typoHints, tones: AppState.shared.toneHints,
+                  date: AppState.shared.dateHints)
+        }
+    }
+    private let flagsLock = NSLock()
+    private var flags: Flags                                // guarded by flagsLock
+    var flagsSnapshot: Flags { flagsLock.withLock { flags } }
+    var mathEnabled: Bool { flagsSnapshot.math }
+    var numberEnabled: Bool { flagsSnapshot.number }
+    var typoEnabled: Bool { flagsSnapshot.typo }
+    var tonesEnabled: Bool { flagsSnapshot.tones }
+    var dateEnabled: Bool { flagsSnapshot.date }
     /// Có loại gợi ý ranh-giới-từ nào bật không — tắt hết ⇒ controller không làm gì thêm.
-    var wordHintsEnabled: Bool { typoEnabled || tonesEnabled || dateEnabled }
+    var wordHintsEnabled: Bool { let f = flagsSnapshot; return f.typo || f.tones || f.date }
 
-    private init() {
-        mathEnabled = AppState.shared.mathResults
-        numberEnabled = AppState.shared.numberChips
-        typoEnabled = AppState.shared.typoHints
-        tonesEnabled = AppState.shared.toneHints
-        dateEnabled = AppState.shared.dateHints
-    }
-    func reloadSetting() {
-        mathEnabled = AppState.shared.mathResults
-        numberEnabled = AppState.shared.numberChips
-        typoEnabled = AppState.shared.typoHints
-        tonesEnabled = AppState.shared.toneHints
-        dateEnabled = AppState.shared.dateHints
-    }
+    private init() { flags = Flags.current() }
+    func reloadSetting() { setFlags(Flags.current()) }
+    /// Bất kỳ thread (test + reloadSetting).
+    func setFlags(_ f: Flags) { flagsLock.withLock { flags = f } }
 
     var isShowing: Bool { lock.withLock { pending != nil } }
     var current: CaretSuggestion? { lock.withLock { pending } }
@@ -414,7 +419,8 @@ final class CaretHint {
                    canReplace: Bool) {
         guard canReplace else { return }
         let gen = keyGeneration
-        if dateEnabled, let phrase = DateHintLogic.detect(boundary: ev.boundary, prevRun: ev.prevRun, run: ev.run,
+        let f = flagsSnapshot
+        if f.date, let phrase = DateHintLogic.detect(boundary: ev.boundary, prevRun: ev.prevRun, run: ev.run,
                                                           isEnglish: TypoFixLogic.isEnglish) {
             let stream = ev.dateStream
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) { [weak self] in
@@ -424,7 +430,7 @@ final class CaretHint {
             }
             return
         }
-        if typoEnabled, !ev.raw.isEmpty,
+        if f.typo, !ev.raw.isEmpty,
            TypoFixLogic.worthChecking(boundary: ev.boundary, raw: ev.raw, word: ev.run),
            !lock.withLock({ rejectedTypos.contains(ev.run) }) {
             let flags = AppState.shared.engineFlags()
@@ -439,18 +445,24 @@ final class CaretHint {
             }
             return
         }
-        if tonesEnabled, let t = ev.tones {
+        if f.tones, let t = ev.tones {
             let delay = t == .pause ? ToneRunLogic.pauseDelay : 0.04
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self, self.keyGeneration == gen, !self.isShowing, !IsSecureEventInputEnabled(),
                       let before = Self.textBeforeCaret(client: client, window: ToneRunLogic.window),
                       let run = ToneRunLogic.run(before: before),
-                      !self.lock.withLock({ self.declinedTones.map { run.hasPrefix($0) } ?? false })
+                      self.lock.withLock({ !(self.declinedTones.map { run.hasPrefix($0) } ?? false)
+                                            && self.fruitlessTones.allows(run, trigger: t) })
                 else { return }
                 self.work.async {
                     // Process con (dữ liệu Thêm dấu không vào process IME); ~0.2 s.
-                    guard self.keyGeneration == gen,
-                          let restored = TextActionTransform.addTonesViaHelper(run, timeout: 3) else { return }
+                    guard self.keyGeneration == gen else { return }
+                    guard let restored = TextActionTransform.addTonesViaHelper(run, timeout: 3),
+                          ToneRunLogic.suggestion(run: run, restored: restored) != nil else {
+                        // Vô ích cho cụm này: đừng spawn lại ở mỗi lần dừng gõ kế tiếp.
+                        self.lock.withLock { self.fruitlessTones.note(fruitless: run) }
+                        return
+                    }
                     DispatchQueue.main.async {
                         self.showIfCurrent(gen, client: client, controller: controller, keyStream: nil,
                                            window: ToneRunLogic.window) { before in

@@ -155,6 +155,24 @@ final class CaretSuggestionsTests: XCTestCase {
         XCTAssertFalse(hint.isTonesDeclinedForTesting("hom nay toi "))
     }
 
+    /// Perf: cụm Thêm dấu không ra gợi ý thì lần dừng gõ kế tiếp KHÔNG spawn lại process
+    /// con (2 lần đọc AX + chạy nguyên executable) — chỉ khi cụm dài thêm ≥2 âm tiết,
+    /// sang cụm khác, hoặc cuối câu.
+    func testFruitlessToneRunNotRetriedEveryPause() {
+        var m = ToneRunLogic.FruitlessMemo()
+        XCTAssertTrue(m.allows("toi di hoc ", trigger: .pause))                // chưa thử lần nào
+        m.note(fruitless: "toi di hoc ")
+        XCTAssertFalse(m.allows("toi di hoc ", trigger: .pause))               // cùng cụm
+        XCTAssertFalse(m.allows("toi di hoc hom ", trigger: .pause))           // +1 âm tiết
+        XCTAssertTrue(m.allows("toi di hoc hom nay ", trigger: .pause))        // +2 âm tiết
+        XCTAssertTrue(m.allows("toi di hoc hom.", trigger: .sentenceEnd))      // cuối câu luôn thử
+        XCTAssertTrue(m.allows("ban an com ", trigger: .pause))                // cụm khác
+        m.clear()
+        XCTAssertTrue(m.allows("toi di hoc ", trigger: .pause))
+        XCTAssertEqual(ToneRunLogic.syllableCount("toi di  hoc "), 3)
+        XCTAssertEqual(ToneRunLogic.syllableCount(""), 0)
+    }
+
     // MARK: 3. Ngày giờ
 
     private let tz = TimeZone(identifier: "Asia/Ho_Chi_Minh")!
