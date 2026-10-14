@@ -231,7 +231,7 @@ void updateModeProp(VtIBusEngine *self) {
 
 // Labels in the UI language + visibility of "Công cụ…" (text_tools_menu, helper installed).
 void refreshPropLabels(VtIBusEngine *self) {
-    ibus_property_set_tooltip(self->modeProp, text(tr("Chuyển Việt/Anh (Ctrl+Space)")));
+    ibus_property_set_tooltip(self->modeProp, text(vt::toggleTooltip(settings().toggleHotkey, english())));
     ibus_property_set_label(self->settingsProp, text(tr("Cài đặt…")));
     ibus_property_set_tooltip(self->settingsProp, text(tr("Mở VietTelex Settings")));
     ibus_property_set_label(self->toolsProp, text(tr("Công cụ…")));
@@ -648,7 +648,7 @@ static void vt_ibus_engine_init(VtIBusEngine *self) {
     g_object_ref_sink(self->props);
     self->modeProp = ibus_property_new("InputMode", PROP_TYPE_TOGGLE,
                                        ibus_text_new_from_static_string("Tiếng Việt"), "viettelex",
-                                       ibus_text_new_from_static_string("Chuyển Việt/Anh (Ctrl+Space)"), TRUE,
+                                       ibus_text_new_from_static_string("Chuyển Việt/Anh"), TRUE,  // refreshPropLabels
                                        TRUE, PROP_STATE_CHECKED, nullptr);
     ibus_prop_list_append(self->props, self->modeProp);
     // "Công cụ…" → the six text tools (like macOS: VietTelex menu → Công cụ…).

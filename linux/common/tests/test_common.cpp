@@ -615,9 +615,18 @@ void testTextToolNamesAndSelection() {
     CHECK(!textToolFromId("bogus", none));
     CHECK_EQ(textToolLabel(TextTool::AddTones, false), std::string("Thêm dấu cho vùng chọn"));
     CHECK_EQ(textToolLabel(TextTool::AddTones, true), std::string("Add tones to selection"));
+    // The Vi/En tooltip names the configured hotkey (it was always "Ctrl+Space").
+    CHECK_EQ(hotkeyLabel("Ctrl+space"), std::string("Ctrl+Space"));
+    CHECK_EQ(hotkeyLabel("Alt+Shift+z"), std::string("Alt+Shift+Z"));
+    CHECK_EQ(hotkeyLabel(""), std::string());
+    CHECK_EQ(hotkeyLabel("z"), std::string());  // invalid: a bare letter never toggles
+    CHECK_EQ(toggleTooltip("Ctrl+space", false), std::string("Chuyển Việt/Anh (Ctrl+Space)"));
+    CHECK_EQ(toggleTooltip("Ctrl+Shift+space", true), std::string("Switch Vietnamese/English (Ctrl+Shift+Space)"));
+    CHECK_EQ(toggleTooltip("Super+space", false), std::string("Chuyển Việt/Anh"));  // GNOME's, rejected
+    CHECK_EQ(toggleTooltip("", false), std::string("Chuyển Việt/Anh"));
     // Every IM menu string the frontends use has an English entry.
     const char *ui[] = {"Tiếng Việt", "English", "Đang gõ tiếng Việt — bấm để chuyển sang English",
-                        "Đang gõ English — bấm để chuyển sang tiếng Việt", "Chuyển Việt/Anh (Ctrl+Space)",
+                        "Đang gõ English — bấm để chuyển sang tiếng Việt", "Chuyển Việt/Anh",
                         "Cài đặt…", "Mở VietTelex Settings", "Công cụ…", "Công cụ văn bản cho chữ đang bôi đen"};
     for (const char *k : ui) {
         CHECK_EQ(uiText(k, false), std::string(k));

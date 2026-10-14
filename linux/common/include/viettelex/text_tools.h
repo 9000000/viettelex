@@ -33,6 +33,12 @@ std::string textToolLabel(TextTool t, bool english);
 // IM menu / tooltip strings. Vietnamese source text is the key (like iOS L10n); unknown
 // strings come back unchanged.
 std::string uiText(const std::string &vi, bool english);
+// Settings::toggleHotkey for display, as the settings app shows it (hotkey_label):
+// "Ctrl+space" → "Ctrl+Space"; "" for none / an invalid one.
+std::string hotkeyLabel(const std::string &value);
+// Tooltip of the Vi/En toggle: "Chuyển Việt/Anh (Ctrl+Space)" with the configured hotkey,
+// without the parenthesis when there is none.
+std::string toggleTooltip(const std::string &toggleHotkey, bool english);
 inline bool isEnglishUi(const std::string &uiLanguage) { return uiLanguage == "en"; }
 
 // Longest selection handled (UTF-16 units on macOS; here Unicode scalars — the helper

@@ -568,6 +568,11 @@ class SettingsWindow(Adw.PreferencesWindow):
                    "Backspace, lỗi thì tự về gạch chân. Chỉ GNOME Wayland (IBus hoặc Fcitx5) và "
                    "KDE Wayland (Fcitx5). Bật lên, VietTelex tự thêm cờ IME Wayland vào lối tắt "
                    "của các app này — mở lại app là xong.")]
+        status = launchers.session_status(enabled, appl)
+        if status == "active":
+            parts.insert(0, _("Trạng thái: đang có hiệu lực trong phiên này."))
+        elif status == "inactive":
+            parts.insert(0, _("Trạng thái: đã bật nhưng không có hiệu lực trong phiên này."))
         if appl == "not_wayland":
             parts.append(_("Phiên này là X11: không áp dụng, Chrome/Electron vẫn gạch chân."))
         elif appl == "gnome_50":

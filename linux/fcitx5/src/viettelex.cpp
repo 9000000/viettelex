@@ -72,9 +72,13 @@ FCITX_CONFIGURATION(
     VietTelexConfig,
     fcitx::Option<bool> vni{this, "VNI", "Kiểu gõ VNI (thay cho Telex)", false};
     fcitx::Option<bool> preeditUnderline{this, "PreeditUnderline", "Gạch chân chữ đang gõ", false};
-    fcitx::Option<bool> noUnderline{this, "NoUnderline",
-                                    "Sửa trực tiếp quanh con trỏ (surrounding; tự về preedit ở app không hỗ trợ)",
-                                    false};
+    // [general] display_mode = "surrounding". The key stays "NoUnderline" (existing
+    // fcitx5 configs); it is NOT [experimental] no_underline ("Bỏ gạch chân trong
+    // Chrome/Electron", settings app only), so the label names the display mode.
+    fcitx::Option<bool> surroundingMode{this, "NoUnderline",
+                                        "Cách hiện từ đang gõ: sửa trực tiếp (surrounding), app không hỗ trợ "
+                                        "tự về chữ đang gõ (preedit)",
+                                        false};
     fcitx::Option<bool> spellCheck{this, "SpellCheck", "Kiểm tra chính tả khi gõ", true};
     fcitx::Option<bool> autoRestore{this, "AutoRestore", "Tự khôi phục từ không phải tiếng Việt", true};
     fcitx::Option<bool> freeMarking{this, "FreeMarking", "Bỏ dấu tự do", true};
@@ -469,7 +473,7 @@ public:
         text = vt::setConfigValue(text, "typing", "modern_tone", b(*config_.modernTone));
         text = vt::setConfigValue(text, "typing", "quick_telex", b(*config_.quickTelex));
         text = vt::setConfigValue(text, "general", "display_mode",
-                                  *config_.noUnderline ? "\"surrounding\"" : "\"preedit\"");
+                                  *config_.surroundingMode ? "\"surrounding\"" : "\"preedit\"");
         text = vt::setConfigValue(text, "general", "per_app_state", b(*config_.perAppState));
         text = vt::setConfigValue(text, "general", "preedit_underline", b(*config_.preeditUnderline));
         vt::writeFileAtomic(vt::configPath(), text);
@@ -738,7 +742,7 @@ private:
     void syncConfigFromSettings() {
         const auto &s = settings();
         config_.vni.setValue(s.vni);
-        config_.noUnderline.setValue(s.displayMode == vt::DisplayMode::Surrounding);
+        config_.surroundingMode.setValue(s.displayMode == vt::DisplayMode::Surrounding);
         config_.preeditUnderline.setValue(s.preeditUnderline);
         g_preeditUnderline = s.preeditUnderline;
         config_.spellCheck.setValue(s.spellCheck);

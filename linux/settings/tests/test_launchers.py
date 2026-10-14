@@ -240,6 +240,14 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(L.applicability("x11", "ubuntu:GNOME", "ibus", 50), "not_wayland")
         self.assertEqual(L.applicability("wayland", "KDE", "fcitx5", 50), "ok")
 
+    def test_session_status(self):
+        # Status line of the experimental switch: in effect in this session or not.
+        self.assertEqual(L.session_status(False, "ok"), "off")
+        self.assertEqual(L.session_status(False, "not_wayland"), "off")
+        self.assertEqual(L.session_status(True, "ok"), "active")
+        for appl in ("not_wayland", "kde_ibus", "gnome_50", "unsupported_desktop"):
+            self.assertEqual(L.session_status(True, appl), "inactive")
+
     def test_gnome_shell_major(self):
         class R:
             def __init__(self, out):

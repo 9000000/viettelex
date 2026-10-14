@@ -172,6 +172,9 @@ EN = {
         "Backspace, and on any error it falls back to the underline. GNOME Wayland (IBus or "
         "Fcitx5) and KDE Wayland (Fcitx5) only. When on, VietTelex adds the Wayland IME flags to "
         "these apps’ launchers — just reopen the app.",
+    "Trạng thái: đang có hiệu lực trong phiên này.": "Status: active in this session.",
+    "Trạng thái: đã bật nhưng không có hiệu lực trong phiên này.":
+        "Status: on, but not active in this session.",
     "Phiên này là X11: không áp dụng, Chrome/Electron vẫn gạch chân.":
         "This is an X11 session: not applicable, Chrome/Electron keep the underline.",
     "GNOME 50 (Ubuntu 26.04) bỏ mất phím Backspace mà bộ gõ gửi (lỗi GNOME, "
