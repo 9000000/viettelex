@@ -3,10 +3,13 @@
 
 Usage:
   gen-emoji-data.py [--emoji-test F] [--cldr-vi F] [--cldr-vi-derived F]
+                    [--cldr-en F] [--cldr-en-derived F]
 Không đưa đường dẫn → tự tải về ~/.cache/viettelex-emoji/ (chỉ python3 stdlib):
   emoji-test.txt   https://unicode.org/Public/17.0.0/emoji/emoji-test.txt
   vi.xml           CLDR release-48 common/annotations/vi.xml
   vi-derived.xml   CLDR release-48 common/annotationsDerived/vi.xml
+  en.xml           CLDR release-48 common/annotations/en.xml
+  en-derived.xml   CLDR release-48 common/annotationsDerived/en.xml
 (giấy phép Unicode — xem docs/DATA-SOURCES.md). Nguồn từ khoá tiếng Việt thứ hai là
 blob gợi ý emoji sẵn có android/app/src/main/assets/emojisuggest.bin (EMS1).
 
@@ -27,6 +30,15 @@ sectionCount × (tag[4], u32 offset, u32 length) — offset tính từ đầu fi
         (id liền nhau theo thứ tự category)
   SKEY  u32 m | u32 foldOff[m+1] | u32 origOff[m+1] | u32 idOff[m+1]
         | fold utf8 | orig utf8 | u16 ids   — khoá tìm kiếm, sort theo fold
+  SKEN  u32 m | u16 foldOff[m+1] | u16 idOff[m+1] | fold utf8 | u16 ids
+                                               — khoá TIẾNG ANH (CLDR en), sort theo fold
+        (gọn hơn SKEY: không có orig vì khoá tiếng Anh không dấu; offset u16);
+        id mỗi khoá xếp theo độ sát (tên tts == khoá > khoá là cụm từ trong tts > còn
+        lại; rồi tts ngắn trước). Đã LỌC nhiễu tiếng Việt: bỏ khoá một từ < 3 chữ,
+        trùng âm tiết tiếng Việt không dấu (vnlexicon) hoặc là tiền tố của âm tiết đó.
+        Dùng cho ô tìm emoji (sau mọi hạng tiếng Việt) và gợi ý khi gõ (khớp nguyên khoá).
+  FLG2  u32 n | n × 2B mã ISO 3166 IN HOA (sort) | u16 id[n]
+        — gõ đúng "JP" (in hoa) → 🇯🇵; chữ thường không tra (65 mã trùng âm tiết Việt).
   KAOM  u32 g | g × (u32 nameOff, u32 nameLen, u32 start, u32 count)
         | u32 itemCount | u32 itemOff[itemCount+1] | utf8 tên+item
 fold = chữ thường, bỏ dấu tiếng Việt (NFD bỏ U+0300–036F, đ→d), dấu câu → space,
@@ -42,6 +54,8 @@ URLS = {
     "emoji-test.txt": "https://unicode.org/Public/17.0.0/emoji/emoji-test.txt",
     "vi.xml": "https://raw.githubusercontent.com/unicode-org/cldr/release-48/common/annotations/vi.xml",
     "vi-derived.xml": "https://raw.githubusercontent.com/unicode-org/cldr/release-48/common/annotationsDerived/vi.xml",
+    "en.xml": "https://raw.githubusercontent.com/unicode-org/cldr/release-48/common/annotations/en.xml",
+    "en-derived.xml": "https://raw.githubusercontent.com/unicode-org/cldr/release-48/common/annotationsDerived/en.xml",
 }
 
 GROUP_TO_CAT = {
@@ -148,6 +162,32 @@ def parse_cldr(text):
     return out
 
 
+def parse_cldr_typed(text):
+    """→ [(emoji, is_tts, [phrase…])] — giữ phân biệt tên (tts) với từ khoá."""
+    out = []
+    root = ET.fromstring(text.encode("utf-8"))
+    for a in root.iter("annotation"):
+        tts = a.get("type") == "tts"
+        phrases = [a.text or ""] if tts else [p.strip() for p in (a.text or "").split("|")]
+        out.append((a.get("cp"), tts, [p for p in phrases if p.strip()]))
+    return out
+
+
+def read_vn_syllables(path):
+    """Âm tiết tiếng Việt đã fold (không dấu) từ vnlexicon.bin (VNL2, xem VNLexicon2.kt)."""
+    b = open(path, "rb").read()
+    assert b[:4] == b"VNL2"
+    n = struct.unpack_from("<I", b, 8)[0]
+    fo = struct.unpack_from("<I", b, 16)[0]
+    oo = struct.unpack_from("<I", b, 16 + 3 * 8)[0]
+    offs = struct.unpack_from("<%dI" % (n + 1), b, oo)
+    return {b[fo + offs[i]:fo + offs[i + 1]].decode() for i in range(n)}
+
+
+def is_flag_pair(e):
+    return len(e) == 2 and all(0x1F1E6 <= ord(c) <= 0x1F1FF for c in e)
+
+
 def read_emojisuggest(path):
     b = open(path, "rb").read()
     assert b[:4] == b"EMS1"
@@ -165,6 +205,8 @@ def main():
     ap.add_argument("--emoji-test")
     ap.add_argument("--cldr-vi")
     ap.add_argument("--cldr-vi-derived")
+    ap.add_argument("--cldr-en")
+    ap.add_argument("--cldr-en-derived")
     a = ap.parse_args()
 
     uver, emoji, versions, cats, unq = parse_emoji_test(fetch("emoji-test.txt", a.emoji_test))
@@ -204,6 +246,57 @@ def main():
                 add(ph, cp)
     items = sorted(keys.items(), key=lambda kv: (fold(kv[0]).encode(), kv[0].encode()))
 
+    # --- khoá tiếng Anh (CLDR en) — section riêng, SKEY tiếng Việt giữ nguyên từng byte.
+    syl = read_vn_syllables(os.path.join(ROOT, "iOS/Keyboard/Resources/vnlexicon.bin"))
+    syl_prefix = {s[:j] for s in syl for j in range(1, len(s))}
+    tts = {}        # id -> tên tts đã fold
+    flagname = {}   # id -> tên nước đã clean ("flag: Japan" → "japan")
+    en_raw = []     # (phrase, id)
+    dropped = {"short": 0, "syllable": 0, "prefix": 0}
+    for name, p in (("en.xml", a.cldr_en), ("en-derived.xml", a.cldr_en_derived)):
+        for cp, is_tts, phrases in parse_cldr_typed(fetch(name, p)):
+            i = resolve(cp)
+            if i is None:
+                continue
+            for ph in phrases:
+                if is_tts:
+                    tts[i] = fold(ph)
+                    if ph.lower().startswith("flag:"):
+                        flagname[i] = fold(ph.split(":", 1)[1])
+                        en_raw.append((ph.split(":", 1)[1], i))
+                en_raw.append((ph, i))
+    en_keys = {}    # fold -> [ids]
+    for ph, i in en_raw:
+        f = fold(ph)
+        if not f:
+            continue
+        words = f.split(" ")
+        if len(words) == 1:
+            why = "short" if len(f) < 3 else "syllable" if f in syl else "prefix" if f in syl_prefix else None
+        else:   # cụm mà mọi từ đều là âm tiết Việt ("the end"…) — gõ tiếng Việt không dấu dễ trùng
+            why = "phrase" if all(w in syl for w in words) else None
+        if why:
+            dropped[why] = dropped.get(why, 0) + 1
+            continue
+        lst = en_keys.setdefault(f, [])
+        if i not in lst:
+            lst.append(i)
+
+    def closeness(k, i):
+        t = tts.get(i, "")
+        if flagname.get(i) == k or t == k:
+            return 0
+        return 1 if f" {k} " in f" {t} " else 2
+
+    for k, lst in en_keys.items():
+        lst.sort(key=lambda i: (closeness(k, i), len(tts.get(i, "")), i))
+    en_items = sorted(en_keys.items(), key=lambda kv: kv[0].encode())
+
+    flags = sorted((cp_code, ident[e]) for e in emoji if is_flag_pair(e)
+                   for cp_code in ["".join(chr(ord(c) - 0x1F1E6 + 65) for c in e)])
+    # "UK" không phải mã ISO nhưng là cách viết tắt phổ biến của 🇬🇧 (GB).
+    flags = sorted(flags + [("UK", dict(flags)["GB"])])
+
     # --- nhị phân
     sections = []
 
@@ -230,15 +323,33 @@ def main():
         start += len(cats[c])
     sections.append((b"ECAT", u32s([len(CAT_ORDER)]) + table + names))
 
-    fb = [fold(k).encode() for k, _ in items]
-    ob = [k.encode() for k, _ in items]
-    ids = [i for _, lst in items for i in lst]
-    io = [0]
-    for _, lst in items:
-        io.append(io[-1] + len(lst))
-    assert max(ids) < 65536
-    sections.append((b"SKEY", u32s([len(items)]) + u32s(offsets(fb)) + u32s(offsets(ob)) + u32s(io)
-                     + b"".join(fb) + b"".join(ob) + struct.pack("<%dH" % len(ids), *ids)))
+    def skey(its):
+        fb = [fold(k).encode() for k, _ in its]
+        ob = [k.encode() for k, _ in its]
+        ids = [i for _, lst in its for i in lst]
+        io = [0]
+        for _, lst in its:
+            io.append(io[-1] + len(lst))
+        assert max(ids) < 65536
+        return (u32s([len(its)]) + u32s(offsets(fb)) + u32s(offsets(ob)) + u32s(io)
+                + b"".join(fb) + b"".join(ob) + struct.pack("<%dH" % len(ids), *ids))
+
+    sections.append((b"SKEY", skey(items)))
+    efb = [k.encode() for k, _ in en_items]
+    eids = [i for _, lst in en_items for i in lst]
+    eio = [0]
+    for _, lst in en_items:
+        eio.append(eio[-1] + len(lst))
+    efo = offsets(efb)
+    assert efo[-1] < 65536 and eio[-1] < 65536, "SKEN vượt u16 — cần offset u32"
+    assert len({f for f in efb}) == len(efb), "SKEN trùng fold"
+
+    def u16s(xs):
+        return struct.pack("<%dH" % len(xs), *xs)
+    sections.append((b"SKEN", u32s([len(en_items)]) + u16s(efo) + u16s(eio) + b"".join(efb) + u16s(eids)))
+    assert all(len(c) == 2 and c.isupper() for c, _ in flags)
+    sections.append((b"FLG2", u32s([len(flags)]) + "".join(c for c, _ in flags).encode()
+                     + struct.pack("<%dH" % len(flags), *[i for _, i in flags])))
 
     # Ký hiệu kaomoji mà Unicode cũng coi là emoji (♥ ☀ ☎ ✂…) → thêm FE0E để hiện dạng chữ.
     groups, kitems, knames = [], [], b""
@@ -271,7 +382,8 @@ def main():
     newer = {v: sum(1 for e in emoji if versions[e] == v) for v in sorted(set(versions.values())) if v >= 15.0}
     print(f"Emoji {uver}: {len(emoji)} emoji ({', '.join(f'{c}={len(cats[c])}' for c in CAT_ORDER)})")
     print(f"mới: {newer}")
-    print(f"khoá tìm: {len(items)}  kaomoji: {len(kitems)}  → emoji.bin {len(data)} B")
+    print(f"khoá tìm: {len(items)}  tiếng Anh: {len(en_items)} (bỏ {dropped})  cờ ISO: {len(flags)}"
+          f"  kaomoji: {len(kitems)}  → emoji.bin {len(data)} B")
 
 
 if __name__ == "__main__":

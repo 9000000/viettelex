@@ -117,6 +117,14 @@ học**). ~700 unigram + ~470 bigram:
 "emoji họ hàng" curated: từ Việt, dạng KHÔNG DẤU và từ Anh cùng nghĩa trả về
 cùng bộ ≤3 ứng viên (`yêu ≡ yeu ≡ love → ❤️ 💕 💗`).
 
+**Dự phòng tiếng Anh (10/2026, `EmojiSearch.typing`, iOS + Android)**: bảng trên không có
+từ → tra NGUYÊN khoá trong section SKEN của emoji.bin (từ khoá CLDR en, binary search trên
+blob mmap): `japan → 🇯🇵`, `pizza → 🍕`, cụm "từ trước + từ này" (`united states`, `hot dog`).
+Chỉ khi từ đang gõ toàn chữ ASCII (có dấu thì thôi); khoá trùng âm tiết Việt không dấu,
+tiền tố âm tiết hay < 3 chữ đã bị script lọc; khoá > 24 emoji (`face`, `flag`) không gợi ý.
+Mã nước 2 chữ chỉ khi gõ IN HOA đúng nguyên văn (`JP`, `VN`, `UK`; `jp`/`Jp` không ra) —
+65/259 mã trùng âm tiết Việt (la, ma, to, do, ca, co…).
+
 ### 5. `DisplayCase` — case chuẩn khi hiển thị
 
 Datastore case-fold toàn bộ; bảng `DisplayCase` map dạng thường → dạng chuẩn

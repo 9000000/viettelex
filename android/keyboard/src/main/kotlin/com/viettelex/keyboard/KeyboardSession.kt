@@ -1187,6 +1187,9 @@ class KeyboardSession(
         lastWord?.let { emojis = EmojiSuggest.emojis(it.lowercase() + " " + cLow) }
         if (emojis.isEmpty()) emojis = EmojiSuggest.emojis(composed)
         if (emojis.isEmpty()) emojis = EmojiSuggest.emojis(raw.lowercase())
+        // Bảng biên soạn không có → từ khoá tiếng Anh CLDR ("japan", "pizza") + mã nước IN HOA
+        // ("JP"). Từ có dấu / âm tiết Việt không dấu không bao giờ khớp (EmojiSearch.typing).
+        if (emojis.isEmpty()) emojis = EmojiSearch.typing(lastWord, composed, raw)
         if (emojis.isEmpty()) {
             val words = padWords(listOfNotNull(word, word2), 2, composed)
             word = words.firstOrNull()

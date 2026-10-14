@@ -8,7 +8,9 @@ import java.text.Normalizer
  * từ khoá gợi ý emoji sẵn có (EmojiSuggest) + tên/từ khoá CLDR vi. Khớp TIỀN TỐ KHÔNG DẤU
  * tại đầu một từ của khoá; hạng: trùng nguyên khoá có dấu > trùng không dấu > tiền tố có
  * dấu > tiền tố đầu khoá > tiền tố ở từ sau; cùng hạng thì khoá ngắn trước. Quét tuyến
- * tính trên blob mmap (không dựng map).
+ * tính trên blob mmap (không dựng map). Khoá tiếng Anh (section SKEN, CLDR en) chỉ quét khi
+ * câu tìm KHÔNG dấu, hạng luôn sau hạng tiếng Việt tương ứng (nguyên khoá → 1, tiền tố → 5/6)
+ * — thứ tự kết quả tiếng Việt không đổi. Gợi ý khi gõ: [typing] (khớp NGUYÊN khoá).
  */
 object EmojiSearch {
     /** Luật fold PHẢI khớp Scripts/gen-emoji-data.py: thường, bỏ dấu (đ→d), dấu câu → space. */
@@ -49,6 +51,22 @@ object EmojiSearch {
     }
     private val index by lazy { Index() }
 
+    /** SKEN: u32 m | u16 foldOff[m+1] | u16 idOff[m+1] | fold utf8 | u16 ids. */
+    private class EnIndex {
+        val base = EmojiData.section("SKEN")
+        val count = EmojiData.u32(base)
+        val foldOff = base + 4
+        val idOff = foldOff + (count + 1) * 2
+        val foldBase = idOff + (count + 1) * 2
+        val idBase = foldBase + EmojiData.u16(foldOff + count * 2)
+        fun fold(k: Int) = foldBase + EmojiData.u16(foldOff + k * 2)
+        fun idStart(k: Int) = EmojiData.u16(idOff + k * 2)
+    }
+    private val en by lazy { EnIndex() }
+    private val flagBase by lazy { EmojiData.section("FLG2") }
+
+    val enKeyCount: Int get() = en.count
+
     val keyCount: Int get() = index.count
 
     fun search(query: String, limit: Int = 60, supported: (Int) -> Boolean = EmojiData::isSupported): List<String> =
@@ -62,7 +80,10 @@ object EmojiSearch {
         val x = index
         val buf = EmojiData.buf
         // (rank, len, key) gói vào Long để sort không cấp phát object.
-        val hits = LongArray(x.count)
+        // Tiếng Anh chỉ khi câu tìm không dấu (gõ "cá" không kéo "cat"/"cake" vào).
+        val withEn = qo.contentEquals(qf)
+        val y = if (withEn) en else null
+        val hits = LongArray(x.count + (y?.count ?: 0))
         var nh = 0
         for (k in 0 until x.count) {
             val fs = x.foldBase + buf.getInt(x.foldOff + k * 4)
@@ -81,14 +102,23 @@ object EmojiSearch {
             }
             hits[nh++] = (rank.toLong() shl 50) or (minOf(fe - fs, 0xFFFF).toLong() shl 24) or k.toLong()
         }
+        if (y != null) for (k in 0 until y.count) {
+            val fs = y.fold(k); val fe = y.fold(k + 1)
+            val pos = wordPrefix(fs, fe, qf)
+            if (pos < 0) continue
+            val rank = if (pos == 0 && fe - fs == qf.size) 1 else if (pos == 0) 5 else 6
+            hits[nh++] = (rank.toLong() shl 50) or (minOf(fe - fs, 0xFFFF).toLong() shl 24) or (x.count + k).toLong()
+        }
         java.util.Arrays.sort(hits, 0, nh)
         val out = ArrayList<Int>()
         val seen = HashSet<Int>()
         for (h in 0 until nh) {
             val k = (hits[h] and 0xFFFFFF).toInt()
-            val s = buf.getInt(x.idOff + k * 4); val e = buf.getInt(x.idOff + k * 4 + 4)
+            val isEn = k >= x.count
+            val s = if (isEn) en.idStart(k - x.count) else buf.getInt(x.idOff + k * 4)
+            val e = if (isEn) en.idStart(k - x.count + 1) else buf.getInt(x.idOff + k * 4 + 4)
             for (j in s until e) {
-                val id = EmojiData.u16(x.idBase + j * 2)
+                val id = EmojiData.u16((if (isEn) en.idBase else x.idBase) + j * 2)
                 if (seen.add(id) && supported(id)) {
                     out += id
                     if (out.size >= limit) return out
@@ -96,6 +126,82 @@ object EmojiSearch {
             }
         }
         return out
+    }
+
+    // ---- gợi ý khi gõ (thanh gợi ý) — chỉ gọi khi bảng EmojiSuggest không có từ này
+
+    /** Khoá tiếng Anh có nhiều emoji hơn mức này là quá chung ("face", "flag"…) — không gợi ý khi gõ. */
+    const val TYPING_MAX_IDS = 24
+
+    /**
+     * Emoji cho từ đang gõ từ khoá tiếng Anh (SKEN) + mã nước in hoa (FLG2).
+     * - "JP"/"VN"/"US" (đúng 2 chữ IN HOA, Telex không biến đổi) → cờ. Chữ thường/"Jp" không
+     *   tra: 65/259 mã trùng âm tiết Việt không dấu (la, ma, to, do, ca, co…).
+     * - Từ chỉ gồm chữ ASCII (tiếng Việt có dấu thì thôi): khớp NGUYÊN khoá, thử cụm "từ trước
+     *   + từ này" ("hot dog", "united states") rồi từ này, rồi raw. Khoá trùng âm tiết Việt
+     *   không dấu / ngắn < 3 chữ đã bị script lọc nên "an", "ban", "me" không ra.
+     */
+    fun typing(prev: String?, composed: String, raw: String, limit: Int = 3,
+               supported: (Int) -> Boolean = EmojiData::isSupported): List<String> {
+        if (composed.length == 2 && composed == raw && composed.all { it in 'A'..'Z' }) {
+            val id = flag(composed[0], composed[1])
+            return if (id >= 0 && supported(id)) listOf(EmojiData.emoji(id)) else emptyList()
+        }
+        if (!isAsciiWord(composed)) return emptyList()
+        val c = composed.lowercase()
+        if (prev != null && isAsciiWord(prev)) {
+            val r = exact(prev.lowercase() + " " + c, limit, supported)
+            if (r.isNotEmpty()) return r
+        }
+        if (c.length >= 3) {
+            val r = exact(c, limit, supported)
+            if (r.isNotEmpty()) return r
+        }
+        if (raw != composed && raw.length >= 3 && isAsciiWord(raw)) return exact(raw.lowercase(), limit, supported)
+        return emptyList()
+    }
+
+    private fun isAsciiWord(s: String) = s.isNotEmpty() && s.all { it in 'a'..'z' || it in 'A'..'Z' }
+
+    /** Binary search khớp nguyên khoá trong SKEN (sort theo byte của fold); query ASCII. */
+    private fun exact(q: String, limit: Int, supported: (Int) -> Boolean): List<String> {
+        val y = en
+        val buf = EmojiData.buf
+        fun cmp(k: Int): Int {
+            var i = y.fold(k); val end = y.fold(k + 1); var j = 0
+            while (i < end && j < q.length) {
+                val a = buf.get(i).toInt() and 0xFF; val b = q[j].code
+                if (a != b) return if (a < b) -1 else 1
+                i++; j++
+            }
+            return if (i < end) 1 else if (j < q.length) -1 else 0
+        }
+        var lo = 0; var hi = y.count
+        while (lo < hi) { val mid = (lo + hi) ushr 1; if (cmp(mid) < 0) lo = mid + 1 else hi = mid }
+        if (lo >= y.count || cmp(lo) != 0) return emptyList()
+        val s = y.idStart(lo); val e = y.idStart(lo + 1)
+        if (e - s > TYPING_MAX_IDS) return emptyList()
+        val out = ArrayList<String>(limit)
+        for (j in s until e) {
+            val id = EmojiData.u16(y.idBase + j * 2)
+            if (supported(id)) { out += EmojiData.emoji(id); if (out.size >= limit) break }
+        }
+        return out
+    }
+
+    /** FLG2: u32 n | n × 2B mã in hoa (sort) | u16 id[n] → id cờ, −1 nếu không có. */
+    private fun flag(a: Char, b: Char): Int {
+        val base = flagBase
+        val buf = EmojiData.buf
+        val n = EmojiData.u32(base)
+        var lo = 0; var hi = n
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            val x = buf.get(base + 4 + mid * 2).toInt(); val y = buf.get(base + 5 + mid * 2).toInt()
+            if (x == a.code && y == b.code) return EmojiData.u16(base + 4 + n * 2 + mid * 2)
+            if (x < a.code || (x == a.code && y < b.code)) lo = mid + 1 else hi = mid
+        }
+        return -1
     }
 
     /** Vị trí nơi [q] là tiền tố của một từ trong [s, e) (đầu khoá hoặc sau space); −1 nếu không. */
