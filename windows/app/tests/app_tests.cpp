@@ -705,3 +705,44 @@ TEST(main_window_messages_are_distinct) {
     }
 }
 
+// ---- UI strings (app/src/strings.cpp is portable) ---------------------------------------
+#include <cwchar>
+#include <string>
+
+#include <viettelex/vtx_engine.h>
+
+#include "strings.h"
+
+// 2026-10 UX audit: Windows keyboards have no ⌫ glyph ("Backspace"), the auto-restore
+// example read "retore → retore" (looked like nothing happens), and the tray item that
+// only hides the icon was enumerated as "Quit".
+TEST(ui_strings_windows_wording) {
+    using namespace vtx::app;
+    for (int en = 0; en < 2; ++en) {
+        setEnglish(en != 0);
+        for (int i = 0; i < static_cast<int>(S::Count); ++i) {
+            const wchar_t* s = tr(static_cast<S>(i));
+            CHECK(s != nullptr);
+            if (s) CHECK(std::wcschr(s, L'⌫') == nullptr);  // ⌫
+        }
+        const wchar_t* restore = tr(S::AutoRestoreDesc);
+        CHECK(std::wcsstr(restore, L"retore → retore") == nullptr);
+        CHECK(std::wcsstr(restore, L"“tet” → “text”") != nullptr);  // engine output, checked below
+    }
+    // The example is what the engine does with the default settings: "text" shows "tet"
+    // while typing and is restored to "text" at the word end.
+    vtx_engine* e = vtx_create();
+    vtx_set_flags(e, vtx::Settings().engineFlags());
+    vtx_action a;
+    for (char c : std::string("text")) vtx_feed(e, static_cast<uint32_t>(c), &a);
+    uint16_t buf[VTX_MAX_TEXT + 1];
+    int32_t n = vtx_composed(e, buf, VTX_MAX_TEXT + 1);
+    CHECK(std::u16string(reinterpret_cast<const char16_t*>(buf), static_cast<size_t>(n)) == u"tet");
+    n = vtx_commit_text(e, 1, buf, VTX_MAX_TEXT + 1);
+    CHECK(std::u16string(reinterpret_cast<const char16_t*>(buf), static_cast<size_t>(n)) == u"text");
+    vtx_destroy(e);
+    setEnglish(false);
+    CHECK(std::wcscmp(tr(S::MenuHideTray), L"Ẩn biểu tượng khay") == 0);
+    CHECK(std::wcscmp(tr(S::SecHints), L"Gợi ý cạnh con trỏ") == 0);
+}
+

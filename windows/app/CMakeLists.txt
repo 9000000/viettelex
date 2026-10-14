@@ -8,8 +8,8 @@ target_link_libraries(vtx_app_core PUBLIC vtx_ime_core viettelex_text)
 
 if(VTX_IME_TESTS)
   add_executable(vtx_app_tests ../ime/tests/test_main.cpp tests/app_tests.cpp tests/typo_fix_tests.cpp
-                 tests/onboarding_game_tests.cpp)
-  target_include_directories(vtx_app_tests PRIVATE ../ime/tests)
+                 tests/onboarding_game_tests.cpp src/strings.cpp)  # strings.cpp: portable UI text
+  target_include_directories(vtx_app_tests PRIVATE ../ime/tests src)
   target_link_libraries(vtx_app_tests PRIVATE vtx_app_core)
   target_compile_definitions(vtx_app_tests PRIVATE
                              VTX_KB_RESOURCES="${CMAKE_CURRENT_SOURCE_DIR}/../../iOS/Keyboard/Resources"

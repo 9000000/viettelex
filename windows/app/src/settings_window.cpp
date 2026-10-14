@@ -510,18 +510,23 @@ std::vector<Item> pageItems(int tab) {
             v.push_back(section(S::SecSpelling));
             for (int i = 5; i <= 10; ++i) v.push_back(toggleItem(i));
             v.push_back(toggleItem(20));  // gạch đỏ âm tiết sai chính tả (composition only)
+            // Gợi ý cạnh con trỏ: mostly on by default, so always visible (not collapsed).
+            v.push_back(section(S::SecHints));
+            for (int i = 15; i <= 19; ++i) v.push_back(toggleItem(i));
             // Công cụ văn bản (macOS: same place, after the spelling options; collapsible,
-            // collapsed by default)
+            // collapsed by default). With the tray icon off (the default) its menu does not
+            // exist: the header says how to reach the tools instead.
             {
                 Item sec = section(S::SecTextTools);
                 sec.collapsible = true;
-                sec.desc = g_textToolsOpen ? S::Count : S::TextToolsSummary;
+                sec.desc = !g_settings.showTrayIcon ? S::TextToolsNoTray
+                           : g_textToolsOpen        ? S::Count
+                                                    : S::TextToolsSummary;
                 v.push_back(sec);
             }
             if (g_textToolsOpen) {
                 v.push_back(toggleItem(14));
                 v.push_back(comboItem(S::AddTonesHotkey, S::AddTonesHotkeyDesc, IdComboAddTones));
-                for (int i = 15; i <= 19; ++i) v.push_back(toggleItem(i));  // caret hints
             }
             break;
         case 2: v.push_back(blockItem(S::SecShortcuts, S::ShortcutsDesc, 360)); break;

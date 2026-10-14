@@ -11,7 +11,7 @@ enum class S {
     MenuSettings,
     MenuCheckUpdate,
     MenuAbout,
-    MenuQuit,
+    MenuHideTray,  // "Ẩn biểu tượng khay": hides the icon, the app keeps running
     // navigation / page titles
     TabTyping,
     TabSpelling,
@@ -81,7 +81,8 @@ enum class S {
     AddTonesHotkey, AddTonesHotkeyDesc,
     MenuTextTools,
     ToolAddTones, ToolUpper, ToolLower, ToolTitle, ToolSentence, ToolStrip,
-    // Gợi ý cạnh con trỏ (macOS 1.8.2), in the collapsible Text tools section
+    // Text tools summary (collapsed section); caret hints (macOS 1.8.2) follow in their
+    // own "Gợi ý" section (SecHints)
     TextToolsSummary,
     MathResults, MathResultsDesc,
     NumberChips, NumberChipsDesc,
@@ -109,6 +110,10 @@ enum class S {
     ImportResult, ImportSkipped, ImportViqr,
     // Ctrl+Shift needs VietTelex active: make it Windows' default input method (Kiểu gõ page)
     DefaultInputTitle, DefaultInputDesc, DefaultInputButton,
+    // Spelling page: caret hints section; how to reach Text tools with the tray icon off
+    SecHints, TextToolsNoTray,
+    // Tray menu: Chế độ game toggle
+    MenuGameMode,
     Count
 };
 

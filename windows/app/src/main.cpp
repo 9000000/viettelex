@@ -56,7 +56,14 @@ static_assert(kAppCommandMsg == kAppCommand && kTrayMsg == kTrayCallback, "app_m
 constexpr UINT kTrayId = 1;
 UINT g_taskbarCreated = 0;
 
-enum TrayCmd : UINT { kTraySettings = 1, kTrayUpdate, kTrayAbout, kTrayQuit, kTrayToolBase = 100 /* +6 text tools */ };
+enum TrayCmd : UINT {
+    kTraySettings = 1,
+    kTrayUpdate,
+    kTrayAbout,
+    kTrayHideTray,  // "Ẩn biểu tượng khay" (the app keeps running)
+    kTrayGameMode,
+    kTrayToolBase = 100 /* +6 text tools */
+};
 
 
 // Tray glyph = the keyboard icon chosen in settings, for the current taskbar theme.
@@ -131,11 +138,13 @@ void showTrayMenu() {
         appendTextToolsMenu(m, kTrayToolBase);
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     }
+    AppendMenuW(m, MF_STRING | (g_settings.gameMode ? MF_CHECKED : MF_UNCHECKED), kTrayGameMode, tr(S::MenuGameMode));
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, kTraySettings, tr(S::MenuSettings));
     AppendMenuW(m, MF_STRING, kTrayUpdate, tr(S::MenuCheckUpdate));
     AppendMenuW(m, MF_STRING, kTrayAbout, tr(S::MenuAbout));
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, kTrayQuit, tr(S::MenuQuit));
+    AppendMenuW(m, MF_STRING, kTrayHideTray, tr(S::MenuHideTray));
     POINT pt;
     GetCursorPos(&pt);
     SetForegroundWindow(g_mainWnd);
@@ -145,7 +154,8 @@ void showTrayMenu() {
         case kTraySettings: showSettings(Tab::Typing); break;
         case kTrayUpdate: startUpdateCheck(g_mainWnd, true); break;
         case kTrayAbout: showSettings(Tab::About); break;
-        case kTrayQuit:  // "Ẩn biểu tượng khay": the app keeps running, just without the icon
+        case kTrayGameMode: toggleGameMode(); break;
+        case kTrayHideTray:  // "Ẩn biểu tượng khay": the app keeps running, just without the icon
             g_settings.showTrayIcon = false;
             settingsChanged();
             refreshSettingsWindow();
