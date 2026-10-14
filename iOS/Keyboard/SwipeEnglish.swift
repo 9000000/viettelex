@@ -43,7 +43,7 @@ enum SwipeEnglish {
         let url = VTDataFile.url("enlexicon.bin")
         #else
         final class BundleToken {}
-        let url = Bundle(for: BundleToken.self).url(forResource: "enlexicon", withExtension: "bin")
+        let url = VTBundleResource.url("enlexicon", "bin", anchor: BundleToken.self)
         #endif
         guard let url, let d = try? Data(contentsOf: url, options: .alwaysMapped) else { return .empty }
         return parse(d) ?? .empty

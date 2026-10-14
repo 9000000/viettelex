@@ -12,7 +12,11 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "TelexCore"
+            name: "TelexCore",
+            // Bàn phím iOS (Release) build -Osize như phần còn lại của extension (iOS/project.yml)
+            // — Xcode KHÔNG truyền SWIFT_OPTIMIZATION_LEVEL của project xuống package (trước:
+            // -O). Chỉ iOS: macOS/Linux giữ -O như cũ. Package local (path:) nên unsafeFlags hợp lệ.
+            swiftSettings: [.unsafeFlags(["-Osize"], .when(platforms: [.iOS], configuration: .release))]
         ),
         .executableTarget(
             name: "GenLessons",

@@ -159,7 +159,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private var rowsLeftConstraint: NSLayoutConstraint?
     private var rowsRightConstraint: NSLayoutConstraint?
     private var repeatTimer: Timer?
-    private var lastSuggestionSig = ""
+    private var lastSuggestionSig: BarSignature?
     private var wordDeleteTick = 0
     /// Giữ backspace >3s → xoá theo TỪ (controller đọc proxy, off hot path).
     var onDeleteWord: (() -> Void)?
@@ -336,7 +336,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     func setSuggestionsEnabled(_ on: Bool, reserveStrip: Bool? = nil) {
         suggestionsEnabled = on
         stripReserved = reserveStrip ?? on
-        lastSuggestionSig = ""        // chrome đổi → lượt show kế phải ghi lại UI
+        lastSuggestionSig = nil        // chrome đổi → lượt show kế phải ghi lại UI
         updateSuggestionChrome()
     }
 
@@ -354,7 +354,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         Self.clickModifier()
         barCollapsed.toggle()
         UserDefaults.standard.set(barCollapsed, forKey: "suggestionBarCollapsed")
-        lastSuggestionSig = ""
+        lastSuggestionSig = nil
         // Animation 200ms (user 2026-07-24): chiều cao trượt + bar fade +
         // chevron xoay 180° (một icon chevron.down + transform). Chỉ animate
         // CONSTANTS trực tiếp — không gọi chrome trong block (chrome set
@@ -816,7 +816,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         suggestionBar.isHidden = !visible || barCollapsed
         suggestionBar.alpha = 1
         if !visible || barCollapsed { pasteCard.isHidden = true; notePasteOffer(false) }   // thu gọn / emoji plane
-        lastSuggestionSig = ""   // chrome đổi → lượt show kế ghi lại (kể cả thẻ Dán)
+        lastSuggestionSig = nil   // chrome đổi → lượt show kế ghi lại (kể cả thẻ Dán)
         refreshCollapseButton(visible: visible)
         refreshBarHitInsets()
     }
@@ -1157,7 +1157,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         Self.clickModifier()
         textToolsMode = false
         plane = templatesActive ? .letters : .templates
-        lastSuggestionSig = ""
+        lastSuggestionSig = nil
         rebuild()
         styleBurger()
     }
@@ -1191,6 +1191,17 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// Payload chip "↩︎ chữ gốc": trả lại chữ đã gõ của lần tự sửa vừa rồi (AutoCorrect).
     static let undoAutoCorrectToken = "\u{E000}undoAutoCorrect"
 
+    /// Khoá "nội dung bar không đổi" của `showSuggestions` (trước: chuỗi ghép mỗi lần refresh).
+    struct BarSignature: Equatable {
+        struct Slot: Equatable { let display: String; let insert: String }
+        enum Paste: Equatable { case none, text, image }
+        let dark: Bool
+        let theme: KeyboardTheme
+        let s0: Slot?, s1: Slot?, s2: Slot?
+        let emojis: [String]
+        let paste: Paste
+    }
+
     func showSuggestions(_ set: SuggestionSet) {
         guard suggestionsEnabled, !barCollapsed else { return }
         buildSuggestionPoolIfNeeded()
@@ -1219,10 +1230,17 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // Nội dung không đổi (nextWords thường ổn định giữa các phím) → bỏ qua
         // toàn bộ ghi UI: setTitle trên bar fillProportionally kéo theo một
         // lượt đo text/Auto Layout mỗi keystroke.
-        let sig = (dark ? "D" : "L") + themeSettings.theme.rawValue
-            + texts.map { $0.map { $0.display + "\u{1}" + $0.insert } ?? "\u{2}" }.joined(separator: "\u{3}")
-            + "\u{4}" + emojis.joined()
-            + (pasteCardOn ? (set.pasteIsImage ? "\u{5}pasteImg" : "\u{5}paste") : "")
+        func slotSig(_ i: Int) -> BarSignature.Slot? {
+            i < texts.count ? texts[i].map { .init(display: $0.display, insert: $0.insert) } : nil
+        }
+        // So bằng struct Equatable (chỉ copy tham chiếu chuỗi) — không ghép chuỗi khoá mỗi lần.
+        let sig = BarSignature(
+            dark: dark, theme: themeSettings.theme,
+            s0: slotSig(0),
+            s1: slotSig(1),
+            s2: slotSig(2),
+            emojis: emojis,
+            paste: pasteCardOn ? (set.pasteIsImage ? .image : .text) : .none)
         if sig == lastSuggestionSig { return }
         lastSuggestionSig = sig
 
@@ -1396,7 +1414,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         notePasteOffer(false)
         guard !pasteCard.isHidden else { return }
         pasteCard.isHidden = true
-        lastSuggestionSig = ""
+        lastSuggestionSig = nil
     }
 
     private func setPasteCard(visible: Bool, image: Bool = false, ink: UIColor) {

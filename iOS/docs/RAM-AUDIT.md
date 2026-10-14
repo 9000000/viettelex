@@ -65,6 +65,45 @@ Test: `ViewTreeLeakTests` (cây cũ chết qua controller mới / cùng controll
 lại, heap/vòng < 30 KB, độ trễ), `RamFixTests` (emoji id, dropCaches, lưới, cảnh báo bộ nhớ, cắt
 ảnh nền), `RamBreakdownTests` leak-cycles (bỏ XCTExpectFailure; 3 vòng làm ấm rồi đo).
 
+## Framework nạp lúc khởi động + đợt 14/10/2026
+
+**Framework link vào bàn phím** (`otool -L` binary appex, Release iphoneos). Trước khi gỡ, đã
+tính bao đóng phụ thuộc của UIKit + Foundation trên runtime simulator iOS 26.5 (`otool -L` đệ
+quy trong RuntimeRoot, 538 image): **AVFAudio, AVFoundation, Accelerate, AudioToolbox, CoreImage,
+CoreText, ImageIO đều đã nằm trong bao đóng của UIKit** ⇒ bỏ link trực tiếp không bớt image nào
+được nạp (không làm: thay AVAudioEngine bằng `AudioServicesPlaySystemSound` mất âm lượng/kiểu âm;
+thay vDSP bằng vòng lặp chậm hơn mà không lợi gì; CoreImage chỉ được libswiftCoreImage weak kéo).
+Chỉ hai cái là THÊM:
+
+| Framework | Image thêm ngoài bao đóng UIKit | Xử lý |
+|---|---|---|
+| Translation (weak) | **34** (AppIntents, Speech, ContextKit, ToolKit, LinkServices, StatusKit…) | **Gỡ khỏi bàn phím** — phần gọi Apple Translation tách thành `VTTranslate.framework` (iOS/VTTranslate/) nhúng ở app chủ, bàn phím `dlopen` lần đầu bấm chip Dịch (`TranslateLoader`, Keyboard/Translate.swift). Extension không được có thư mục Frameworks riêng (ITMS-90206) nên framework nằm ở `VietTelex.app/Frameworks/`; dlopen file trong bundle đã ký là hợp lệ App Store. |
+| CoreHaptics | 1 (chính nó) | Giữ — chỉ một image, không kéo theo gì. |
+
+Trước → sau (link của binary bàn phím): bỏ `Translation.framework (weak)`; còn lại y nguyên
+(Foundation, UIKit, AVFAudio, Accelerate, AudioToolbox, CoreFoundation, CoreGraphics, CoreHaptics,
+CoreText, ImageIO, QuartzCore + overlay libswift*). **Cần máy thật**: đo footprint "vừa hiện" trước/
+sau (ước vài trăm KB `__DATA` dirty của 34 image) và bấm chip Dịch một lần (dlopen từ appex trên
+thiết bị đã ký).
+
+**Bảng emoji (51–65 MB khi mở)**: không thêm giảm nhẹ. Khi bàn phím ẩn, `tearDown()` đã gỡ toàn bộ
+cây view (gồm lưới emoji) và `EmojiData.dropCaches()` — phần còn lại là cache glyph Apple Color
+Emoji của CoreText, không API công khai nào xả được (§4). Cách duy nhất còn lại là tự thoát process
+khi ẩn — không làm (hệ thống có thể đang hiện lại bàn phím, rủi ro "bàn phím trắng"). Sprite atlas:
+không làm (quyết định 14/10/2026).
+
+Đường phím nóng (14/10/2026): `manualCompletions` dùng chỉ mục fold sẵn + tìm nhị phân (trước fold
+cả danh sách từ thêm tay mỗi phím); hoãn gợi ý 30 ms dùng lại MỘT `DispatchSourceTimer`
+(`MainDebouncer`) thay vì `asyncAfter` mỗi phím; khoá "bar không đổi" là struct Equatable thay vì
+chuỗi ghép; `TouchLog.write` nhận `@autoclosure` (Debug mode tắt ⇒ không dựng chuỗi). Test:
+`PerfSizeUXFixTests`.
+
+Dung lượng: app iOS không chép `vnlexicon.bin` + `enlexicon.bin` nữa (−334 KB, đọc bản trong
+`PlugIns/VietTelexKeyboard.appex` — `VTBundleResource`); VTTranslate.framework +72 KB; TelexCore
+(package) giờ -Osize ở Release iOS (Xcode không truyền `SWIFT_OPTIMIZATION_LEVEL` của project xuống
+package; `__TEXT` 106 → 89 KB). `icon-1024.png`: không tối ưu — actool giải PNG rồi nén lại lzfse
+ARGB trong Assets.car (559 KB) nên nén PNG nguồn không đổi dung lượng bản phát hành.
+
 ## Kết luận nhanh (audit gốc, trước khi sửa)
 
 1. **Rò rỉ nghiêm trọng: mỗi lần ẩn/hiện bàn phím giữ lại NGUYÊN cây view cũ** (~1,8 MB/lần,
@@ -217,7 +256,7 @@ Ghi chú đo: bản cũ nạp từ plist là NSDictionary bridge (tra chậm qua
 | Ảnh nền giải ở @2x thay @3x (nền đã mờ/phủ tối, mắt không thấy) | −1,9 MB giữ, đỉnh giải mã −3 MB | thấp |
 | `didReceiveMemoryWarning`: thêm `planeCache.removeAll()`, bỏ `EmojiData` cache, `Wallpaper.dropCache()` khi không hiện, template vuốt khi ẩn | 2–4 MB khi bị ép | thấp |
 | Âm phím: đã shutdown khi ẩn ✓; nếu cần nhẹ hơn nữa: `AudioServicesPlaySystemSound` với file dựng sẵn thay AVAudioEngine | −2–3 MB khi bật | trung bình (độ trễ/âm lượng) |
-| Link yếu + nạp lười AVFAudio/AudioToolbox/CoreHaptics (đang link cứng, nạp lúc khởi động dù tắt) | ước 0,5–1,5 MB `__DATA` (cần đo máy thật) | trung bình |
+| Link yếu + nạp lười AVFAudio/AudioToolbox/CoreHaptics (đang link cứng, nạp lúc khởi động dù tắt) | ~0: 14/10/2026 kiểm — AVFAudio/AudioToolbox đã trong bao đóng UIKit, CoreHaptics chỉ +1 image (xem "Framework nạp lúc khởi động") | — |
 | FUTO giữ fp16, đổi fp32 theo lớp khi chạy | −1,25 MB khi bật | trung bình (CPU) |
 
 Đã đúng (không cần làm): mmap `.alwaysMapped` cho mọi blob; ảnh nền giải bằng ImageIO thumbnail

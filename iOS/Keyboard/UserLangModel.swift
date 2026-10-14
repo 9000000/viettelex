@@ -24,14 +24,18 @@
 // Sao lưu / Từ điển cá nhân đi qua `Plain` (dict như cũ) — JSON sao lưu không đổi.
 //
 // PRIVACY: chỉ đếm TẦN SUẤT (không câu, không thứ tự, không timestamp per-từ);
-// ô mật khẩu không đi qua đây; toggle "Học từ hay dùng" + nút xóa trong app.
+// ô mật khẩu không đi qua đây; toggle "Học từ hay dùng" + nút xoá trong app.
 import Foundation
 
 final class UserLangModel {
     private var t = UserLMTables()
     private var lastDecay = Date()
     /// Từ user tự thêm (màn Từ điển cá nhân): key lowercase → dạng hiển thị ("VietTelex").
-    private(set) var manual: [String: String] = [:]
+    private(set) var manual: [String: String] = [:] { didSet { manualIndex = nil } }
+    /// Chỉ mục tiền tố cho `manualCompletions` (đường gõ, mỗi phím): (UTF-8 của fold NFC,
+    /// fold, key) sắp theo byte. Dựng lười lần đầu cần sau khi `manual` đổi (thêm/xoá/nạp —
+    /// hiếm) ⇒ mỗi phím chỉ fold TIỀN TỐ + tìm nhị phân, không fold cả danh sách.
+    private var manualIndex: [(bytes: [UInt8], fold: String, key: String)]?
 
     /// Bảng dạng dict (tests / công cụ) — dựng lại mỗi lần gọi, KHÔNG dùng trên đường gõ.
     var uni: [String: Int] { t.uniDict() }
@@ -289,16 +293,47 @@ final class UserLangModel {
     }
 
     /// Từ thêm tay khớp tiền tố đang gõ (bỏ dấu, không phân biệt hoa/thường), dạng hiển thị.
+    /// Gọi trên main MỖI PHÍM ⇒ dùng `manualIndex` (fold sẵn, sắp xếp) thay vì fold cả danh sách.
     func manualCompletions(_ prefix: String, limit: Int = 2) -> [String] {
         guard !manual.isEmpty, !prefix.isEmpty else { return [] }
-        let f = Self.fold(prefix)
-        return manual.filter { k, d in d != prefix && Self.fold(k).hasPrefix(f) }
+        let f = Self.fold(prefix).precomposedStringWithCanonicalMapping
+        let fb = Array(f.utf8)
+        let idx = manualIndex ?? buildManualIndex()
+        // Cận dưới theo byte: mọi chuỗi có tiền tố byte `fb` nằm liền một khối từ đây.
+        var lo = 0, hi = idx.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if idx[mid].bytes.lexicographicallyPrecedes(fb) { lo = mid + 1 } else { hi = mid }
+        }
+        var hits: [String] = []
+        var i = lo
+        while i < idx.count, idx[i].bytes.starts(with: fb) {
+            // hasPrefix theo Character (như bản cũ) — khác tiền tố byte chỉ ở dấu kết hợp lẻ.
+            let e = idx[i]
+            if e.fold.hasPrefix(f), let d = manual[e.key], d != prefix { hits.append(e.key) }
+            i += 1
+        }
+        return hits
             .sorted { a, b in
-                let ca = t.uni(a.key), cb = t.uni(b.key)
-                return ca != cb ? ca > cb : a.key < b.key
+                let ca = t.uni(a), cb = t.uni(b)
+                return ca != cb ? ca > cb : a < b
             }
-            .prefix(limit).map { $0.value }
+            .prefix(limit).compactMap { manual[$0] }
     }
+
+    private func buildManualIndex() -> [(bytes: [UInt8], fold: String, key: String)] {
+        let idx = manual.keys.map { k -> (bytes: [UInt8], fold: String, key: String) in
+            let f = Self.fold(k).precomposedStringWithCanonicalMapping
+            return (Array(f.utf8), f, k)
+        }.sorted { $0.bytes.lexicographicallyPrecedes($1.bytes) }
+        manualIndex = idx
+        return idx
+    }
+
+    #if DEBUG
+    /// Test: chỉ mục đã dựng chưa (bị bỏ khi `manual` đổi).
+    var debugHasManualIndex: Bool { manualIndex != nil }
+    #endif
 
     /// Chuẩn hoá từ nhập tay: bỏ khoảng trắng đầu/cuối, chỉ chữ cái, 1…24 ký tự. nil = không hợp lệ.
     static func normalizeManual(_ raw: String) -> String? {
@@ -555,7 +590,7 @@ final class UserLangModel {
         return true
     }
 
-    /// Xoá store (bản nhị phân + mọi bản cũ) — "Xóa từ đã học".
+    /// Xoá store (bản nhị phân + mọi bản cũ) — "Xoá từ đã học".
     static func removeStore(at url: URL) {
         let fm = FileManager.default
         try? fm.removeItem(at: compactURL(for: url))
@@ -629,7 +664,7 @@ final class UserLangModel {
         ioQueue.sync { Self.write(snap, to: url) }
     }
 
-    /// App đã sửa/xoá store (Từ điển cá nhân / "Xóa từ đã học" — mốc userlmResetAt
+    /// App đã sửa/xoá store (Từ điển cá nhân / "Xoá từ đã học" — mốc userlmResetAt
     /// trong App Group đổi): bỏ bảng trong RAM, huỷ ghi chờ (không bao giờ ghi đè bản của
     /// app), nạp lại file (vắng ⇒ seed lại).
     func reloadAfterExternalEdit() {

@@ -1,5 +1,5 @@
 // SeedData.swift — GENERATED: seed ban đầu cho UserLangModel (lần đầu chạy /
-// sau khi user bấm "Xóa từ đã học"). Nguồn: corpus OpenSubtitles2018 tiếng Việt
+// sau khi user bấm "Xoá từ đã học"). Nguồn: corpus OpenSubtitles2018 tiếng Việt
 // (văn nói) lọc bias phim ảnh + bù lớp chat/teencode curated + ~112 từ tiếng
 // Anh cơ bản hay pha trong chat Việt. Weight log-scale, max 50 — user gõ thật
 // (+1/lần, accepted +2) sẽ vượt seed sau vài ngày; decay tuần làm seed mờ dần.

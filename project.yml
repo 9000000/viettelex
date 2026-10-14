@@ -53,6 +53,8 @@ targets:
       #  • Công cụ → Dịch (macOS 26+, TranslateAction.swift): chiều dịch + nhận ra tiếng Việt
       #    không cần NaturalLanguage, ngôn ngữ đích `translateTarget` — cùng luật với iOS.
       - path: iOS/Keyboard/Translate.swift
+      #    phần gọi Apple Translation (iOS: framework VTTranslate nạp lười; macOS: biên dịch thẳng)
+      - path: iOS/VTTranslate/TranslateEngine.swift
       - path: iOS/Shared/TranslatePrefs.swift
       # L("…") của TextTools (giao diện tiếng Anh, b8da26e) — chỉ Foundation.
       - path: iOS/Shared/L10n.swift

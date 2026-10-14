@@ -12,6 +12,30 @@
 //   sections theo thứ tự: folded, display, attr, offsets, dispOffsets, freqs
 import Foundation
 
+#if !VIETTELEX_CLI
+/// Tìm file dữ liệu: bundle của code (bàn phím / test / app macOS) trước, rồi bàn phím nhúng
+/// trong app iOS (`PlugIns/VietTelexKeyboard.appex`) — app iOS KHÔNG chép riêng vnlexicon.bin /
+/// enlexicon.bin nữa (14/10/2026, bớt ~334 KB bản trùng; project.yml).
+enum VTBundleResource {
+    static let keyboardAppex = "VietTelexKeyboard.appex"
+
+    static func url(_ name: String, _ ext: String, anchor: AnyClass) -> URL? {
+        url(name, ext, bundles: [Bundle(for: anchor), Bundle.main])
+    }
+
+    static func url(_ name: String, _ ext: String, bundles: [Bundle]) -> URL? {
+        for b in bundles { if let u = b.url(forResource: name, withExtension: ext) { return u } }
+        for b in bundles {
+            guard let plugins = b.builtInPlugInsURL,
+                  let appex = Bundle(url: plugins.appendingPathComponent(keyboardAppex)),
+                  let u = appex.url(forResource: name, withExtension: ext) else { continue }
+            return u
+        }
+        return nil
+    }
+}
+#endif
+
 enum VNLexicon2Data {
     static let count = 7184
 
@@ -21,7 +45,7 @@ enum VNLexicon2Data {
         let url = VTDataFile.url("vnlexicon.bin")
         #else
         final class BundleToken {}
-        let url = Bundle(for: BundleToken.self).url(forResource: "vnlexicon", withExtension: "bin")
+        let url = VTBundleResource.url("vnlexicon", "bin", anchor: BundleToken.self)
         #endif
         guard let url, let d = try? Data(contentsOf: url, options: .alwaysMapped)
         else { fatalError("vnlexicon.bin missing from bundle") }

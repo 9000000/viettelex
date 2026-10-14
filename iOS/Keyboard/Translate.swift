@@ -3,14 +3,14 @@
 // (TranslationSession(installedSource:target:), iOS 26+) — không mạng, không server.
 // Bàn phím không tự tải gói được (session kiểu này canRequestDownloads == false) ⇒ báo
 // người dùng mở app (App/Plus/TranslateSettingsView.swift).
-// KHÔNG TỐN GÌ khi không dùng: Translation chỉ chạm tới khi bấm chip;
-// session là biến cục bộ, nhả ngay sau một lần dịch. Luật chiều dịch: Shared/TranslatePrefs.swift.
-// macOS dùng chung file này (project.yml, Công cụ → Dịch — App/Sources/TranslateAction.swift):
-// mọi chỗ cần OS mới ghi cả iOS 26 lẫn macOS 26.
+// KHÔNG TỐN GÌ khi không dùng: file này KHÔNG import Translation — phần gọi Apple Translation
+// nằm ở iOS/VTTranslate/TranslateEngine.swift. iOS: bàn phím không link Translation (link là
+// dyld nạp nó + ~33 framework phụ thuộc lúc khởi động); `TranslateLoader` dlopen
+// VTTranslate.framework của app chủ lần đầu bấm chip. Session là biến cục bộ, nhả ngay sau
+// một lần dịch. Luật chiều dịch: Shared/TranslatePrefs.swift.
+// macOS dùng chung file này (project.yml, Công cụ → Dịch — App/Sources/TranslateAction.swift)
+// + TranslateEngine.swift biên dịch thẳng vào app: mọi chỗ cần OS mới ghi cả iOS 26 lẫn macOS 26.
 import Foundation
-#if canImport(Translation)
-import Translation
-#endif
 
 /// Phần THUẦN (test được): nhận ra ngôn ngữ + giữ khoảng trắng hai đầu.
 enum TranslateText {
@@ -140,41 +140,109 @@ enum TranslateFailure: Error, Equatable {
     case failed
 }
 
-@available(iOS 26.0, macOS 26.0, *)
-enum OnDeviceTranslator {
-    /// Dịch một lần. Kiểm tra gói đã cài TRƯỚC (LanguageAvailability, không tạo session);
-    /// session sống trong hàm này rồi được nhả.
-    static func translate(_ text: String, pair: TranslateDirection.Pair) async -> Result<String, TranslateFailure> {
-        #if canImport(Translation)
-        let src = Locale.Language(identifier: pair.source)
-        let dst = Locale.Language(identifier: pair.target)
-        switch await LanguageAvailability().status(from: src, to: dst) {
-        case .installed: break
-        case .supported: return .failure(.notInstalled)
-        case .unsupported: return .failure(.unsupported)
-        @unknown default: return .failure(.unsupported)
+extension TranslateFailure {
+    /// Mã từ TranslateEngine (`TranslateEngineCode`); 0 (ok) ⇒ nil.
+    init?(engineCode: Int32) {
+        switch engineCode {
+        case 0: return nil
+        case 1: self = .notInstalled
+        case 2: self = .unsupported
+        case 3: self = .unknownLanguage
+        default: self = .failed
         }
-        let session = TranslationSession(installedSource: src, target: dst)
-        do {
-            let r = try await session.translate(text)
-            return .success(r.targetText)
-        } catch {
-            switch error {
-            case TranslationError.notInstalled: return .failure(.notInstalled)
-            case TranslationError.unsupportedLanguagePairing, TranslationError.unsupportedSourceLanguage,
-                 TranslationError.unsupportedTargetLanguage: return .failure(.unsupported)
-            case TranslationError.unableToIdentifyLanguage: return .failure(.unknownLanguage)
-            default:
-                #if os(iOS)
-                TouchLog.write("translate failed: \(type(of: error))")
-                #else
-                DebugLog.log("translate failed: \(type(of: error))")
-                #endif
-                return .failure(.failed)
-            }
-        }
-        #else
-        return .failure(.unsupported)
-        #endif
     }
 }
+
+@available(iOS 26.0, macOS 26.0, *)
+enum OnDeviceTranslator {
+    /// Dịch một lần (gói ngôn ngữ phải đã cài — kiểm trước, không tạo session thừa).
+    static func translate(_ text: String, pair: TranslateDirection.Pair) async -> Result<String, TranslateFailure> {
+        #if os(iOS)
+        let r = await TranslateLoader.run(text, source: pair.source, target: pair.target)
+        #else
+        let r = await TranslateEngine.run(text, source: pair.source, target: pair.target)
+        #endif
+        if let f = TranslateFailure(engineCode: r.code) {
+            if f == .failed {
+                #if os(iOS)
+                TouchLog.write("translate failed: \(r.text ?? "?")")
+                #else
+                DebugLog.log("translate failed: \(r.text ?? "?")")
+                #endif
+            }
+            return .failure(f)
+        }
+        return .success(r.text ?? "")
+    }
+}
+
+#if os(iOS)
+/// Nạp lười VTTranslate.framework (nhúng ở app chủ, KHÔNG link vào bàn phím) rồi gọi
+/// `vt_translate` qua dlsym. Không tìm thấy / không nạp được ⇒ `.unsupported` (không crash).
+enum TranslateLoader {
+    typealias Callback = @convention(c) (UnsafeMutableRawPointer?, Int32, UnsafePointer<CChar>?) -> Void
+    typealias Entry = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>,
+                                      UnsafeMutableRawPointer?, Callback) -> Void
+
+    static let frameworkName = "VTTranslate"
+
+    /// Đường dẫn binary framework: bàn phím = VietTelex.app/PlugIns/X.appex ⇒ ../../Frameworks;
+    /// app/test = Frameworks của chính bundle.
+    static func candidatePaths(bundle: Bundle = .main) -> [String] {
+        let rel = "\(frameworkName).framework/\(frameworkName)"
+        var out: [String] = []
+        if bundle.bundleURL.pathExtension == "appex" {
+            out.append(bundle.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("Frameworks").appendingPathComponent(rel).path)
+        }
+        if let p = bundle.privateFrameworksURL { out.append(p.appendingPathComponent(rel).path) }
+        return out
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var cached: Entry??
+
+    /// dlopen một lần (lần đầu cần) — nil nếu không có framework.
+    static func entry(paths: [String] = candidatePaths()) -> Entry? {
+        lock.lock(); defer { lock.unlock() }
+        if let c = cached { return c }
+        var found: Entry?
+        for p in paths where FileManager.default.fileExists(atPath: p) {
+            guard let h = dlopen(p, RTLD_NOW | RTLD_LOCAL), let sym = dlsym(h, "vt_translate") else {
+                TouchLog.write("translate: dlopen \(p) lỗi \(String(cString: dlerror()))")
+                continue
+            }
+            found = unsafeBitCast(sym, to: Entry.self)
+            break
+        }
+        cached = .some(found)
+        return found
+    }
+
+    #if DEBUG
+    /// Test: quên kết quả dlopen (để thử đường dẫn khác).
+    static func debugReset() { lock.lock(); cached = nil; lock.unlock() }
+    #endif
+
+    private final class Box {
+        let done: (Int32, String?) -> Void
+        init(_ done: @escaping (Int32, String?) -> Void) { self.done = done }
+    }
+
+    static func run(_ text: String, source: String, target: String,
+                    entry fn: Entry? = nil) async -> (code: Int32, text: String?) {
+        guard let fn = fn ?? entry() else { return (2, nil) }   // TranslateEngineCode.unsupported
+        return await withCheckedContinuation { cont in
+            let box = Box { code, out in cont.resume(returning: (code, out)) }
+            let ctx = Unmanaged.passRetained(box).toOpaque()
+            text.withCString { t in source.withCString { s in target.withCString { d in
+                fn(t, s, d, ctx) { ctx, code, out in
+                    guard let ctx else { return }
+                    let b = Unmanaged<Box>.fromOpaque(ctx).takeRetainedValue()
+                    b.done(code, out.map { String(cString: $0) })
+                }
+            } } }
+        }
+    }
+}
+#endif

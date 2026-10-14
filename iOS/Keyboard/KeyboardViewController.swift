@@ -322,7 +322,7 @@ final class KeyboardViewController: UIInputViewController {
     /// suspend/kill không làm mất; Apple cũng ghi rõ synchronize() không cần gọi.
     /// Không Full Access thì iOS chặn ghi → giá trị đọc lại không khớp mãi; memo
     /// theo process để không thử ghi lại mỗi lần hiện.
-    /// Mốc "userlmResetAt" (App Group) lần hiện trước. App sửa Từ điển cá nhân / "Xóa từ
+    /// Mốc "userlmResetAt" (App Group) lần hiện trước. App sửa Từ điển cá nhân / "Xoá từ
     /// đã học" ⇒ mốc đổi ⇒ bỏ bảng trong RAM, nạp lại file app vừa ghi (không ghi đè nó).
     private var seenDictResetAt: Double?
     private func checkExternalDictEdit() {
@@ -969,10 +969,8 @@ final class KeyboardViewController: UIInputViewController {
         // trượt) giờ chạy nền trong updateSuggestions, main chỉ re-rank + vẽ bar.
         // Bar tắt / thu gọn ⇒ không lên lịch gì (0 closure, 0 timer mỗi phím).
         guard suggestionsActive, keyboard?.isBarCollapsed != true else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
-            guard let self, gen == self.suggestionGen else { return }
-            self.updateSuggestions()
-        }
+        suggestDebounceGen = gen
+        suggestDebounce.schedule(after: 0.03)
     }
 
     // MARK: tự sửa (AutoCorrect)
@@ -1062,6 +1060,17 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private var suggestionGen = 0
+    /// Gợi ý hoãn ~30 ms sau phím: MỘT timer dùng lại (không cấp phát block/timer mỗi phím).
+    /// `suggestDebounceGen` = gen lúc hẹn — có gen mới hơn mà không hẹn lại ⇒ bỏ lượt (như cũ).
+    private lazy var suggestDebounce: MainDebouncer = {
+        let d = MainDebouncer()
+        d.action = { [weak self] in
+            guard let self, self.suggestDebounceGen == self.suggestionGen else { return }
+            self.updateSuggestions()
+        }
+        return d
+    }()
+    private var suggestDebounceGen = 0
     /// Công tắc phụ của thanh gợi ý (KeyboardSettings) — đọc mỗi lần hiện.
     private var addTonesSetting = false
     private var numberChipsSetting = true

@@ -44,10 +44,8 @@ targets:
       - Keyboard/SyllableLM.swift
       - Keyboard/KeyGeometry.swift
       - Keyboard/TouchGeometry.swift
-      - path: Keyboard/Resources/vnlexicon.bin
-        buildPhase: resources
-      - path: Keyboard/Resources/enlexicon.bin
-        buildPhase: resources
+      # vnlexicon.bin / enlexicon.bin KHÔNG chép vào app (14/10/2026, −334 KB): app đọc bản
+      # của bàn phím trong PlugIns/VietTelexKeyboard.appex (VNLexicon2.swift VTBundleResource).
       - path: ios-mau-cau.yml
         buildPhase: resources
     settings:
@@ -77,7 +75,12 @@ targets:
     dependencies:
       - target: VietTelexKeyboard
         embed: true
-      # Dịch trên máy (iOS 26+; deployment 16) — weak để máy cũ vẫn chạy.
+      # Framework dịch: nhúng (Frameworks/) cho bàn phím dlopen khi bấm chip Dịch — app KHÔNG link.
+      - target: VTTranslate
+        embed: true
+        link: false
+      # Dịch trên máy (iOS 26+; deployment 16) — weak để máy cũ vẫn chạy. App (màn chọn
+      # ngôn ngữ/tải gói) dùng trực tiếp.
       - sdk: Translation.framework
         weak: true
       # SwipeEnglish (Luyện vuốt) dùng bảng từ tiếng Anh của engine.
@@ -116,7 +119,24 @@ targets:
             RequestsOpenAccess: true
     dependencies:
       - package: TelexCore
-      # Dịch trên máy (iOS 26+; deployment 16) — weak để máy cũ vẫn chạy.
+      # KHÔNG link Translation (14/10/2026): link — kể cả weak — là dyld nạp nó + ~33 framework
+      # phụ thuộc lúc bàn phím khởi động. Dịch đi qua VTTranslate.framework (app chủ), dlopen
+      # lần đầu bấm chip (Keyboard/Translate.swift TranslateLoader).
+  # Framework nhỏ chỉ chứa phần gọi Apple Translation — xem iOS/VTTranslate/TranslateEngine.swift.
+  VTTranslate:
+    type: framework
+    platform: iOS
+    sources:
+      - VTTranslate
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.viettelex.ios.translate
+        GENERATE_INFOPLIST_FILE: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        DEFINES_MODULE: NO
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) VT_TRANSLATE_FRAMEWORK"
+    dependencies:
       - sdk: Translation.framework
         weak: true
   VietTelexKeyboardTests:
@@ -185,6 +205,7 @@ targets:
       - Keyboard/TextTools.swift
       - Keyboard/TextToolRunner.swift
       - Keyboard/Translate.swift
+      - Keyboard/MainDebouncer.swift
       # bảng gõ tắt mẫu ở gốc repo — test khứ hồi parse/export cùng định dạng macOS
       - path: ../sample-shortcuts.yml
       # VietTelex Plus: gate dùng chung + logic mua (không StoreKit) + cấu hình StoreKit test.
@@ -216,6 +237,10 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: Keyboard/ObjC/VietTelexKeyboard-Bridging-Header.h
     dependencies:
       - package: TelexCore
+      # TranslateTests: dlopen VTTranslate thật (nhúng, không link).
+      - target: VTTranslate
+        embed: true
+        link: false
 
 schemes:
   # App + file cấu hình StoreKit cục bộ (mua thử trên simulator, không cần App
