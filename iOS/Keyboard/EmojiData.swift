@@ -12,7 +12,8 @@ enum EmojiData {
 
     static let blob: Data = {
         final class BundleToken {}
-        guard let url = Bundle(for: BundleToken.self).url(forResource: "emoji", withExtension: "bin"),
+        // App chủ (dựng EmojiAtlas) không chép emoji.bin — đọc bản trong VietTelexKeyboard.appex.
+        guard let url = VTBundleResource.url("emoji", "bin", anchor: BundleToken.self),
               let d = try? Data(contentsOf: url, options: .alwaysMapped)
         else { fatalError("emoji.bin missing from bundle") }
         precondition(d.count > 64 && d.prefix(4).elementsEqual("VTE1".utf8), "emoji.bin hỏng")
@@ -49,6 +50,21 @@ enum EmojiData {
     }
 
     private static let emojBase = section("EMOJ")
+
+    /// Hash FNV-1a 64 của section EMOJ (tập chuỗi emoji) — khoá atlas: đổi bảng emoji ⇒ dựng
+    /// lại atlas. Chỉ EMOJ: khoá tìm (SKEY) đổi không ảnh hưởng ảnh.
+    static let dataHash: String = {
+        let n = u32(4)
+        var len = 0
+        for i in 0..<n where blob[(8 + i * 12)..<(8 + i * 12 + 4)].elementsEqual("EMOJ".utf8) {
+            len = u32(8 + i * 12 + 8)
+        }
+        var h: UInt64 = 0xcbf2_9ce4_8422_2325
+        blob.withUnsafeBytes { raw in
+            for b in raw[emojBase..<(emojBase + len)] { h = (h ^ UInt64(b)) &* 0x0000_0100_0000_01b3 }
+        }
+        return String(h, radix: 16)
+    }()
     private static let verBase = section("EVER")
 
     /// Số emoji trong bảng (id 0..<count).
@@ -99,6 +115,7 @@ enum EmojiData {
     static func dropCaches() {
         cachedCategories = nil
         glyphCache = [:]
+        EmojiAtlasStore.release()
     }
 
     // MARK: lọc glyph
@@ -113,10 +130,13 @@ enum EmojiData {
     }
 
     /// id vẽ được trên máy này (kiểm lười, cache một lần mỗi process).
+    /// Atlas hợp lệ đã mở (bảng emoji đang hiện): app chủ đã kiểm glyph trên CHÍNH bản iOS này
+    /// (khoá manifest gồm build iOS) và chỉ đưa emoji vẽ được vào atlas ⇒ hỏi atlas, khỏi nạp
+    /// font Apple Color Emoji (~1,8 MB) chỉ để kiểm glyph.
     static func isSupported(_ id: Int) -> Bool {
         if version(id) <= trustedVersion { return true }
         if let v = glyphCache[id] { return v }
-        let v = canRender(emoji(id))
+        let v = EmojiAtlasStore.current?.contains(emoji(id)) ?? canRender(emoji(id))
         glyphCache[id] = v
         return v
     }
@@ -146,6 +166,28 @@ enum EmojiData {
             }
         }
         return visible == 1
+    }
+
+    // MARK: tông da
+
+    /// [gốc + 5 tông da] nếu emoji có scalar là modifier base; nil nếu không.
+    /// Tông áp cho MỌI base trong chuỗi ZWJ (chọn 1 tông cho cả nhóm — như
+    /// lựa chọn nhanh của stock; chưa nhớ tông riêng từng emoji). Popup giữ lâu (EmojiPlane)
+    /// và atlas (app dựng sẵn ảnh các biến thể) dùng chung.
+    static func toneVariants(of e: String) -> [String]? {
+        guard e.unicodeScalars.contains(where: { $0.properties.isEmojiModifierBase })
+        else { return nil }
+        var out = [e]
+        for t in 0x1F3FB...0x1F3FF {
+            var v = String.UnicodeScalarView()
+            for sc in e.unicodeScalars {
+                if (0x1F3FB...0x1F3FF).contains(sc.value) { continue }  // bỏ tông cũ
+                v.append(sc)
+                if sc.properties.isEmojiModifierBase { v.append(Unicode.Scalar(UInt32(t))!) }
+            }
+            out.append(String(v))
+        }
+        return out
     }
 
     // MARK: kaomoji

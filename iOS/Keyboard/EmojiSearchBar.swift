@@ -17,10 +17,14 @@ final class EmojiSearchBar: UIView {
     private var resultButtons: [UIButton] = []
     private(set) var shownResults: [String] = []
     private let dark: Bool
+    /// Ảnh emoji vẽ sẵn (EmojiAtlas); nil ⇒ chữ.
+    private let atlas: EmojiAtlasStore?
     private var fieldWidth: NSLayoutConstraint!
 
     init(dark: Bool) {
         self.dark = dark
+        atlas = EmojiAtlas.loadForKeyboard(scale: UIScreen.main.scale,
+                                           pad: UIDevice.current.userInterfaceIdiom == .pad)
         super.init(frame: .zero)
         let ink: UIColor = dark ? .white : .black
         backgroundColor = KeyboardView.touchableClear
@@ -117,10 +121,8 @@ final class EmojiSearchBar: UIView {
         let size: CGFloat = 38
         for e in list {
             let b = UIButton(type: .custom)
-            b.setTitle(e, for: .normal)
-            b.titleLabel?.font = .systemFont(ofSize: 28)
-            b.accessibilityLabel = e
             b.frame = CGRect(x: x, y: 2, width: size, height: size)
+            EmojiPlane.setEmoji(e, on: b, font: 28, atlas: atlas)
             b.addAction(UIAction { [weak self] _ in self?.onPick?(e) }, for: .touchUpInside)
             results.addSubview(b)
             resultButtons.append(b)

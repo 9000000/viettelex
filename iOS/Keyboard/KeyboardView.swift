@@ -1878,8 +1878,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                 crossRow: crossRowConstraints,
                 distribution: rowsContainer.distribution)
         }
-        // Rời lưới emoji: nhả bảng category (lưới không cache, dựng lại lười khi mở lại).
-        if builtPlane == .emoji, plane != .emoji { EmojiData.dropCaches() }
+        // Rời lưới emoji / ô tìm emoji: nhả bảng category + trang atlas đã giải mã (lưới không
+        // cache, dựng lại lười khi mở lại).
+        if builtPlane == .emoji || builtPlane == .emojiSearch, plane != builtPlane { EmojiData.dropCaches() }
         builtPlane = plane; builtReturn = returnTitle
         builtDark = dark; builtPalette = palette; builtWidth = bounds.width
         builtGlobe = needsGlobe; builtKind = inputKind

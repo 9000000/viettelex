@@ -16,6 +16,8 @@ struct VietTelexApp: App {
                                               pad: UIDevice.current.userInterfaceIdiom == .pad,
                                               portraitWidth: min(screen.width, screen.height),
                                               extraStateKeys: BackupSettings.all.map(\.key))
+        // Ảnh emoji vẽ sẵn cho bàn phím (RAM-AUDIT.md §4b): dựng nền nếu thiếu/cũ.
+        EmojiAtlasBuilder.ensureFresh()
         #if DEBUG
         let g = UserDefaults(suiteName: "group.com.viettelex")
         NSLog("DBG kbFullAccess=%d kbLastSeen=%f",
@@ -166,6 +168,7 @@ struct RootView: View {
                 // Plus: đọc entitlement đã verify → cờ App Group cho bàn phím.
                 Task { await PlusShared.model.refreshEntitlements() }
                 ICloudSync.shared.start()          // tắt ⇒ không làm gì
+                EmojiAtlasBuilder.ensureFresh()    // vừa cập nhật iOS ⇒ font emoji có thể đổi
             } else if phase == .background {
                 ICloudSync.shared.syncNow()        // đẩy thay đổi vừa sửa lên iCloud
             }

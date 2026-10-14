@@ -44,6 +44,8 @@ targets:
       - Keyboard/SyllableLM.swift
       - Keyboard/KeyGeometry.swift
       - Keyboard/TouchGeometry.swift
+      # Atlas emoji (App/EmojiAtlasBuilder.swift): bảng emoji đọc emoji.bin trong appex.
+      - Keyboard/EmojiData.swift
       # vnlexicon.bin / enlexicon.bin KHÔNG chép vào app (14/10/2026, −334 KB): app đọc bản
       # của bàn phím trong PlugIns/VietTelexKeyboard.appex (VNLexicon2.swift VTBundleResource).
       - path: ios-mau-cau.yml
@@ -221,6 +223,7 @@ targets:
       - Keyboard/KeyboardViewController.swift
       - Keyboard/ObjC/VTCatch.m
       - Keyboard/ClipboardPanel.swift
+      - App/EmojiAtlasBuilder.swift
       - path: Keyboard/Resources/vnlexicon.bin
         buildPhase: resources
       - path: Keyboard/Resources/emoji.bin

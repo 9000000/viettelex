@@ -124,6 +124,9 @@ final class EmojiPlane: UIView, UICollectionViewDataSource, UICollectionViewDele
     }
     private var sections: [Section] = []
     private var collection: UICollectionView!
+    /// Ảnh emoji app chủ vẽ sẵn (EmojiAtlas) — nil ⇒ vẽ chữ như cũ. Mở TRƯỚC reloadSections:
+    /// lọc glyph hỏi atlas thay vì CoreText.
+    private(set) var atlas: EmojiAtlasStore?
     private var categoryButtons: [CategoryButton] = []
     private var kaomojiButton: CategoryButton?
 
@@ -188,6 +191,7 @@ final class EmojiPlane: UIView, UICollectionViewDataSource, UICollectionViewDele
         super.init(frame: .zero)
         self.dark = dark
         isMultipleTouchEnabled = true
+        atlas = EmojiAtlas.loadForKeyboard(scale: UIScreen.main.scale, pad: pad)
         reloadSections()
         buildSearchField()
         buildCollection()
@@ -536,25 +540,8 @@ final class EmojiPlane: UIView, UICollectionViewDataSource, UICollectionViewDele
 
     // MARK: skin tones
 
-    /// [gốc + 5 tông da] nếu emoji có scalar là modifier base; nil nếu không.
-    /// Tông áp cho MỌI base trong chuỗi ZWJ (chọn 1 tông cho cả nhóm — như
-    /// lựa chọn nhanh của stock; chưa nhớ tông riêng từng emoji).
-    static func toneVariants(of e: String) -> [String]? {
-        guard e.unicodeScalars.contains(where: { $0.properties.isEmojiModifierBase })
-        else { return nil }
-        let tones: [Unicode.Scalar] = (0x1F3FB...0x1F3FF).compactMap { Unicode.Scalar($0) }
-        var out = [e]
-        for t in tones {
-            var v = String.UnicodeScalarView()
-            for sc in e.unicodeScalars {
-                if (0x1F3FB...0x1F3FF).contains(sc.value) { continue }  // bỏ tông cũ
-                v.append(sc)
-                if sc.properties.isEmojiModifierBase { v.append(t) }
-            }
-            out.append(String(v))
-        }
-        return out
-    }
+    /// [gốc + 5 tông da] — xem EmojiData.toneVariants (atlas dựng sẵn đúng các biến thể này).
+    static func toneVariants(of e: String) -> [String]? { EmojiData.toneVariants(of: e) }
 
     private var tonePopup: UIView?
 
@@ -582,9 +569,8 @@ final class EmojiPlane: UIView, UICollectionViewDataSource, UICollectionViewDele
         pop.layer.zPosition = 20
         for (i, v) in variants.enumerated() {
             let b = UIButton(type: .custom)
-            b.setTitle(v, for: .normal)
-            b.titleLabel?.font = .systemFont(ofSize: 26)
             b.frame = CGRect(x: CGFloat(i) * itemW, y: 0, width: itemW, height: h)
+            Self.setEmoji(v, on: b, font: 26, atlas: atlas)
             b.addAction(UIAction { [weak self] _ in
                 KeyboardView.clickLetter()
                 self?.noteUsed(v)
@@ -602,6 +588,35 @@ final class EmojiPlane: UIView, UICollectionViewDataSource, UICollectionViewDele
         addSubview(pop)
         tonePopup = pop
     }
+
+    /// Nút một emoji (popup tông da, kết quả tìm): ảnh atlas nếu có, không thì chữ.
+    static func setEmoji(_ e: String, on b: UIButton, font: CGFloat, atlas: EmojiAtlasStore?) {
+        b.accessibilityLabel = e
+        if let atlas, let img = atlas.tile(e) {
+            let side = atlas.side(forFont: font)
+            let iv = UIImageView(image: UIImage(cgImage: img, scale: atlas.scale, orientation: .up))
+            iv.contentMode = .scaleAspectFit
+            iv.isUserInteractionEnabled = false
+            iv.frame = CGRect(x: (b.bounds.width - side) / 2, y: (b.bounds.height - side) / 2, width: side, height: side)
+            iv.autoresizingMask = [.flexibleLeftMargin, .flexibleRightMargin, .flexibleTopMargin, .flexibleBottomMargin]
+            b.addSubview(iv)
+        } else {
+            b.setTitle(e, for: .normal)
+            b.titleLabel?.font = .systemFont(ofSize: font)
+        }
+    }
+
+    #if DEBUG
+    /// Test: số ô đang hiện vẽ bằng ảnh atlas / bằng chữ.
+    var debugVisibleCellModes: (image: Int, text: Int) {
+        var img = 0, txt = 0
+        for case let c as EmojiCell in collection.visibleCells { if c.usesImage { img += 1 } else { txt += 1 } }
+        return (img, txt)
+    }
+    var debugVisibleCellLabels: [String?] {
+        collection.visibleCells.map { $0.accessibilityLabel }
+    }
+    #endif
 
     private func dismissTonePopup() {
         tonePopup?.removeFromSuperview()
@@ -649,7 +664,7 @@ final class EmojiPlane: UIView, UICollectionViewDataSource, UICollectionViewDele
             lastLayoutWidth = bounds.width
             appliedMetrics = m
             dismissTonePopup()
-            for case let c as EmojiCell in collection.visibleCells { c.setFont(m.fontSize) }
+            for case let c as EmojiCell in collection.visibleCells { c.setFont(m.fontSize, atlas: atlas) }
             // Lưới đổi cỡ giữa chừng: flow layout trong CÙNG pass có thể chia hàng theo cỡ cũ
             // (đo 29/09: đủ ô 46pt mà chỉ xếp 3/4 hàng, khe giãn). Xếp lại một lượt ở nhịp kế —
             // chỉ khi đổi cỡ (xoay/host co), không phải mỗi layout.
@@ -701,8 +716,7 @@ final class EmojiPlane: UIView, UICollectionViewDataSource, UICollectionViewDele
 
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "e", for: indexPath) as! EmojiCell
-        cell.label.text = sections[indexPath.section][indexPath.item]
-        cell.setFont(currentMetrics().fontSize)
+        cell.show(sections[indexPath.section][indexPath.item], font: currentMetrics().fontSize, atlas: atlas)
         return cell
     }
 
@@ -798,8 +812,13 @@ final class EmojiPlane: UIView, UICollectionViewDataSource, UICollectionViewDele
         }
     }
 
+    /// Ô emoji: ẢNH từ atlas (UIImageView — layer.contents trỏ thẳng CGImage của ô, không backing
+    /// store, không đụng cache glyph CoreText) hoặc, khi chưa có atlas / thiếu emoji, chữ như cũ.
     private final class EmojiCell: UICollectionViewCell {
         let label = UILabel()
+        private let imageView = UIImageView()
+        private var imageSide: CGFloat = 0
+        private(set) var usesImage = false
         override init(frame: CGRect) {
             super.init(frame: frame)
             label.font = .systemFont(ofSize: 32)
@@ -809,16 +828,61 @@ final class EmojiPlane: UIView, UICollectionViewDataSource, UICollectionViewDele
             label.lineBreakMode = .byClipping
             label.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview(label)
+            imageView.contentMode = .scaleAspectFit
+            imageView.isHidden = true
+            contentView.addSubview(imageView)
             NSLayoutConstraint.activate([
                 label.leftAnchor.constraint(equalTo: contentView.leftAnchor),
                 label.rightAnchor.constraint(equalTo: contentView.rightAnchor),
                 label.topAnchor.constraint(equalTo: contentView.topAnchor),
                 label.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
             ])
+            // VoiceOver: ô là một phần tử, nhãn = chuỗi emoji (VoiceOver tự đọc tên emoji —
+            // emoji.bin không có trường tên CLDR riêng).
+            isAccessibilityElement = true
+            accessibilityTraits = .keyboardKey
         }
         required init?(coder: NSCoder) { fatalError() }
-        func setFont(_ size: CGFloat) {
-            if label.font.pointSize != size { label.font = .systemFont(ofSize: size) }
+
+        func show(_ e: String, font: CGFloat, atlas: EmojiAtlasStore?) {
+            accessibilityLabel = e
+            if let atlas, let img = atlas.tile(e) {
+                usesImage = true
+                label.text = nil
+                label.isHidden = true
+                imageView.image = UIImage(cgImage: img, scale: atlas.scale, orientation: .up)
+                imageView.isHidden = false
+                setFont(font, atlas: atlas)
+            } else {
+                usesImage = false
+                imageView.image = nil
+                imageView.isHidden = true
+                label.isHidden = false
+                label.text = e
+                setFont(font, atlas: nil)
+            }
+        }
+
+        func setFont(_ size: CGFloat, atlas: EmojiAtlasStore?) {
+            if usesImage, let atlas {
+                let side = atlas.side(forFont: size)
+                if side != imageSide { imageSide = side; setNeedsLayout() }
+            } else if label.font.pointSize != size {
+                label.font = .systemFont(ofSize: size)
+            }
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard usesImage else { return }
+            let b = contentView.bounds
+            imageView.frame = CGRect(x: (b.width - imageSide) / 2, y: (b.height - imageSide) / 2,
+                                     width: imageSide, height: imageSide)
+        }
+
+        override func prepareForReuse() {
+            super.prepareForReuse()
+            imageView.image = nil      // ô ra khỏi màn hình không giữ ảnh
         }
     }
 }

@@ -86,11 +86,11 @@ CoreText, ImageIO, QuartzCore + overlay libswift*). **Cần máy thật**: đo f
 sau (ước vài trăm KB `__DATA` dirty của 34 image) và bấm chip Dịch một lần (dlopen từ appex trên
 thiết bị đã ký).
 
-**Bảng emoji (51–65 MB khi mở)**: không thêm giảm nhẹ. Khi bàn phím ẩn, `tearDown()` đã gỡ toàn bộ
-cây view (gồm lưới emoji) và `EmojiData.dropCaches()` — phần còn lại là cache glyph Apple Color
-Emoji của CoreText, không API công khai nào xả được (§4). Cách duy nhất còn lại là tự thoát process
-khi ẩn — không làm (hệ thống có thể đang hiện lại bàn phím, rủi ro "bàn phím trắng"). Sprite atlas:
-không làm (quyết định 14/10/2026).
+**Bảng emoji (51–65 MB khi mở)**: Khi bàn phím ẩn, `tearDown()` đã gỡ toàn bộ cây view (gồm lưới
+emoji) và `EmojiData.dropCaches()` — phần còn lại là cache glyph Apple Color Emoji của CoreText,
+không API công khai nào xả được (§4). Tự thoát process khi ẩn — không làm (hệ thống có thể đang
+hiện lại bàn phím, rủi ro "bàn phím trắng"). **Sửa (14/10/2026, maintainer duyệt): app chủ vẽ sẵn
+emoji thành atlas ảnh, bàn phím vẽ bitmap — §4b.**
 
 Đường phím nóng (14/10/2026): `manualCompletions` dùng chỉ mục fold sẵn + tìm nhị phân (trước fold
 cả danh sách từ thêm tay mỗi phím); hoãn gợi ý 30 ms dùng lại MỘT `DispatchSourceTimer`
@@ -222,6 +222,61 @@ phần dựng trong `viewDidLoad` ra hàm). Phải test: hiện → ẩn → hi�
 - Cache glyph không xả được ⇒ giữ "khoảng trống" bằng cách sửa #1 và giảm các khoản khác; nhảy
   theo nhóm (thanh category) thay vì lướt liên tục đã giới hạn số emoji vẽ.
 
+## 4b. Atlas emoji vẽ sẵn (14/10/2026)
+
+Bàn phím KHÔNG vẽ chữ emoji ở lưới / Recents / kết quả tìm / popup tông da nữa khi có atlas hợp lệ —
+mọi cache glyph CoreText chuyển sang app chủ (không có trần jetsam chặt).
+
+- **App** (`App/EmojiAtlasBuilder.swift`): lúc mở app (init + `scenePhase == .active`) kiểm manifest;
+  thiếu/cũ ⇒ dựng nền (QoS utility, không chặn UI): 8 category đúng thứ tự lưới (chỉ emoji máy vẽ
+  được) + nhóm `tones` (biến thể tông da của popup; Recents/tìm kiếm chỉ chứa emoji thuộc hai tập
+  này). Vẽ bằng CoreText ở **cỡ glyph lớn nhất lưới dùng** (iPhone 34 pt, iPad 52 pt — test khoá với
+  `EmojiGridMetrics`) × scale màn hình, ô vuông `ceil(cỡ × scale)` px (102 px trên @3x), căn giữa theo
+  bbox ảnh glyph. Trang 8 × 4 ô PNG (816 × 408 px).
+- **Lưu** (`Shared/EmojiAtlas.swift`) trong App Group `EmojiAtlas/`: mỗi bản dựng một thư mục
+  `b<uuid>/` (manifest.json + index.bin + trang), con trỏ `current` ghi nguyên tử SAU CÙNG, bản cũ
+  xoá sau ⇒ bàn phím đang giữ bản cũ chỉ thấy trang biến mất (ô đó vẽ chữ), không bao giờ ảnh lệch.
+  `isExcludedFromBackup`. Manifest: format, **build iOS** (`operatingSystemVersionString` — cập nhật
+  iOS đổi font emoji), scale, cỡ chữ, **hash FNV-1a của section EMOJ trong emoji.bin** (chỉ tập chuỗi
+  emoji; khoá tìm SKEY đổi không cần dựng lại). Khoá index = **chuỗi emoji** (không phải id).
+  `index.bin` mmap, tra nhị phân theo byte UTF-8 — 0 heap.
+- **Bàn phím**: `EmojiPlane` / `EmojiSearchBar` mở atlas lúc dựng (chỉ khi vào bảng emoji — đường
+  gõ không đổi, không mở emoji ⇒ 0 chi phí). Ô = `UIImageView` với BẢN SAO riêng của ô (crop trang
+  → bitmap 102² px ≈ 41 KB), không giữ cả trang ⇒ Recents rải 30 trang cũng chỉ 30 ô. Trang giải mã
+  bằng ImageIO (`ShouldCacheImmediately`), LRU 4 trang + giải mã trước trang kề ở nền. Rời bảng
+  emoji / ô tìm / cảnh báo bộ nhớ ⇒ `EmojiData.dropCaches()` → `EmojiAtlasStore.release()`. Atlas
+  hợp lệ cũng thay việc kiểm glyph: app đã kiểm trên CHÍNH bản iOS này ⇒ emoji mới hơn mức tin cậy
+  mà không có trong atlas = không vẽ được (khỏi nạp font Apple Color Emoji ~1,8 MB chỉ để kiểm).
+- **Rơi về chữ** từng ô: chưa mở app lần nào, manifest cũ (vừa cập nhật iOS, chưa mở app), emoji
+  thiếu trong atlas, trang bị xoá. VoiceOver: ô là một phần tử, nhãn = chuỗi emoji (VoiceOver đọc
+  tên emoji; emoji.bin không có trường tên CLDR riêng — tên tts lẫn trong SKEY).
+- **Định dạng**: PNG (đo simulator iPhone 17, @3x): 3.714 ảnh (emoji lưới + biến thể tông da), 120 trang,
+  **38,5 MB đĩa**, dựng 4,1 s, giải mã 7,1 ms/trang. HEIC q0,9 (alpha): 14,6 MB, dựng 8,4 s, giải mã
+  9,1 ms/trang, alpha nén mất mát. Chọn PNG (giải mã rẻ nhất qua ImageIO, không lệ thuộc bộ giải
+  HEVC trong extension, alpha không viền); đổi sang HEIC = một dòng (`EmojiAtlasBuilder.Format`).
+- **App** giữ cache glyph của mọi emoji đã vẽ (~3.700 × vài chục KB) tới khi bị hệ thống thu hồi —
+  chấp nhận được (app không có trần extension).
+
+Đo (simulator iPhone 17, iOS 27.0, Debug, phys_footprint, `EmojiAtlasTests` bộ chậm, mỗi biến thể
+một process riêng vì cache glyph không xả):
+
+| `EmojiPlane` thật trong cửa sổ (402 × 290) | chữ (trước) | atlas (sau) |
+|---|---|---|
+| Mở bảng | +11,0 MB | **+4,8 MB** |
+| Lướt HẾT mọi category | +228,6 MB | **+7,8 MB** |
+| Rời bảng | +211,7 MB (không nhả) | **+7,8 MB** |
+
+| Vẽ trực tiếp (không UIKit) | |
+|---|---|
+| Chữ, 266 emoji "objects" @34 pt | heap +2,1 MB = 8,3 KB/emoji, không nhả |
+| Atlas, 559 emoji "smileys", cửa sổ 60 ô sống + LRU trang | đỉnh +3,5–4,9 MB, sau khi nhả +0,7 MB (heap +0,04 MB); 0,2–0,3 ms/emoji |
+
+Con số "lướt hết" bằng chữ (+228 MB) lớn hơn nhiều so với 8,5 KB/emoji cache glyph đo bằng heap ở
+§4: phần lớn nằm NGOÀI malloc (ảnh sbix đã giải mã ở cỡ @3x mà CoreText/CoreUI giữ) — chỉ thấy
+qua phys_footprint. **Cần máy thật**: `ram-audit.sh` (mốc "Đang mở emoji" / "Rời emoji") sau khi mở
+app chủ một lần; kiểm nét ảnh @3x (iPhone) và @2x (iPad 52 pt), căn giữa so với stock, giật khi
+lướt (giải mã trang trên main lúc trang kề chưa kịp giải mã nền), app dựng lại sau cập nhật iOS.
+
 ## 5. UserLangModel
 
 **Đã làm (09/2026)** — `UserLMTables` trong Keyboard/UserLangModel.swift: từ intern thành id
@@ -283,6 +338,7 @@ proxy weak; closure `onKey`… đều `[weak self]`; `leaks` không thấy chu t
 | `iOS/Scripts/ram-audit/ram-audit.sh <default\|all\|off> [out] [udid] [cycles]` | Driver XCUITest (`Driver/`, app chủ `Host/`, `project.yml` sinh bằng xcodegen) + mẫu footprint/vmmap/heap mỗi mốc, in bảng (`summarize.py`). ~8 phút/cấu hình. |
 | `iOS/Scripts/ram-audit/leak-cycle.sh [cycles]` | Ẩn/hiện không qua XCUITest, in footprint + số `KeyboardView` sống. |
 | `iOS/Scripts/ram-audit/heapdiff.py a.heap b.heap` | Lớp tăng nhiều nhất giữa hai mốc. |
+| `EmojiAtlasTests` (bộ chậm: `testPlaneScrollMemoryText` / `testPlaneScrollMemoryAtlas` — chạy MỖI cái một lệnh, `testMemoryTextVsAtlas`, `testFullAtlasDiskSize`) | RAM chữ vs atlas, dung lượng + thời gian dựng atlas PNG/HEIC. `TEST_RUNNER_VT_SLOW_TESTS=1 xcodebuild -scheme VietTelexKeyboardTests -only-testing:VietTelexKeyboardTests/EmojiAtlasTests/<test> test` |
 | `RamBreakdownTests` (bộ chậm, scheme `VietTelexKeyboardSlowTests`) | Tách RAM từng thành phần + leak-cycles + cache glyph emoji. `TEST_RUNNER_VT_SLOW_TESTS=1 xcodebuild -scheme VietTelexKeyboardTests -only-testing:VietTelexKeyboardTests/RamBreakdownTests test` |
 
 Lưu ý khi đo: (1) `pgrep` phải lấy đúng process extension của đúng simulator (script đã lọc theo
