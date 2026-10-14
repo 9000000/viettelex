@@ -51,6 +51,12 @@ class PrefSyncTest {
         assertEquals(":settings", attr(one("activity"), "process"))
         assertEquals(":settings", attr(one("provider"), "process"))
         assertNull("bàn phím ở process chính", attr(one("service"), "process"))
-        assertEquals(1, app.getElementsByTagName("activity").length)   // activity mới ⇒ nhớ đặt process
+        // Activity của app + activity thư viện mở từ app (Billing, Play Core, GMS) đều ở ":settings".
+        val acts = app.getElementsByTagName("activity")
+        for (i in 0 until acts.length) {
+            val a = acts.item(i) as org.w3c.dom.Element
+            assertEquals(attr(a, "name"), ":settings", attr(a, "process"))
+        }
+        assertTrue(acts.length >= 3)
     }
 }

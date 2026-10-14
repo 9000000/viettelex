@@ -179,6 +179,12 @@ object SettingsProcess {
         if (installed) return
         installed = true
         val app = ctx.applicationContext
+        // androidx.startup (InitializationProvider) chỉ chạy ở process chính ⇒ tự khởi tạo ở đây
+        // những gì UI Compose dùng như trước khi tách process (emoji màu mới, ProcessLifecycleOwner).
+        runCatching {
+            androidx.startup.AppInitializer.getInstance(app)
+                .initializeComponent(androidx.emoji2.text.EmojiCompatInitializer::class.java)
+        }
         if (!com.viettelex.keyboard.KeyboardData.installed)
             com.viettelex.keyboard.KeyboardData.install(com.viettelex.android.ime.AssetBlobs.provider(app.assets))
         com.viettelex.android.shared.PrefSync.forward(app)   // thay đổi trong app ⇒ bàn phím

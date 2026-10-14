@@ -57,6 +57,16 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/export_paths" />
         </provider>
+        <!-- Activity của thư viện chỉ được mở từ app cài đặt (Play Billing, hộp thoại Play Core /
+             Google Play services) ⇒ cùng process ":settings", không kéo vào process bàn phím. -->
+        <activity android:name="com.android.billingclient.api.ProxyBillingActivity"
+            android:process=":settings" tools:node="merge" />
+        <activity android:name="com.android.billingclient.api.ProxyBillingActivityV2"
+            android:process=":settings" tools:node="merge" />
+        <activity android:name="com.google.android.play.core.common.PlayCoreDialogWrapperActivity"
+            android:process=":settings" tools:node="merge" />
+        <activity android:name="com.google.android.gms.common.api.GoogleApiActivity"
+            android:process=":settings" tools:node="merge" />
         <service
             android:name=".ime.VietTelexIME"
             android:label="@string/ime_name"
