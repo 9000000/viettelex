@@ -308,6 +308,12 @@ final class TelexInputController: IMKInputController {
         guard event.type == .keyDown,
               let client = sender as? IMKTextInput else { return false }
 
+        // Bảng Công cụ đang mở mà phím vẫn tới IME ⇒ user gõ tiếp: đóng (một lần đọc
+        // static khi không có panel).
+        if TextToolsPanel.current != nil {
+            TextToolsPanel.noteIMEKeyDown(keyCode: Int(event.keyCode), shift: event.modifierFlags.contains(.shift))
+        }
+
         // Gợi ý cạnh con trỏ (CaretHint — MathHint.swift): kết quả phép tính "= 36" / chip
         // số "1.200.000 ₫" đang hiện (ô ứng viên hệ thống hoặc ô nổi) ⇒ Tab (phép tính:
         // cả Enter) áp dụng, Esc tắt + nuốt, phím khác tắt rồi xử lý như thường. Không hiện
@@ -1760,6 +1766,16 @@ final class TelexInputController: IMKInputController {
 
     /// Show the composed syllable as marked text, caret at the end. Reliable in apps
     /// that ignore in-place replacementRange; shows a brief underline while composing.
+    /// Near-invisible underline colour — allocated ONCE (was a new NSColor per marked key).
+    static let markedUnderlineColor = NSColor(calibratedWhite: 0, alpha: 0.004)
+    /// Attributes for the marked span (see the formula notes in updateMarked). Pure.
+    static func markedTextAttributes(base: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
+        var attrs = base
+        attrs[.underlineStyle] = 1
+        attrs[.underlineColor] = markedUnderlineColor
+        return attrs
+    }
+
     private func updateMarked(_ client: IMKTextInput) {
         let s = engine.composed
         let caret = NSRange(location: (s as NSString).length, length: 0)
@@ -1787,11 +1803,9 @@ final class TelexInputController: IMKInputController {
         // (No Excel special case: Excel paints its own thick composition underline
         // and ignores every attribute variant — field-tested exhaustively 2026-07-21.
         // Its clean path is empty-reset tap, i.e. real characters, not marked text.)
-        var attrs = mark(forStyle: 2 /* kTSMHiliteRawText */, at: range)
+        let base = mark(forStyle: 2 /* kTSMHiliteRawText */, at: range)
             as? [NSAttributedString.Key: Any] ?? [:]
-        attrs[.underlineStyle] = 1
-        attrs[.underlineColor] = NSColor(calibratedWhite: 0, alpha: 0.004)
-        let attributed = NSAttributedString(string: s, attributes: attrs)
+        let attributed = NSAttributedString(string: s, attributes: Self.markedTextAttributes(base: base))
         client.setMarkedText(attributed, selectionRange: caret, replacementRange: kNoRange)
         DebugLog.log("setMarked \(AppState.shared.currentBundleID ?? "?"): len=\((s as NSString).length)")
     }
@@ -2702,10 +2716,48 @@ final class TelexInputController: IMKInputController {
         guard Self.shouldPromptAccessibility(trusted: Accessibility.isTrusted,
                                              alreadyPrompted: AppState.shared.axPromptShown,
                                              isOurSignedBuild: Accessibility.isOurSignedBuild) else { return }
-        AppState.shared.axPromptShown = true
-        DispatchQueue.main.async { [weak self] in
-            self?.grantAccessibility()
+        // Defer to a TYPING PAUSE: this fires on the first activateServer, i.e. exactly
+        // while the user starts typing — a modal popping up mid-word swallowed the next
+        // keys and a Return in flight hit "Open Settings". Wait until no key (IMK or tap,
+        // CaretHint key generation) for `AXPromptPause.idleNs`, then show. Main only.
+        guard Self.axPromptTimer == nil else { return }
+        var pause = AXPromptPause()
+        _ = pause.tick(gen: CaretHint.shared.keyGeneration, nowNs: DispatchTime.now().uptimeNanoseconds)
+        let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] timer in
+            guard pause.tick(gen: CaretHint.shared.keyGeneration,
+                             nowNs: DispatchTime.now().uptimeNanoseconds) else { return }
+            timer.invalidate()
+            Self.axPromptTimer = nil
+            // Re-check: granted / prompted elsewhere while we waited.
+            guard Self.shouldPromptAccessibility(trusted: Accessibility.isTrusted,
+                                                 alreadyPrompted: AppState.shared.axPromptShown,
+                                                 isOurSignedBuild: Accessibility.isOurSignedBuild) else { return }
+            AppState.shared.axPromptShown = true
+            self?.grantAccessibility(firstRun: true)
         }
+        t.tolerance = 0.2
+        RunLoop.main.add(t, forMode: .common)
+        Self.axPromptTimer = t
+    }
+    private static var axPromptTimer: Timer?
+
+    /// First-run Accessibility prompt waits for a typing pause. Feed the key generation
+    /// each tick; true = no key for `idleNs` -> show now. Pure — pinned by AppSupportTests.
+    struct AXPromptPause: Equatable {
+        static let idleNs: UInt64 = 2_000_000_000
+        private(set) var lastGen: UInt64?
+        private(set) var lastChangeNs: UInt64 = 0
+        mutating func tick(gen: UInt64, nowNs: UInt64) -> Bool {
+            if lastGen != gen { lastGen = gen; lastChangeNs = nowNs; return false }
+            return nowNs &- lastChangeNs >= Self.idleNs
+        }
+    }
+
+    /// Key equivalents for the prompt's (Open Settings, Close) buttons. First-run (the
+    /// prompt WE raised, user may still be typing): Return must NOT open Settings — no
+    /// default button; Esc closes. nil = NSAlert defaults (user asked via the menu).
+    static func axPromptKeyEquivalents(firstRun: Bool) -> (open: String, close: String)? {
+        firstRun ? ("", "\u{1b}") : nil
     }
 
     static func shouldPromptAccessibility(trusted: Bool, alreadyPrompted: Bool,
@@ -2717,13 +2769,17 @@ final class TelexInputController: IMKInputController {
     /// `AXIsProcessTrustedWithOptions(prompt:)` here — that fires the system TCC
     /// dialog too, so clicking the status opened Settings AND our popup at once. The
     /// popup's "Mở Cài đặt" button opens the Accessibility pane on demand instead.
-    private func grantAccessibility() {
+    private func grantAccessibility(firstRun: Bool = false) {
         NSApp.setActivationPolicy(.regular)
         let alert = NSAlert()
         alert.messageText = VTLocalized("Accessibility permission needed")
         alert.informativeText = VTLocalized("VietTelex needs Accessibility to type Vietnamese in Terminal/iTerm and browsers.\n\nOpen System Settings → Privacy & Security → Accessibility and enable VietTelex (if it’s already there, untick then tick it again).")
         alert.addButton(withTitle: VTLocalized("Open Settings"))
         alert.addButton(withTitle: VTLocalized("Close"))
+        if let keys = Self.axPromptKeyEquivalents(firstRun: firstRun) {
+            alert.buttons[0].keyEquivalent = keys.open
+            alert.buttons[1].keyEquivalent = keys.close
+        }
         // We're an accessory (agent) app, so a plain runModal() can open the alert
         // BEHIND the frontmost app — the user then has to click our Dock icon to find
         // it (the reported bug). Activate the app AND force the alert window frontmost

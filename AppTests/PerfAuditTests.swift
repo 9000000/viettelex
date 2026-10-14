@@ -114,4 +114,20 @@ final class PerfAuditTests: XCTestCase {
         XCTAssertEqual(first, c._testUsesMarkedNow("com.apple.Terminal"))
         XCTAssertEqual(first, c._testUsesMarkedNow("com.apple.Terminal"))
     }
+
+    // MARK: Đợt 14/10/2026 — marked text không cấp phát NSColor mỗi phím
+
+    func testMarkedTextAttributesReuseOneColorAndKeepBase() {
+        let base: [NSAttributedString.Key: Any] = [NSAttributedString.Key("NSMarkedClauseSegment"): 0]
+        let a = TelexInputController.markedTextAttributes(base: base)
+        let b = TelexInputController.markedTextAttributes(base: [:])
+        XCTAssertEqual(a[.underlineStyle] as? Int, 1)
+        XCTAssertEqual(a[NSAttributedString.Key("NSMarkedClauseSegment")] as? Int, 0)   // base giữ nguyên
+        let ca = a[.underlineColor] as AnyObject, cb = b[.underlineColor] as AnyObject
+        XCTAssertTrue(ca === cb, "underline colour must be one shared instance")
+        // Công thức đã field-test 21/07: alpha ≈ 1/255, KHÔNG trong suốt hẳn (Chromium).
+        let c = TelexInputController.markedUnderlineColor
+        XCTAssertGreaterThan(c.alphaComponent, 0)
+        XCTAssertLessThan(c.alphaComponent, 0.01)
+    }
 }
