@@ -46,6 +46,21 @@ final class TextToolsPanelTests: XCTestCase {
         XCTAssertEqual(L.command(keyCode: kVK_Escape, shift: false), .cancel)
     }
 
+    /// UX 14/10/2026: không có Accessibility thì monitor "phím khác = đóng" không chạy —
+    /// phím tới IME (letters) đóng panel; panel bỏ quên tự đóng sau 15s.
+    func testPanelClosesOnTypingAndIdle() {
+        XCTAssertTrue(L.closesOnIMEKey(keyCode: kVK_ANSI_A, shift: false))
+        XCTAssertTrue(L.closesOnIMEKey(keyCode: kVK_ANSI_1, shift: true))       // "!" = gõ tiếp
+        XCTAssertTrue(L.closesOnIMEKey(keyCode: kVK_Delete, shift: false))
+        XCTAssertFalse(L.closesOnIMEKey(keyCode: kVK_ANSI_1, shift: false))     // phím panel
+        XCTAssertFalse(L.closesOnIMEKey(keyCode: kVK_Escape, shift: false))
+        XCTAssertEqual(L.idleCloseSeconds, 15)
+        // Không panel nào mở: no-op, không crash.
+        XCTAssertNil(TextToolsPanel.current)
+        TextToolsPanel.noteIMEKeyDown(keyCode: kVK_ANSI_A, shift: false)
+        XCTAssertNil(TextToolsPanel.current)
+    }
+
     func testBindingsUnique() {
         // Mỗi (phím, shift) một lệnh: RegisterEventHotKey trùng sẽ fail.
         for count in [6, 7] {

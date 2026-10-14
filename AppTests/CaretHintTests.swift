@@ -395,6 +395,30 @@ final class CaretHintTests: XCTestCase {
         AppState.shared.numberChips = true
         XCTAssertTrue(CaretHint.shared.numberEnabled)
     }
+
+    /// Cờ CaretHint ghi trên main, đọc ở TAP-thread mỗi phím: snapshot dưới khoá, không
+    /// bao giờ đọc ra trạng thái nửa vời (trước là 5 var trơn — data race).
+    func testFlagsAreLockedSnapshot() {
+        let hint = CaretHint.shared
+        defer { hint.reloadSetting() }
+        let on = CaretHint.Flags(math: true, number: true, typo: true, tones: true, date: true)
+        let off = CaretHint.Flags()
+        // The host app may reloadSetting() concurrently (settings observers) — that
+        // writes the persisted flags, also a whole snapshot.
+        let persisted = CaretHint.Flags.current()
+        DispatchQueue.concurrentPerform(iterations: 2000) { i in
+            if i % 2 == 0 {
+                hint.setFlags(i % 4 == 0 ? on : off)
+            } else {
+                let f = hint.flagsSnapshot
+                XCTAssertTrue(f == on || f == off || f == persisted, "torn snapshot \(f)")
+            }
+        }
+        hint.setFlags(on)
+        XCTAssertTrue(hint.mathEnabled && hint.numberEnabled && hint.wordHintsEnabled)
+        hint.setFlags(off)
+        XCTAssertFalse(hint.mathEnabled || hint.numberEnabled || hint.wordHintsEnabled)
+    }
 }
 
 /// TextMate (Phil 04/10/2026, log "caret diag"): firstRect rác, rect dòng IMK lệch, AX đúng.

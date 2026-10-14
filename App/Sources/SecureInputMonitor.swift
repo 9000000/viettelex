@@ -25,7 +25,7 @@
 // Phát hiện: notification input-source-changed là đường nhanh (secure input bật
 // thường kèm macOS đá selection sang ABC); didWake / screenIsUnlocked bắt ca
 // 1Password-sau-sleep ngay khi mở máy (ioreg hay báo NHẦM loginwindow); poll 5s
-// là lưới an toàn — vi phạm có chủ đích ethos "no timers" của main.swift (tiền
+// (20s khi không bị chặn và VietTelex không được chọn — pollInterval) là lưới an toàn — vi phạm có chủ đích ethos "no timers" của main.swift (tiền
 // lệ: trustPoll) vì lúc bị chặn thì chính là lúc KHÔNG có event nào tới được mình.
 
 import AppKit
@@ -100,6 +100,13 @@ final class SecureInputMonitor {
             selected = isVietTelex
         }
 
+        /// VietTelex mất selection (không do user) trong cửa sổ grace — poll phải giữ nhịp
+        /// nhanh để bắt ON kịp (SecureInputMonitor.pollInterval).
+        func lostRecently(nowNs: UInt64) -> Bool {
+            !selected && lostAtNs != 0 && !lostByUser && nowNs >= lostAtNs
+                && nowNs - lostAtNs <= Self.onsetGraceNs
+        }
+
         /// Lúc phát hiện ON (`onsetNs`): hết chặn thì có trả lại VietTelex không.
         func wasSelected(onsetNs: UInt64) -> Bool {
             if selected { return true }
@@ -131,15 +138,43 @@ final class SecureInputMonitor {
     /// Hint cuối đã log — chỉ log khi đổi (poll 5s gọi lại updateStatusItem).
     private var lastLoggedKind: HintKind?
 
-    /// Poll chỉ để bắt transition; mọi công việc thật nằm sau guard "có đổi không".
-    func start() {
-        check(reason: "startup")
-        let t = Timer(timeInterval: 5.0, repeats: true) { [weak self] _ in
+    /// Nhịp poll lưới an toàn (thuần — HotPathCacheTests). 5s khi cần bắt nhanh: ĐANG bị
+    /// chặn (bắt OFF để trả lại VietTelex, chẳng event nào tới lúc đó) hoặc VietTelex đang
+    /// là selection (ON thường đá selection — có notification — nhưng không phải luôn).
+    /// Còn lại (user đang gõ ABC/bộ khác, không bị chặn): 20s — vẫn bắt được ca "mở picker
+    /// thấy VietTelex mờ" (ON trong lúc đang ABC: không notification nào tới mình), chỉ
+    /// chậm hơn; mọi đường nhanh (input-source-changed, wake, unlock, snapshot) giữ nguyên.
+    /// `recentlyLost`: VietTelex mất selection trong `PreBlockSelection.onsetGraceNs` —
+    /// ca #100 (ô mật khẩu đá sang ABC TRƯỚC khi secure input kịp ON): ON phải được bắt
+    /// trong cửa sổ grace, không thì không trả lại VietTelex được.
+    static func pollInterval(blocked: Bool, vietTelexSelected: Bool, recentlyLost: Bool = false) -> TimeInterval {
+        blocked || vietTelexSelected || recentlyLost ? 5 : 20
+    }
+    private var pollStarted = false
+    private var currentPollInterval: TimeInterval = 0
+
+    /// Đổi nhịp timer khi trạng thái đổi (gọi cuối mỗi check). Không tạo lại timer nếu
+    /// nhịp không đổi. Main-thread only.
+    private func reschedulePollIfNeeded() {
+        guard pollStarted else { return }
+        let want = Self.pollInterval(blocked: activeHolder != nil, vietTelexSelected: preBlock.selected,
+                                     recentlyLost: preBlock.lostRecently(nowNs: DispatchTime.now().uptimeNanoseconds))
+        guard want != currentPollInterval || timer == nil else { return }
+        timer?.invalidate()
+        let t = Timer(timeInterval: want, repeats: true) { [weak self] _ in
             self?.check(reason: "poll")
         }
-        t.tolerance = 2.0   // coalesce với wakeup khác — đây là lưới an toàn, không cần đúng nhịp
+        // Coalesce với wakeup khác — đây là lưới an toàn, không cần đúng nhịp.
+        t.tolerance = want * 0.4
         RunLoop.main.add(t, forMode: .common)
         timer = t
+        currentPollInterval = want
+    }
+
+    /// Poll chỉ để bắt transition; mọi công việc thật nằm sau guard "có đổi không".
+    func start() {
+        pollStarted = true
+        check(reason: "startup")
 
         // 1Password (và loginwindow) bật SI lúc lock/sleep; IME bị mờ TRƯỚC khi
         // input-source-changed hay poll 5s kịp chạy. Check ngay + một nhịp settle
@@ -183,6 +218,7 @@ final class SecureInputMonitor {
     /// Re-check ngay khi có tín hiệu rẻ (đổi input source, mở snapshot). Idempotent,
     /// main-thread only (NSStatusItem).
     func check(reason: String) {
+        defer { reschedulePollIfNeeded() }
         let active = IsSecureEventInputEnabled()
         let holder: Holder? = active
             ? Self.secureInputPID().map { Holder(pid: $0, name: Self.processName($0),

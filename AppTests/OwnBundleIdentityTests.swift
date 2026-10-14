@@ -45,6 +45,27 @@ final class OwnBundleIdentityTests: XCTestCase {
             "ad-hoc Debug cannot receive a durable grant and must not nag")
     }
 
+    /// UX 14/10/2026: the first-run prompt waits for a ≥2s typing pause and Return in
+    /// flight must not hit "Open Settings".
+    func testFirstRunAccessibilityPromptWaitsForTypingPause() {
+        typealias P = TelexInputController.AXPromptPause
+        var p = P()
+        let s: UInt64 = 1_000_000_000
+        XCTAssertFalse(p.tick(gen: 10, nowNs: 0))            // seed
+        XCTAssertFalse(p.tick(gen: 11, nowNs: s))            // typing
+        XCTAssertFalse(p.tick(gen: 12, nowNs: 2 * s))        // still typing
+        XCTAssertFalse(p.tick(gen: 12, nowNs: 3 * s))        // 1s idle
+        XCTAssertFalse(p.tick(gen: 13, nowNs: 3 * s + 900_000_000))   // a key restarts the wait
+        XCTAssertFalse(p.tick(gen: 13, nowNs: 5 * s))
+        XCTAssertTrue(p.tick(gen: 13, nowNs: 3 * s + 900_000_000 + P.idleNs))
+
+        let k = TelexInputController.axPromptKeyEquivalents(firstRun: true)
+        XCTAssertEqual(k?.open, "", "Return must not open Settings on the first-run prompt")
+        XCTAssertEqual(k?.close, "\u{1b}")
+        XCTAssertNil(TelexInputController.axPromptKeyEquivalents(firstRun: false),
+                     "user-requested prompt keeps NSAlert defaults")
+    }
+
     func testBundlePlistUsesConfigurationSpecificIdentityEverywhere() {
         #if DEBUG
         let expected = dev

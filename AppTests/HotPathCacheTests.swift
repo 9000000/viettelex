@@ -233,6 +233,50 @@ final class SettingsSuiteIsolationTests: XCTestCase {
         XCTAssertEqual(TerminalTapController.watchdogInterval(idle: true), 30)
     }
 
+    /// Perf 14/10/2026: 5 healthy typing ticks ⇒ 6s; any anomaly resets the run ⇒ 3s.
+    func testWatchdogTypingCadenceBacksOffOnlyAfterHealthyRun() {
+        typealias T = TerminalTapController
+        for n in 0..<T.watchdogHealthyTicksBeforeBackoff {
+            XCTAssertEqual(T.watchdogTypingInterval(healthyTicks: n), 3, "\(n)")
+        }
+        XCTAssertEqual(T.watchdogTypingInterval(healthyTicks: T.watchdogHealthyTicksBeforeBackoff), 6)
+        XCTAssertEqual(T.watchdogTypingInterval(healthyTicks: 1000), 6)
+        // Typing cadence stays well below the idle cadence.
+        XCTAssertLessThan(T.watchdogTypingInterval(healthyTicks: 1000), T.watchdogInterval(idle: true))
+    }
+
+    /// Perf 14/10/2026: the imeActive self-heal hopped to MAIN for a TIS read every 750ms
+    /// of typing. Fast window only for 10s after a switch event (where a stale latch is
+    /// born), 5s otherwise.
+    func testReconcileWindowFastOnlyAfterSwitch() {
+        typealias T = TerminalTapController
+        XCTAssertEqual(T.reconcileWindowNs(sinceSwitchNs: 0), 750_000_000)
+        XCTAssertEqual(T.reconcileWindowNs(sinceSwitchNs: 9_999_999_999), 750_000_000)
+        XCTAssertEqual(T.reconcileWindowNs(sinceSwitchNs: 10_000_000_000), 5_000_000_000)
+        XCTAssertEqual(T.reconcileWindowNs(sinceSwitchNs: .max), 5_000_000_000)
+    }
+
+    /// Perf 14/10/2026: secure-input safety poll 5s only while it matters (blocked /
+    /// VietTelex selected / VietTelex just kicked off — #100 grace), else 20s.
+    func testSecureInputPollCadence() {
+        typealias M = SecureInputMonitor
+        XCTAssertEqual(M.pollInterval(blocked: true, vietTelexSelected: false), 5)
+        XCTAssertEqual(M.pollInterval(blocked: false, vietTelexSelected: true), 5)
+        XCTAssertEqual(M.pollInterval(blocked: false, vietTelexSelected: false, recentlyLost: true), 5)
+        XCTAssertEqual(M.pollInterval(blocked: false, vietTelexSelected: false), 20)
+
+        var p = M.PreBlockSelection()
+        p.noteCalm(isVietTelex: true, nowNs: 1_000, userGesture: false)
+        XCTAssertFalse(p.lostRecently(nowNs: 2_000))                         // still selected
+        p.noteCalm(isVietTelex: false, nowNs: 5_000, userGesture: false)     // kicked (#100)
+        XCTAssertTrue(p.lostRecently(nowNs: 5_000 + 9_000_000_000))
+        XCTAssertFalse(p.lostRecently(nowNs: 5_000 + M.PreBlockSelection.onsetGraceNs + 1))
+        var u = M.PreBlockSelection()
+        u.noteCalm(isVietTelex: true, nowNs: 1_000, userGesture: false)
+        u.noteCalm(isVietTelex: false, nowNs: 5_000, userGesture: true)      // user switched
+        XCTAssertFalse(u.lostRecently(nowNs: 6_000))
+    }
+
     func testSecureInputPollDoesNotReadTheInputSource() {
         XCTAssertFalse(SecureInputMonitor.refreshesSelection(reason: "poll"))
         for r in ["startup", "input-source-changed", "wake", "unlock", "wake-settle"] {

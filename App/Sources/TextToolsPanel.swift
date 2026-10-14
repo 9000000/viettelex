@@ -66,6 +66,19 @@ enum TextToolsPanelLogic {
         bindings.first { $0.keyCode == keyCode && $0.shift == shift }?.command
     }
 
+    /// Không tương tác bấy nhiêu giây ⇒ tự đóng. Lúc panel mở, phím KHÔNG modifier (số,
+    /// mũi tên, Tab, Space, Return, Esc) bị hotkey giành toàn hệ thống; không có quyền
+    /// Accessibility thì monitor "gõ phím khác = đóng" không chạy ⇒ panel bị bỏ quên sẽ ăn
+    /// Space/Return của user mãi. Re-arm ở mỗi tương tác (rê chuột, phím panel).
+    static let idleCloseSeconds: TimeInterval = 15
+
+    /// Phím tới IME (IMK handle) lúc panel mở. Phím panel bị hotkey nuốt TRƯỚC khi tới IME,
+    /// nên phím tới được = user gõ tiếp ⇒ đóng — chạy được cả khi THIẾU Accessibility
+    /// (khác global monitor). Phím trùng binding (hotkey đăng ký hỏng) thì để nguyên.
+    static func closesOnIMEKey(keyCode: Int, shift: Bool) -> Bool {
+        command(keyCode: keyCode, shift: shift) == nil
+    }
+
     /// Dời chọn có vòng (cuối ↓ → đầu).
     static func moved(_ index: Int, by delta: Int, count: Int = tools.count) -> Int {
         guard count > 0 else { return 0 }
@@ -185,6 +198,12 @@ final class TextToolsPanel {
         p.teardown()
     }
 
+    /// MAIN (IMK handle). Một phím thật tới IME lúc panel mở ⇒ user đã gõ tiếp: đóng.
+    static func noteIMEKeyDown(keyCode: Int, shift: Bool) {
+        guard current != nil, TextToolsPanelLogic.closesOnIMEKey(keyCode: keyCode, shift: shift) else { return }
+        close()
+    }
+
     private let client: IMKTextInput?
     private var window: ToolsWindow?
     private var rows: [ToolRowView] = []
@@ -193,6 +212,7 @@ final class TextToolsPanel {
     private var hotKeys: [EventHotKeyRef] = []
     private var handlerRef: EventHandlerRef?
     private var workspaceObserver: NSObjectProtocol?
+    private var idleClose: DispatchWorkItem?
     private static let signature: OSType = 0x5654_5450   // "VTTP" (≠ "VTTH" của TextActionHotkey)
 
     private init(client: IMKTextInput?) { self.client = client }
@@ -247,6 +267,19 @@ final class TextToolsPanel {
         w.setFrameOrigin(Self.anchorOrigin(client: client, panelSize: size))
         w.orderFrontRegardless()                   // KHÔNG makeKey / activate
         installInputHooks()
+        armIdleClose()
+    }
+
+    /// (Re)hẹn tự đóng sau `idleCloseSeconds` không tương tác.
+    private func armIdleClose() {
+        idleClose?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, TextToolsPanel.current === self else { return }
+            DebugLog.log("tools panel: idle \(Int(TextToolsPanelLogic.idleCloseSeconds))s → close")
+            TextToolsPanel.close()
+        }
+        idleClose = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + TextToolsPanelLogic.idleCloseSeconds, execute: work)
     }
 
     /// Góc dưới-trái cho một ô nổi cạnh con trỏ (bảng Công cụ, ô báo của Dịch).
@@ -276,6 +309,7 @@ final class TextToolsPanel {
     // MARK: Selection / run
 
     private func select(_ i: Int) {
+        if window != nil { armIdleClose() }
         selected = i
         for (j, r) in rows.enumerated() { r.highlighted = (j == i) }
     }
@@ -355,6 +389,8 @@ final class TextToolsPanel {
     }
 
     private func teardown() {
+        idleClose?.cancel()
+        idleClose = nil
         for ref in hotKeys { UnregisterEventHotKey(ref) }
         hotKeys = []
         if let h = handlerRef { RemoveEventHandler(h); handlerRef = nil }
