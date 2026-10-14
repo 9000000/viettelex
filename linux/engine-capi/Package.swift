@@ -24,6 +24,17 @@
 //   -Xlinker --end-group)
 //   → .build/release/libtelexcore.so   (C header: include/telexcore.h)
 //   → .build/release/viettelex-text-tool
+//
+// Size (measured 14/10/2026, Swift 6.4 noble arm64, stripped): libtelexcore.so 5.5 MB,
+// viettelex-text-tool 12.4 MB. Almost all of it is the static Swift runtime/stdlib (+
+// FoundationEssentials in the tool); our own symbols are ~85 KB (.so) / ~300 KB (tool), the
+// engine ~76 KB in each. So, on purpose:
+//   * no -Osize: no measurable change in the stripped files (it would only touch our code);
+//   * no extra --gc-sections: SwiftPM already links release products with
+//     -Xlinker --gc-sections (dead stripping is on by default);
+//   * the tool does not link libtelexcore.so to share the engine: the .so exports only the
+//     vt_* C ABI and carries its own static Swift runtime, so the tool would still need its
+//     runtime (two Swift runtimes in one process) for ~76 KB saved.
 import PackageDescription
 
 let package = Package(
