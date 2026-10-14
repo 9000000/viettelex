@@ -584,6 +584,11 @@ TEST(ctrl_shift_from_another_keyboard_activates_viettelex) {
     CHECK(foreignChordAction(SwitchHotkey::Off, 0, enUS, false) == ForeignChord::Ignore);
     CHECK(chordWatcherWanted(SwitchHotkey::CtrlShift));
     CHECK(!chordWatcherWanted(SwitchHotkey::AltZ) && !chordWatcherWanted(SwitchHotkey::WinSpace));
+    CHECK(chordToggleAllowed(true, false, false, false));
+    CHECK(!chordToggleAllowed(true, true, false, false));   // fires on release only
+    CHECK(!chordToggleAllowed(true, false, true, false));   // game / fullscreen
+    CHECK(!chordToggleAllowed(true, false, false, true));   // Ctrl+Shift+click / drag
+    CHECK(!chordToggleAllowed(false, false, false, false));
 
     // Which input locale to request.
     const uintptr_t list[] = {0x04090409, 0x042A042A, 0xF0C1042A};
@@ -599,6 +604,26 @@ TEST(ctrl_shift_from_another_keyboard_activates_viettelex) {
     CHECK(defaultInputAdvice(SwitchHotkey::CtrlShift, 0) == DefaultInputAdvice::None);  // unreadable
     CHECK(defaultInputAdvice(SwitchHotkey::WinSpace, enUS) == DefaultInputAdvice::None);
     CHECK_EQ(defaultLayoutOrTipSpec(0x042A, "{A}", "{B}"), std::string("0x042A:{A}{B}"));
+}
+
+// 2026-10 perf audit H1/H2: the default Ctrl+Shift watcher kept WH_MOUSE_LL (and raw
+// input) installed for good — every mouse move woke the high-priority hook thread.
+TEST(hook_needs_mouse_only_while_typing_or_chord_armed) {
+    // Default install: watcher only. Keyboard hook yes, mouse hook no...
+    HookNeeds n = hookNeeds(false, true, false, false);
+    CHECK(n.keyboard && !n.mouse);
+    // ...until Ctrl+Shift are held together (a click must cancel the toggle).
+    n = hookNeeds(false, true, true, false);
+    CHECK(n.keyboard && n.mouse);
+    // Typing (hook / Direct): both, a click resets the word.
+    n = hookNeeds(true, false, false, false);
+    CHECK(n.keyboard && n.mouse);
+    // Nothing wanted: nothing installed (armed state of a dead watcher is irrelevant).
+    n = hookNeeds(false, false, true, false);
+    CHECK(!n.keyboard && !n.mouse);
+    // Game / fullscreen / Chế độ game: unhooked, not just flagged.
+    n = hookNeeds(true, true, true, true);
+    CHECK(!n.keyboard && !n.mouse);
 }
 
 // ---- Công cụ văn bản (text_action_logic.h) ----------------------------------------------

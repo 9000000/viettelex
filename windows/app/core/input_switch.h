@@ -71,6 +71,35 @@ bool isChordModifierVk(unsigned vk);
 // PreserveKey of the TIP — eating it in other keyboards would break apps' Alt+Z).
 inline bool chordWatcherWanted(SwitchHotkey h) { return h == SwitchHotkey::CtrlShift; }
 
+// Which low-level hooks VietTelex.exe's hook thread keeps installed (2026-10 perf audit H1).
+//   keyboard: typing (hook / Direct mode) or the observe-only chord watcher;
+//   mouse:    typing (a click resets the word), or — for the watcher alone — ONLY while
+//             Ctrl+Shift are held together (chord armed: a click then cancels the toggle).
+//             A permanent WH_MOUSE_LL woke the high-priority hook thread on every mouse
+//             move for every default install.
+//   suspended (game / fullscreen / Chế độ game): nothing — every key passes anyway and the
+//             chord is ignored there (foreignChordAction).
+// Raw input (the hook watchdog's second key signal) is registered exactly while the
+// keyboard hook is.
+struct HookNeeds {
+    bool keyboard = false;
+    bool mouse = false;
+};
+inline HookNeeds hookNeeds(bool typing, bool watchChord, bool chordArmed, bool suspended) {
+    HookNeeds n;
+    if (suspended) return n;
+    n.keyboard = typing || watchChord;
+    n.mouse = typing || (watchChord && chordArmed);
+    return n;
+}
+
+// The watcher saw the chord complete (ModifierChord::note returned true). Toggle only on
+// the release, outside games, and with no mouse button held (Ctrl+Shift+drag / click
+// selection — a click that arrived before the mouse hook was in).
+inline bool chordToggleAllowed(bool completed, bool keyDown, bool suspended, bool mouseButtonHeld) {
+    return completed && !keyDown && !suspended && !mouseButtonHeld;
+}
+
 enum class ForeignChord { Ignore, ActivateVietTelex };
 // The chord completed. `tipProp` = kTipLangProp on the foreground root (1/2 = the TIP is
 // active there: it toggles by itself), `fgLangId` = LOWORD(GetKeyboardLayout(thread)) of

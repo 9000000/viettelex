@@ -36,6 +36,7 @@ enum : UINT {
     kCmdForeground,            // lParam: Foreground* (hook thread owns it)
     kCmdDisableHere,           // Direct proved unusable in the current field: stop hooking
     kCmdSuspend,               // wParam 1 = game / fullscreen: type nothing (game_mode.cpp)
+    kCmdSyncHooks,             // the chord armed / disarmed: add or drop the mouse hook
     kCmdQuit,
 };
 
@@ -58,6 +59,7 @@ struct HookState {
     HHOOK kbHook = nullptr;
     HHOOK mouseHook = nullptr;
     HWND sink = nullptr;       // message-only window: raw input for the watchdog
+    bool rawInput = false;     // raw input registered (only while the keyboard hook is in)
     DWORD fgThread = 0;
     HWND fgHwnd = nullptr;     // window the hooked typing belongs to
     std::wstring fgExe;        // lowercase
@@ -70,7 +72,8 @@ struct HookState {
     bool suspended = false;    // game / fullscreen / Chế độ game: every key passes through
     // Observe-only Ctrl+Shift watcher (input_switch.h): keeps the keyboard hook installed
     // while the switch hotkey is Ctrl+Shift, so the chord also works while ANOTHER
-    // keyboard is the window's input method. Never eats a key.
+    // keyboard is the window's input method. Never eats a key. The mouse hook joins only
+    // while the chord is armed (hookNeeds).
     bool watchChord = false;
     ModifierChord chord;
 };
@@ -80,6 +83,7 @@ HANDLE g_hookThread = nullptr;
 HANDLE g_hookReady = nullptr;
 HWND g_chordTarget = nullptr;  // main window: receives g_chordMsg when the chord completes
 UINT g_chordMsg = 0;
+bool g_suspendedUi = false;    // UI thread: last hookSetSuspended (replayed to a new hook thread)
 
 // ---------------------------------------------------------------- UI-thread state
 struct UiState {
@@ -166,10 +170,17 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM wp, LPARAM lp) {
             if (GetAsyncKeyState(VK_SHIFT) < 0) before |= kModShift;
             if (GetAsyncKeyState(VK_MENU) < 0) before |= kModAlt;
             if (GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0) before |= kModWin;
-            if (h->chord.note(chordHeldAfter(before, kb->vkCode, down)) && !down && !h->suspended && g_chordTarget)
+            const bool wasArmed = h->chord.armed();
+            const bool completed = h->chord.note(chordHeldAfter(before, kb->vkCode, down));
+            const bool buttonHeld = completed && (GetAsyncKeyState(VK_LBUTTON) < 0 ||
+                                                  GetAsyncKeyState(VK_RBUTTON) < 0 ||
+                                                  GetAsyncKeyState(VK_MBUTTON) < 0);
+            if (chordToggleAllowed(completed, down, h->suspended, buttonHeld) && g_chordTarget)
                 PostMessageW(g_chordTarget, g_chordMsg, 0, 0);  // decided on the UI thread
-        } else if (down) {
+            if (wasArmed != h->chord.armed()) PostThreadMessageW(g_hookTid, kCmdSyncHooks, 0, 0);
+        } else if (down && h->chord.armed()) {
             h->chord.disarm();  // Ctrl+Shift+T etc. is not the switch chord
+            PostThreadMessageW(g_hookTid, kCmdSyncHooks, 0, 0);
         }
     }
     if (!h->wanted) return CallNextHookEx(nullptr, code, wp, lp);  // watching only
@@ -245,7 +256,10 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM wp, LPARAM lp) {
 
 LRESULT CALLBACK mouseProc(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION && h && (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN || wp == WM_MBUTTONDOWN)) {
-        h->chord.disarm();  // a click between press and release is not a toggle
+        if (h->chord.armed()) {
+            h->chord.disarm();  // a click between press and release is not a toggle
+            PostThreadMessageW(g_hookTid, kCmdSyncHooks, 0, 0);  // watcher only: drop this hook
+        }
         h->session.reset();  // caret probably moved
         h->arming.click();
     }
@@ -271,29 +285,54 @@ void setAck(HWND w) {
     if (w) SetPropW(w, kDirectOnProp, reinterpret_cast<HANDLE>(1));
 }
 
+// Raw input (RIDEV_INPUTSINK: every key system-wide) only feeds the hook watchdog, so it
+// is registered exactly while the keyboard hook is installed.
+void setRawInput(bool on) {
+    if (on == h->rawInput || (on && !h->sink)) return;
+    RAWINPUTDEVICE rid = {};
+    rid.usUsagePage = 0x01;  // generic desktop
+    rid.usUsage = 0x06;      // keyboard
+    rid.dwFlags = on ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+    rid.hwndTarget = on ? h->sink : nullptr;  // RIDEV_REMOVE requires a null target
+    if (RegisterRawInputDevices(&rid, 1, sizeof rid) || !on) h->rawInput = on;
+}
+
 void removeHooks() {
     if (h->kbHook) UnhookWindowsHookEx(h->kbHook);
     if (h->mouseHook) UnhookWindowsHookEx(h->mouseHook);
     h->kbHook = h->mouseHook = nullptr;
+    setRawInput(false);
 }
 
-// Keyboard hook: typing (h->wanted) or the chord watcher. Mouse hook: both (a click
-// resets the word and disarms the chord).
-bool hooksNeeded() { return h->wanted || h->watchChord; }
-
-void installHooks() {
-    removeHooks();
-    HINSTANCE inst = GetModuleHandleW(nullptr);
-    h->kbHook = SetWindowsHookExW(WH_KEYBOARD_LL, keyboardProc, inst, 0);
-    h->mouseHook = SetWindowsHookExW(WH_MOUSE_LL, mouseProc, inst, 0);
-    h->watchdog.hookInstalled(GetTickCount64());
-}
+HookNeeds needs() { return hookNeeds(h->wanted, h->watchChord, h->chord.armed(), h->suspended); }
+// Keyboard hook: typing (h->wanted) or the chord watcher, never while suspended.
+bool hooksNeeded() { return needs().keyboard; }
 
 void syncHooks() {
-    const bool need = hooksNeeded();
-    if (need && !h->kbHook) installHooks();
-    else if (!need && h->kbHook) removeHooks();
-    h->watchdog.setActive(need, GetTickCount64());
+    const HookNeeds n = needs();
+    HINSTANCE inst = GetModuleHandleW(nullptr);
+    if (n.keyboard && !h->kbHook) {
+        h->kbHook = SetWindowsHookExW(WH_KEYBOARD_LL, keyboardProc, inst, 0);
+        h->watchdog.hookInstalled(GetTickCount64());
+    } else if (!n.keyboard && h->kbHook) {
+        UnhookWindowsHookEx(h->kbHook);
+        h->kbHook = nullptr;
+    }
+    if (n.mouse && !h->mouseHook) {
+        h->mouseHook = SetWindowsHookExW(WH_MOUSE_LL, mouseProc, inst, 0);
+    } else if (!n.mouse && h->mouseHook) {
+        UnhookWindowsHookEx(h->mouseHook);
+        h->mouseHook = nullptr;
+    }
+    setRawInput(h->kbHook != nullptr);
+    if (n.keyboard != h->watchdog.active()) h->watchdog.setActive(n.keyboard, GetTickCount64());
+}
+
+// The watchdog saw Windows drop the keyboard hook (LowLevelHooksTimeout): reinstall.
+void reinstallHooks() {
+    removeHooks();
+    syncHooks();
+    h->watchdog.hookInstalled(GetTickCount64());
 }
 
 void applyWanted(bool on) {
@@ -329,7 +368,7 @@ LRESULT CALLBACK sinkProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lp), RID_INPUT, &ri, &sz, sizeof(RAWINPUTHEADER)) != UINT(-1) &&
             ri.header.dwType == RIM_TYPEKEYBOARD && !(ri.data.keyboard.Flags & RI_KEY_BREAK)) {
             // Raw input sees every key; if the LL hook has not for a while, Windows removed it.
-            if (h->watchdog.rawKey(GetTickCount64())) installHooks();
+            if (h->watchdog.rawKey(GetTickCount64())) reinstallHooks();
         }
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -343,15 +382,8 @@ DWORD WINAPI hookThreadMain(void*) {
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpszClassName = L"VietTelexHookSink";
     RegisterClassW(&wc);
+    // Raw input is registered by syncHooks, only while a keyboard hook is installed.
     h->sink = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
-    if (h->sink) {
-        RAWINPUTDEVICE rid = {};
-        rid.usUsagePage = 0x01;  // generic desktop
-        rid.usUsage = 0x06;      // keyboard
-        rid.dwFlags = RIDEV_INPUTSINK;
-        rid.hwndTarget = h->sink;
-        RegisterRawInputDevices(&rid, 1, sizeof rid);
-    }
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the queue
     SetEvent(g_hookReady);
@@ -385,11 +417,20 @@ DWORD WINAPI hookThreadMain(void*) {
                     h->arming.disengaged();
                     appLog("hook", "stopped for this field (Direct fell back to composition)");
                     break;
-                case kCmdSuspend:
-                    h->suspended = msg.wParam != 0;
+                case kCmdSuspend: {
+                    const bool on = msg.wParam != 0;
+                    if (on == h->suspended) break;
+                    h->suspended = on;
+                    h->chord.disarm();
                     h->session.resetContext();
-                    appLog("hook", h->suspended ? "suspended (game / fullscreen)" : "resumed");
+                    // Unhooked while suspended (nothing to type, the chord is ignored). A
+                    // resume mid-word: typing starts at the next boundary.
+                    syncHooks();
+                    if (!on && h->wanted) h->arming.engaged(false);
+                    appLog("hook", h->suspended ? "suspended (game / fullscreen): hooks removed" : "resumed");
                     break;
+                }
+                case kCmdSyncHooks: syncHooks(); break;
                 case kCmdQuit: PostQuitMessage(0); break;
                 default: break;
             }
@@ -405,11 +446,20 @@ DWORD WINAPI hookThreadMain(void*) {
     return 0;
 }
 
+// The hook thread starts the first time something needs a hook (the Ctrl+Shift watcher,
+// a hook / Direct app in the foreground) and then stays. A new thread gets the current
+// settings and suspend state first; foreground updates follow in order.
 void ensureHookThread() {
     if (g_hookThread) return;
     g_hookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hookThread = CreateThread(nullptr, 0, hookThreadMain, nullptr, 0, &g_hookTid);
     if (g_hookThread && g_hookReady) WaitForSingleObject(g_hookReady, 2000);
+    if (!g_hookThread) return;
+    if (u) {
+        auto* s = new Settings(u->settings);
+        if (!PostThreadMessageW(g_hookTid, kCmdConfig, 0, reinterpret_cast<LPARAM>(s))) delete s;
+    }
+    if (g_suspendedUi) PostThreadMessageW(g_hookTid, kCmdSuspend, 1, 0);
 }
 
 // ---------------------------------------------------------------- UI thread
@@ -475,8 +525,9 @@ void publishForeground(bool fresh) {
                            " -> " + (hookOn ? (direct ? "DIRECT (hook types)" : "hookFallback") : "no hook") + " (" +
                            why + ")" + rid + (fresh ? "" : " [mid-focus]"));
     }
-    ensureHookThread();
     directVerifyFocusChanged();
+    if (!hookOn && !g_hookThread) return;  // nothing to hook, and no hook thread to tell
+    ensureHookThread();
     auto* f = new Foreground{u->fgApp, u->fgExe, u->fgThread, fg, hookOn, direct, fresh};
     if (!PostThreadMessageW(g_hookTid, kCmdForeground, 0, reinterpret_cast<LPARAM>(f))) delete f;
 }
@@ -500,8 +551,12 @@ void hookConfigure(const Settings& s) {
     if (!u) u = new UiState();
     u->settings = s;
     appSetLogging(s.debugLogging);
-    ensureHookThread();
-    PostThreadMessageW(g_hookTid, kCmdConfig, 0, reinterpret_cast<LPARAM>(new Settings(s)));
+    if (g_hookThread) {
+        auto* copy = new Settings(s);
+        if (!PostThreadMessageW(g_hookTid, kCmdConfig, 0, reinterpret_cast<LPARAM>(copy))) delete copy;
+    } else if (chordWatcherWanted(parseSwitchHotkey(s.switchHotkey))) {
+        ensureHookThread();  // posts these settings
+    }
     // Always watch the foreground: built-in Direct rules (consoles, terminals) exist.
     if (!u->fgHook)
         u->fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, winEventProc, 0, 0,
@@ -528,8 +583,8 @@ void hookDisableCurrentField() {
 }
 
 void hookSetSuspended(bool on) {
-    ensureHookThread();
-    PostThreadMessageW(g_hookTid, kCmdSuspend, on ? 1 : 0, 0);
+    g_suspendedUi = on;
+    if (g_hookThread) PostThreadMessageW(g_hookTid, kCmdSuspend, on ? 1 : 0, 0);
 }
 
 void hookShutdown() {
