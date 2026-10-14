@@ -2072,10 +2072,29 @@ final class TerminalTapController {
     private let activationLock = NSLock()
     private var activation = IMEActivation()
     var imeActive: Bool { activationLock.withLock { activation.isActive } }
+    /// Uptime (ns) of the last activate / deactivate / TIS-notification event — guarded by
+    /// activationLock. Arms the fast reconcile window (see `reconcileWindowNs(sinceSwitchNs:)`).
+    private var lastSwitchEventNs: UInt64 = 0
+
+    /// Reconcile throttle for the imeActive self-heal (tap key path). A stale latch can
+    /// only be born at a switch instant (the deactivate / TIS paths fire but read the
+    /// OUTGOING source), and every switch fires at least one of those events — so the
+    /// fast 750ms cadence is only needed for `reconcileFastSpanNs` after one. In steady
+    /// typing the TIS check hopped to MAIN every 750ms for nothing; now every 5s.
+    /// Pure — pinned by HotPathCacheTests.
+    static let reconcileFastNs: UInt64 = 750_000_000
+    static let reconcileSlowNs: UInt64 = 5_000_000_000
+    static let reconcileFastSpanNs: UInt64 = 10_000_000_000
+    static func reconcileWindowNs(sinceSwitchNs: UInt64) -> UInt64 {
+        sinceSwitchNs < reconcileFastSpanNs ? reconcileFastNs : reconcileSlowNs
+    }
 
     /// activateServer: VietTelex active for the focused client.
     func markActive() {
-        let active = activationLock.withLock { activation.activate(); return activation.isActive }
+        let active = activationLock.withLock {
+            activation.activate(); lastSwitchEventNs = DispatchTime.now().uptimeNanoseconds
+            return activation.isActive
+        }
         DebugLog.log("markActive → imeActive=\(active)")
         // Issue #40 (Discord): tap-routed Electron apps never get the field scans
         // that poke a lazily-built AX tree on, so the reach-back reads (⌫ re-open /
@@ -2091,7 +2110,9 @@ final class TerminalTapController {
     /// right now (queried via TIS by the caller). Ignores a stale late deactivate.
     func markInactive(stillSelected: Bool) {
         let active = activationLock.withLock {
-            activation.deactivate(stillSelected: stillSelected); return activation.isActive
+            activation.deactivate(stillSelected: stillSelected)
+            lastSwitchEventNs = DispatchTime.now().uptimeNanoseconds
+            return activation.isActive
         }
         DebugLog.log("markInactive(stillSelected=\(stillSelected)) → imeActive=\(active)")
     }
@@ -2099,7 +2120,9 @@ final class TerminalTapController {
     /// TIS selection-changed notification: authoritative recompute.
     func selectionChanged(isVietTelex: Bool) {
         let active = activationLock.withLock {
-            activation.selectionChanged(isVietTelex: isVietTelex); return activation.isActive
+            activation.selectionChanged(isVietTelex: isVietTelex)
+            lastSwitchEventNs = DispatchTime.now().uptimeNanoseconds
+            return activation.isActive
         }
         DebugLog.log("selectionChanged(isVietTelex=\(isVietTelex)) → imeActive=\(active)")
     }
@@ -2267,11 +2290,30 @@ final class TerminalTapController {
     /// cost nothing but battery (maintainer 25/09/2026). The first key after idle
     /// restores 3s (see `watchdogSlow` in the key path). Pure — pinned by tests.
     static func watchdogInterval(idle: Bool) -> TimeInterval { idle ? 30 : 3 }
+    /// Typing cadence backoff (conservative): after `watchdogHealthyTicksBeforeBackoff`
+    /// consecutive HEALTHY typing ticks (tap enabled before ensureRunning, breaker not
+    /// tripped, last probe acked) the typing cadence relaxes 3s → 6s — half the F20
+    /// probes, secure-field prechecks and SyntheticInputGuard window scans during long
+    /// typing runs. ANY anomaly drops straight back to 3s, so the second probe miss
+    /// that tears a wedged tap down still comes 3s after the first (worst case blind
+    /// window 6s + 3s instead of 3s + 3s). Not DetectorBackoff: that one is for the
+    /// verdict caches and caps at 1s. Pure — pinned by HotPathCacheTests.
+    static let watchdogHealthyTicksBeforeBackoff = 5
+    static func watchdogTypingInterval(healthyTicks: Int) -> TimeInterval {
+        healthyTicks >= watchdogHealthyTicksBeforeBackoff ? 6 : 3
+    }
     /// Guarded by stateLock: the timer is currently on the idle cadence.
     private var watchdogSlow = false
+    /// MAIN only (timer callback + startWatchdog): consecutive healthy typing ticks and
+    /// the cadence the live timer runs at.
+    private var watchdogHealthyTicks = 0
+    private var watchdogCurrentInterval: TimeInterval = 3
 
-    private func startWatchdog(interval: TimeInterval = TerminalTapController.watchdogInterval(idle: false)) {
+    private func startWatchdog(interval: TimeInterval = TerminalTapController.watchdogInterval(idle: false),
+                               keepHealthyRun: Bool = false) {
         watchdog?.invalidate()
+        watchdogCurrentInterval = interval
+        if !keepHealthyRun { watchdogHealthyTicks = 0 }
         let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             guard let self else { return }
             if !AXIsProcessTrusted() {
@@ -2279,6 +2321,9 @@ final class TerminalTapController {
                 self.trustMayHaveChanged()
                 return
             }
+            // Health BEFORE ensureRunning repairs anything — feeds the cadence backoff.
+            let tapWasHealthy = !SyntheticKeyboard.tripped
+                && (self.stateLock.withLock({ self.tap }).map { CGEvent.tapIsEnabled(tap: $0) } ?? false)
             // Trusted but the tap silently died: the tapDisabledByTimeout event is
             // NOT guaranteed to arrive (a callback blocked mid-post never sees it —
             // same field data as gonhanh's watchdog). ensureRunning is a single
@@ -2355,6 +2400,16 @@ final class TerminalTapController {
                 }
             } else {
                 self.probeMisses = 0
+            }
+            // Cadence backoff (see watchdogTypingInterval): healthy run → 6s, anomaly → 3s.
+            self.watchdogHealthyTicks = (tapWasHealthy && sent == seen) ? self.watchdogHealthyTicks + 1 : 0
+            let want = Self.watchdogTypingInterval(healthyTicks: self.watchdogHealthyTicks)
+            if want != self.watchdogCurrentInterval {
+                DebugLog.log("watchdog: typing cadence \(Int(want))s (healthy ticks \(self.watchdogHealthyTicks))")
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.watchdog != nil else { return }
+                    self.startWatchdog(interval: want, keepHealthyRun: true)
+                }
             }
             if !SyntheticKeyboard.probeMayPost(secureInput: IsSecureEventInputEnabled(),
                                                secureField: SecureFieldDetector.isSecure,
@@ -2467,7 +2522,6 @@ final class TerminalTapController {
     // Throttle for the imeActive self-heal reconcile (see handle()). TAP-thread
     // confined (only touched inside the callback).
     private var lastReconcileNs: UInt64 = 0
-    private let reconcileWindowNs: UInt64 = 750_000_000
 
     private let kDelete = 51, kReturn = 36, kEnter = 76, kTab = 48, kEscape = 53
 
@@ -2868,9 +2922,13 @@ final class TerminalTapController {
         // asynchronously. The correction lands via the locked selectionChanged() and
         // takes effect on the NEXT keystroke — one key later than the old synchronous
         // check, which is fine for a ≤750ms-throttled self-heal of an already-stale flag.
+        // Window: 750ms for 10s after any switch event, 5s otherwise (reconcileWindowNs).
+        // The lock read only happens once the fast window has elapsed (≤1.3×/s).
         if active {
             let now = DispatchTime.now().uptimeNanoseconds
-            if now &- lastReconcileNs > reconcileWindowNs {
+            if now &- lastReconcileNs > Self.reconcileFastNs,
+               now &- lastReconcileNs > Self.reconcileWindowNs(
+                    sinceSwitchNs: now &- activationLock.withLock({ lastSwitchEventNs })) {
                 lastReconcileNs = now
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
