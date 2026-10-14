@@ -61,5 +61,4 @@ print("seed", len(uni), len(bi))
 
 shutil.copy(os.path.join(kb, "Resources/vnlexicon.bin"), os.path.join(out, "vnlexicon.bin"))
 shutil.copy(os.path.join(root, "iOS/ios-mau-cau.yml"), os.path.join(out, "ios-mau-cau.yml"))
-shutil.copy(os.path.join(kb, "SpaceLogo@3x.png"), os.path.join(out, "spacelogo.png"))
 print("ok")

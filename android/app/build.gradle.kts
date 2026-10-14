@@ -47,7 +47,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("androidx.compose.ui:ui-tooling-preview")
+    debugImplementation("androidx.compose.ui:ui-tooling-preview")   // không có @Preview trong main ⇒ chỉ bản debug
     // VietTelex Plus + ủng hộ: Google Play Billing (thư viện chính chủ của Google).
     implementation("com.android.billingclient:billing:8.0.0")
     // Dịch trên máy (Plus): ML Kit nằm ở module on-demand :translate (APK gốc không có);

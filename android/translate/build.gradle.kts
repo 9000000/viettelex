@@ -1,4 +1,4 @@
-// Play Feature Delivery — module ON-DEMAND "translate": ML Kit Translation (native ~16 MB/arm64).
+// Play Feature Delivery — module ON-DEMAND "translate": ML Kit Translation (tải ~7 MB/ABI, cài ~16 MB arm64 — xem TranslateFeature.kt).
 // App gốc không phụ thuộc ML Kit; module chỉ tải khi người dùng bấm "Tải tính năng Dịch".
 plugins {
     id("com.android.dynamic-feature")
