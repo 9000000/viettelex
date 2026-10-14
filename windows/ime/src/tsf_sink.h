@@ -2,6 +2,7 @@
 #pragma once
 #include "globals.h"
 #include "session.h"
+#include "tip_caches.h"
 
 namespace vtx::tip {
 
@@ -34,6 +35,9 @@ private:
     TextService* svc_;
     ITfContext* ctx_;
     TfEditCookie ec_;
+    // The last textBeforeCaret of this edit session (one sink = one session): lets
+    // replaceBeforeCaret skip its verification read (tip_caches.h).
+    BeforeCaretCache before_;
 };
 
 }  // namespace vtx::tip

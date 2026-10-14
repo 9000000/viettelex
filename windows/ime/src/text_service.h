@@ -10,9 +10,11 @@
 #include "session.h"
 #include "settings.h"
 #include "text_tool_ipc.h"
+#include "tip_caches.h"
 #include "caret_hint_ipc.h"
 #include "tsf_compat.h"
 
+#include <memory>
 #include <string>
 
 namespace vtx::tip {
@@ -76,7 +78,7 @@ public:
     bool vietnamese() const;
     void toggleVietnamese();                 // switch hotkey
     void setVietnamese(bool on);
-    const Settings& settings() const { return settings_; }
+    const Settings& settings() const { return *settings_; }  // after ActivateEx
 
 private:
     TextService();
@@ -85,7 +87,7 @@ private:
     bool typingEnabled() const;
     // Games / fullscreen (game_ipc.h): VietTelex.exe told this TIP to eat nothing, or
     // Chế độ game is on. One bool test per key; nothing else on the key path.
-    bool suspended() const { return tipSuspended(suspendPosted_, settings_.gameMode); }
+    bool suspended() const { return tipSuspended(suspendPosted_, gameMode_); }
     void setSuspendBits(uint32_t bits);  // from kTipSuspendMsg / kSuspendProp
     void readSuspendProp();              // focus change: a suspension set before we had focus
     bool appRunning() const;
@@ -94,7 +96,10 @@ private:
     void publishLangProp();  // kTipLangProp on the focus root (hook / tray read it)
     void clearLangProp();
     void notifyAppState(bool on);
+    // Settings from the snapshot when it changed (`force`: always), then the per-focus
+    // state (app mode, stale Chế độ game) — no copy, no lock held, when nothing changed.
     void applyConfig(bool force);
+    void applyFocusState();
     bool prepareKey(WPARAM wp, bool down, KeyInput& out);
     // (#121) A key we are about to let through that the thread's (Vietnamese) layout would
     // NOT type like US (1 -> ă): true = eat it; with `inject`, also type the US character
@@ -119,6 +124,7 @@ private:
     void sendTextToolSelection();
     void applyTextToolResult();
     void evaluateHost(ITfContext* ctx);
+    void evaluateHostAtWordStart(ITfContext* ctx);  // + Direct handover state
     void resolveActiveApp();
 
     // Gợi ý cạnh con trỏ (ime/core/caret_hints.h). Keys feed a tracker only while a hint is
@@ -176,8 +182,14 @@ private:
     TfGuidAtom misspelledAtom_ = TF_INVALID_GUIDATOM;  // red squiggle (underlineMisspelled)
 
     TypingSession session_;
-    Settings settings_;
+    // Shared, immutable snapshot (config.h): one copy of the shortcuts map per process,
+    // not one per thread manager. session_ points into it (SessionOptions::shortcuts).
+    std::shared_ptr<const Settings> settings_;
+    bool gameMode_ = false;             // settings_->gameMode, unless VietTelex.exe is gone
     unsigned long settingsGen_ = 0;
+    FocusStateNotify focusNotify_;      // tray state posts at focus changes (tip_caches.h)
+    PerKeyOnce hostEval_;               // evaluateHost once per key (tip_caches.h)
+    bool ownKeyEdit_ = false;           // inside OnKeyDown's synchronous edit session
     SwitchHotkey hotkey_ = SwitchHotkey::CtrlShift;
     ModifierChord chord_;
 

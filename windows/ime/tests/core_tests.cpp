@@ -6,6 +6,7 @@
 #include "settings.h"
 #include "shortcuts.h"
 #include "text_tool_ipc.h"
+#include "tip_caches.h"
 #include "test.h"
 
 #include <viettelex/vtx_engine.h>
@@ -508,4 +509,67 @@ TEST(tip_suspension_reasons) {
     // (kTipTextToolMsg; text_service.cpp uses WM_APP + 0x59..0x5C internally).
     CHECK(kTipSuspendMsg != kTipTextToolMsg);
     CHECK(kTipSuspendMsg > 0x8000u + 0x5Cu && kTipSuspendMsg < 0xC000u);
+}
+
+// ---- TIP per-key / per-focus caches (tip_caches.h, 2026-10 perf audit) ----------------
+
+// M3: an in-place replace read the text before the caret, then read it AGAIN to verify
+// the deletion — inside one edit session, where nothing else can change it.
+TEST(before_caret_cache_proves_tail_until_written) {
+    BeforeCaretCache c;
+    CHECK(!c.proves(u""));  // nothing read yet
+    c.remember(u"xin cha", true);
+    CHECK(c.proves(u"a"));
+    CHECK(c.proves(u"cha"));
+    CHECK(c.proves(u""));
+    CHECK(!c.proves(u"chà"));
+    CHECK(!c.proves(u"xxin cha"));  // longer than what was read: unknown
+    c.invalidate();                 // a write of ours
+    CHECK(!c.proves(u"a"));
+    // Hidden text / embedded objects: fewer units than positions -> never trusted.
+    c.remember(u"ab", false);
+    CHECK(!c.proves(u"b"));
+}
+
+// M4: evaluateHost ran in OnTestKeyDown AND OnKeyDown of the same key.
+TEST(per_key_once_reuses_test_evaluation_once) {
+    PerKeyOnce once;
+    int ctxA = 0, ctxB = 0;
+    CHECK(!once.takeForKeyDown(1, &ctxA));  // a host without OnTestKeyDown: evaluate
+    once.noteTest(2, &ctxA);
+    CHECK(once.takeForKeyDown(2, &ctxA));   // same key, same context: reuse
+    CHECK(!once.takeForKeyDown(2, &ctxA));  // at most once
+    once.noteTest(3, &ctxA);
+    CHECK(!once.takeForKeyDown(4, &ctxA));  // another key
+    once.noteTest(5, &ctxA);
+    CHECK(!once.takeForKeyDown(5, &ctxB));  // another context
+    once.noteTest(6, &ctxA);
+    once.invalidate();                      // focus change
+    CHECK(!once.takeForKeyDown(6, &ctxA));
+}
+
+// M1: every focus change posted StateChanged to VietTelex.exe (FindWindow + wake-up),
+// though only the optional tray icon (default off) uses it.
+TEST(focus_state_notify_only_tray_and_changes) {
+    FocusStateNotify n;
+    CHECK(!n.shouldPost(false, true, 10));  // tray off (default): never
+    CHECK(n.shouldPost(true, true, 10));    // tray on: first time
+    CHECK(!n.shouldPost(true, true, 10));   // same field / window, same state
+    CHECK(n.shouldPost(true, false, 10));   // state changed (another process toggled)
+    CHECK(n.shouldPost(true, false, 11));   // another window of this thread
+    n.notePosted(true, 11);                 // the user switched (always posted)
+    CHECK(!n.shouldPost(true, true, 11));
+    CHECK(!n.shouldPost(false, true, 11));  // tray turned off...
+    CHECK(n.shouldPost(true, true, 11));    // ...and on again: tell it afresh
+    n.reset();
+    CHECK(n.shouldPost(true, true, 11));
+}
+
+TEST(effective_game_mode_asks_app_only_when_on) {
+    int asked = 0;
+    CHECK(!effectiveGameMode(false, [&] { ++asked; return true; }));
+    CHECK(asked == 0);  // off: no FindWindow
+    CHECK(effectiveGameMode(true, [&] { ++asked; return true; }));
+    CHECK(!effectiveGameMode(true, [&] { ++asked; return false; }));  // app gone: stale "on" ignored
+    CHECK(asked == 2);
 }

@@ -50,6 +50,8 @@ std::u16string TsfTextSink::textBeforeCaret(int max) {
     if (max <= 0) return out;
     if (max > kMaxRead) max = kMaxRead;
     ITfRange* r = nullptr;
+    const bool composing = svc_->composition() != nullptr;
+    before_.invalidate();
     if (ITfComposition* comp = svc_->composition()) {
         ITfRange* cr = nullptr;
         if (SUCCEEDED(comp->GetRange(&cr)) && cr) {
@@ -62,11 +64,18 @@ std::u16string TsfTextSink::textBeforeCaret(int max) {
     if (!r) return out;
     r->Collapse(ec_, TF_ANCHOR_START);
     LONG shifted = 0;
-    if (SUCCEEDED(r->ShiftStart(ec_, -max, &shifted, nullptr)) && shifted < 0) {
-        WCHAR buf[kMaxRead + 1];
-        ULONG got = 0;
-        if (SUCCEEDED(r->GetText(ec_, 0, buf, static_cast<ULONG>(-shifted), &got)))
-            out.assign(reinterpret_cast<const char16_t*>(buf), got);
+    if (SUCCEEDED(r->ShiftStart(ec_, -max, &shifted, nullptr))) {
+        bool exact = shifted == 0;
+        if (shifted < 0) {
+            WCHAR buf[kMaxRead + 1];
+            ULONG got = 0;
+            if (SUCCEEDED(r->GetText(ec_, 0, buf, static_cast<ULONG>(-shifted), &got))) {
+                out.assign(reinterpret_cast<const char16_t*>(buf), got);
+                exact = got == static_cast<ULONG>(-shifted);
+            }
+        }
+        // Before the CARET (not before a composition): what replaceBeforeCaret verifies.
+        if (!composing) before_.remember(out, exact);
     }
     r->Release();
     return out;
@@ -107,6 +116,10 @@ bool TsfTextSink::hasSelection() {
 
 bool TsfTextSink::replaceBeforeCaret(const std::u16string& expect, const std::u16string& insert) {
     if (svc_->composition()) return false;
+    // Read earlier in this same edit session (the staleness check) and nothing written
+    // since: the units before the caret are known — position the range, skip GetText.
+    const bool known = before_.proves(expect);
+    before_.invalidate();
     if (expect.size() > static_cast<size_t>(kMaxRead)) return false;
     ITfRange* sel = selectionRange();
     if (!sel) return false;
@@ -126,7 +139,7 @@ bool TsfTextSink::replaceBeforeCaret(const std::u16string& expect, const std::u1
         LONG want = static_cast<LONG>(expect.size());
         LONG shifted = 0;
         bool positioned = want == 0 || (SUCCEEDED(r->ShiftStart(ec_, -want, &shifted, nullptr)) && shifted == -want);
-        if (positioned && want > 0) {
+        if (positioned && want > 0 && !known) {
             WCHAR buf[kMaxRead + 1];
             ULONG got = 0;
             positioned = SUCCEEDED(r->GetText(ec_, 0, buf, static_cast<ULONG>(want), &got)) &&
@@ -181,6 +194,7 @@ bool TsfTextSink::canReadContext() {
 bool TsfTextSink::compositionActive() { return svc_->composition() != nullptr; }
 
 bool TsfTextSink::setComposition(const std::u16string& text, int absorb, bool misspelled) {
+    before_.invalidate();
     ITfComposition* comp = svc_->composition();
     ITfRange* r = nullptr;
     if (!comp) {
@@ -221,6 +235,7 @@ bool TsfTextSink::setComposition(const std::u16string& text, int absorb, bool mi
 }
 
 void TsfTextSink::endComposition(const std::u16string& finalText) {
+    before_.invalidate();
     ITfComposition* comp = svc_->composition();
     if (!comp) return;
     ITfRange* r = nullptr;
@@ -237,6 +252,7 @@ void TsfTextSink::endComposition(const std::u16string& finalText) {
 }
 
 void TsfTextSink::endCompositionAsIs() {
+    before_.invalidate();
     ITfComposition* comp = svc_->composition();
     if (!comp) return;
     ITfRange* r = nullptr;

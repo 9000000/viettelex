@@ -331,14 +331,15 @@ bool TypingSession::handleWordKey(char32_t c, TextSink& sink) {
         return true;
     }
     std::u16string expect;
-    if (!tailOf(shown_, a.backspaces, expect) || !sink.replaceBeforeCaret(expect, actionInsert(a))) {
+    const std::u16string insert = actionInsert(a);
+    if (!tailOf(shown_, a.backspaces, expect) || !sink.replaceBeforeCaret(expect, insert)) {
         // Screen did not match what we typed: this word goes literal (never guess), and
         // the rest of this field uses composition.
         fallBack("in-place: text before the caret did not verify -> composition for this field");
         reset();
         return false;
     }
-    noteReplace(shown_, expect, actionInsert(a));
+    noteReplace(shown_, expect, insert);
     shown_ = now;
     return true;
 }
@@ -379,8 +380,9 @@ bool TypingSession::tryReEdit(char32_t c, TextSink& sink) {
         ok = sink.setComposition(now, static_cast<int>(word.size()), misspelled(t));
     } else if (a.kind == VTX_REPLACE) {
         std::u16string expect;
-        ok = tailOf(word, a.backspaces, expect) && sink.replaceBeforeCaret(expect, actionInsert(a));
-        if (ok) noteReplace(word, expect, actionInsert(a));
+        const std::u16string insert = actionInsert(a);
+        ok = tailOf(word, a.backspaces, expect) && sink.replaceBeforeCaret(expect, insert);
+        if (ok) noteReplace(word, expect, insert);
     } else {
         ok = true;  // VTX_NONE: consumed
     }
@@ -443,11 +445,12 @@ bool TypingSession::handleBackspace(TextSink& sink) {
         return true;
     }
     std::u16string expect;
-    if (!tailOf(shown_, a.backspaces, expect) || !sink.replaceBeforeCaret(expect, actionInsert(a))) {
+    const std::u16string insert = actionInsert(a);
+    if (!tailOf(shown_, a.backspaces, expect) || !sink.replaceBeforeCaret(expect, insert)) {
         reset();
         return false;
     }
-    noteReplace(shown_, expect, actionInsert(a));
+    noteReplace(shown_, expect, insert);
     shown_ = now;
     if (shown_.empty()) reset();
     return true;
@@ -551,11 +554,12 @@ bool TypingSession::commitWord(TextSink& sink, KeyKind kind) {
         finalText = shown_;
         if (a.kind == VTX_REPLACE) {
             std::u16string expect;
-            if (!tailOf(shown_, a.backspaces, expect) || !sink.replaceBeforeCaret(expect, actionInsert(a))) {
+            const std::u16string insert = actionInsert(a);
+            if (!tailOf(shown_, a.backspaces, expect) || !sink.replaceBeforeCaret(expect, insert)) {
                 vtx_forget_last_commit(engine_);
                 committed = false;
             } else {
-                finalText = shown_.substr(0, shown_.size() - expect.size()) + actionInsert(a);
+                finalText = shown_.substr(0, shown_.size() - expect.size()) + insert;
             }
         }
     }
