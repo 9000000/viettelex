@@ -8,30 +8,34 @@
 
 namespace viettelex {
 
-namespace {
-struct timespec mtimeOf(const std::string &path) {
+SettingsWatcher::Stamp SettingsWatcher::stampOf(const std::string &path) {
+    Stamp s;
     struct stat st;
-    if (::stat(path.c_str(), &st) != 0) return {0, 0};
-    return st.st_mtim;
+    if (::stat(path.c_str(), &st) != 0) return s;
+    s.mtime = st.st_mtim;
+    s.size = st.st_size;
+    s.ino = st.st_ino;
+    return s;
 }
-bool same(const struct timespec &a, const struct timespec &b) {
-    return a.tv_sec == b.tv_sec && a.tv_nsec == b.tv_nsec;
-}
-}  // namespace
 
 SettingsWatcher::SettingsWatcher(std::string dir) : dir_(std::move(dir)) {
     mkdirs(dir_);
     fd_ = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
-    if (fd_ >= 0) {
-        wd_ = inotify_add_watch(fd_, dir_.c_str(),
-                                IN_CLOSE_WRITE | IN_MOVED_TO | IN_DELETE | IN_CREATE | IN_MOVED_FROM);
-        if (wd_ < 0) { ::close(fd_); fd_ = -1; }
+    addWatch();
+    if (wd_ < 0 && fd_ >= 0) {
+        ::close(fd_);
+        fd_ = -1;
     }
     reload();
 }
 
 SettingsWatcher::~SettingsWatcher() {
     if (fd_ >= 0) ::close(fd_);
+}
+
+void SettingsWatcher::addWatch() {
+    if (fd_ < 0) return;
+    wd_ = inotify_add_watch(fd_, dir_.c_str(), IN_CLOSE_WRITE | IN_MOVED_TO | IN_DELETE | IN_CREATE | IN_MOVED_FROM);
 }
 
 bool SettingsWatcher::drain() {
@@ -43,6 +47,12 @@ bool SettingsWatcher::drain() {
         if (n <= 0) break;
         for (char *p = buf; p < buf + n;) {
             auto *ev = reinterpret_cast<struct inotify_event *>(p);
+            // The directory itself went away (removed / renamed over): the watch is gone, so
+            // focus-in falls back to the mtime check (changedOnDiskUnwatched) from now on.
+            if ((ev->mask & IN_IGNORED) && ev->wd == wd_) {
+                wd_ = -1;
+                relevant = true;
+            }
             if (ev->len > 0) {
                 const char *name = ev->name;
                 // IN_CREATE of config.toml.tmp is noise; the rename (IN_MOVED_TO) is the signal.
@@ -57,14 +67,33 @@ bool SettingsWatcher::drain() {
 }
 
 bool SettingsWatcher::changedOnDisk() {
-    return !same(mtimeOf(dir_ + "/config.toml"), cfgMtime_) ||
-           !same(mtimeOf(dir_ + "/shortcuts.yml"), scMtime_);
+    return !(stampOf(dir_ + "/config.toml") == cfgStamp_) || !(stampOf(dir_ + "/shortcuts.yml") == scStamp_);
+}
+
+bool SettingsWatcher::changedOnDiskUnwatched() {
+    if (watching()) return false;
+    if (fd_ >= 0) addWatch();  // the directory may be back
+    return changedOnDisk();
 }
 
 const Settings &SettingsWatcher::reload() {
-    cfgMtime_ = mtimeOf(dir_ + "/config.toml");
-    scMtime_ = mtimeOf(dir_ + "/shortcuts.yml");
-    settings_ = loadSettings(dir_);
+    cfgStamp_ = stampOf(dir_ + "/config.toml");
+    Stamp sc = stampOf(dir_ + "/shortcuts.yml");
+    std::string text;
+    Settings s = readFile(dir_ + "/config.toml", text) ? parseConfig(text) : Settings();
+    if (loaded_ && sc == scStamp_) {
+        s.shortcuts = settings_.shortcuts;  // config.toml changed alone: same table
+    } else {
+        std::string yml;
+        if (readFile(dir_ + "/shortcuts.yml", yml)) {
+            s.shortcuts = std::make_shared<ShortcutTable>(parseShortcuts(yml));
+            ++shortcutParses_;
+        }
+    }
+    scStamp_ = sc;
+    settings_ = std::move(s);
+    loaded_ = true;
+    ++generation_;
     return settings_;
 }
 

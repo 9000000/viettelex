@@ -225,6 +225,15 @@ bool typoWorthChecking(uint32_t boundary, const std::string &raw, const std::str
     return !vt_is_valid_syllable(word.c_str(), true);
 }
 
+bool typoKnownEnglish(const std::string &raw) {
+    if (raw.empty() || raw.size() > 16 || !isAsciiLetters(raw)) return false;
+    char lower[17];
+    size_t n = 0;
+    for (char c : raw) lower[n++] = (c >= 'A' && c <= 'Z') ? char(c - 'A' + 'a') : c;
+    lower[n] = '\0';
+    return vt_is_english_word(lower);
+}
+
 ToneTrigger ToneTracker::feed(const std::string &chunk, uint32_t b) {
     constexpr int kMin = 3, kMax = 40;
     if (b == '\n' || b == '\r') {

@@ -54,12 +54,24 @@ struct Mock : InputContext {
     std::string doc, pre, shown;
     bool surrounding = true, selection = false;
     int hides = 0;
+    int wholeReads = 0;  // textBeforeCursor (the whole paragraph) — the Session asks for tails
     void setPreedit(const std::string &s, bool) override { pre = s; }
     void commit(const std::string &s) override { doc += s; }
     void deleteBeforeCursor(int n) override { popChars(doc, n); }
     bool textBeforeCursor(std::string &out) override {
         if (!surrounding) return false;
+        ++wholeReads;
         out = doc;
+        return true;
+    }
+    bool textBeforeCursorTail(size_t maxChars, std::string &out) override {
+        if (!surrounding) return false;
+        size_t i = doc.size();
+        for (size_t n = 0; i > 0 && n < maxChars; ++n) {
+            --i;
+            while (i > 0 && (static_cast<unsigned char>(doc[i]) & 0xc0) == 0x80) --i;
+        }
+        out = doc.substr(i);
         return true;
     }
     bool hasSelection() override { return selection; }
@@ -484,6 +496,47 @@ void testTailFollowsKeys() {
     CHECK_EQ(a.s.typedBefore(), a.m.doc);
 }
 
+// Seeding the typed tail and checking the screen before Tab read only the characters they
+// need — a long paragraph before the caret is never copied whole on a key.
+void testTailReadsOnlyWhatItNeeds() {
+    Rig r(Settings(), DisplayMode::Surrounding);
+    r.m.doc = std::string(1000, 'x') + " ";
+    type(r.s, r.m, "12*3=");
+    CHECK_EQ(r.last(), req({"math", kUnknown + std::string(319, 'x') + " 12*3="}));
+    CHECK_EQ(r.m.wholeReads, 0);
+    // Exactly 320 characters before the caret: all of it, known to start the text.
+    Rig k(Settings(), DisplayMode::Surrounding);
+    k.m.doc = std::string(319, 'y') + " ";
+    type(k.s, k.m, "12*3=");
+    CHECK_EQ(k.last(), req({"math", std::string(319, 'y') + " 12*3="}));
+    // Tab on a typo fix after a long paragraph.
+    Rig t(Settings(), DisplayMode::Surrounding);
+    t.m.doc = std::string(1000, 'z') + " ";
+    type(t.s, t.m, "anh tpoi ");
+    t.answer(S(Kind::Typo, "tôi", "tpoi ", "tôi "));
+    CHECK(tab(t.s, t.m));
+    CHECK_EQ(t.m.doc, std::string(1000, 'z') + " anh tôi ");
+    CHECK_EQ(t.m.wholeReads, 0);
+}
+
+// English words of the engine's list: the helper's TypoFixLogic.isKnown answers "no fix",
+// so they are not sent at all (typing English used to wake the 13 MB helper on every word).
+void testTypoSkipsKnownEnglish() {
+    CHECK(hints::typoWorthChecking(' ', "with", "with"));  // would have been sent
+    CHECK(vt_is_english_word("with"));
+    CHECK(hints::typoKnownEnglish("With"));
+    CHECK(hints::typoKnownEnglish("BECAUSE"));
+    CHECK(!hints::typoKnownEnglish("tpoi"));
+    CHECK(!hints::typoKnownEnglish("thoi"));
+    CHECK(!hints::typoKnownEnglish(""));
+    CHECK(!hints::typoKnownEnglish("wíth"));
+    Rig r;
+    type(r.s, r.m, "with through Because, ");
+    CHECK(r.reqs.empty());
+    type(r.s, r.m, "tpoi ");
+    CHECK_EQ(r.reqs.size(), size_t(1));  // a real typo still goes to the helper
+}
+
 void testPasswordAndEnglish() {
     Rig r;
     r.s.setPassthrough(true, r.m);
@@ -605,6 +658,8 @@ int main() {
     testToneRun();
     testGenerationAndScreenChecks();
     testTailFollowsKeys();
+    testTailReadsOnlyWhatItNeeds();
+    testTypoSkipsKnownEnglish();
     testPasswordAndEnglish();
     testDirectMode();
     testHintServiceEndToEnd();

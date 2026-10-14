@@ -241,6 +241,7 @@ public:
     std::string clientId;  // ic->program()
     bool stateLoaded = false;
     bool rememberState = true;  // AppPolicy.rememberState of the current field
+    vt::PolicyCache policy;     // inputs of the field policy last applied (refreshFieldFlags)
     // Text tool result that arrived while this context had no focus (the tray menu took
     // it): committed on the next activation if still fresh.
     std::string pendingResult;
@@ -401,7 +402,7 @@ public:
     void activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         try {
             auto *ic = event.inputContext();
-            if (watcher_.changedOnDisk()) applySettingsToAll();  // inotify fallback
+            if (watcher_.changedOnDiskUnwatched()) applySettingsToAll();  // inotify fallback
             auto *st = state(ic);
             st->stateLoaded = false;
             ensureAppState(st);
@@ -520,6 +521,7 @@ private:
         FcitxClient client(st->ic);
         bool vi = s.perAppState ? appState_.vietnamese(st->appId, s.defaultVietnamese) : s.defaultVietnamese;
         st->session.setVietnamese(vi, client);
+        st->policy.invalidate();  // new focus: resolve and apply the policy once more
         refreshFieldFlags(st, client);
     }
 
@@ -563,11 +565,16 @@ private:
         }
     }
 
-    // Password fields, [app_modes] and surrounding capability can change per focus.
+    // Password fields, [app_modes] and surrounding capability can change per focus. Called
+    // before every key: the policy is resolved again only when one of its inputs changed.
     void refreshFieldFlags(VietTelexState *st, FcitxClient &client) {
         auto caps = st->ic->capabilityFlags();
         // Proven = advertised AND the client actually sent a valid text for this field.
         bool surrounding = caps.test(fcitx::CapabilityFlag::SurroundingText) && st->ic->surroundingText().isValid();
+        const int shellMajor = gnome_ ? gnome_->shellMajor() : 0;
+        if (st->policy.unchanged(st->appId, watcher_.generation(), uint64_t(caps.toInteger()), surrounding,
+                                 shellMajor, st->ic->frontend() ? st->ic->frontend() : "", st->ic->program()))
+            return;
         vt::FieldHints field;
         field.terminal = caps.test(fcitx::CapabilityFlag::Terminal);
         field.urlOrEmail = caps.test(fcitx::CapabilityFlag::Url) || caps.test(fcitx::CapabilityFlag::Email);

@@ -218,6 +218,15 @@ public func vt_is_valid_syllable(_ word: UnsafePointer<CChar>?, _ teencode: Bool
     return SyllableValidator.isValidSyllable(cString(word), teencode: teencode)
 }
 
+/// EnglishContextLookup.opensEnglishRun — the engine's English word list (lowercase a–z).
+/// The helper's TypoFixLogic.isKnown includes it, so such a word never gets a typo fix:
+/// the frontend skips the helper round trip for it.
+@_cdecl("vt_is_english_word")
+public func vt_is_english_word(_ word: UnsafePointer<CChar>?) -> Bool {
+    guard let word else { return false }
+    return EnglishContextLookup.opensEnglishRun(cString(word))
+}
+
 // MARK: - Gạch đỏ âm tiết sai chính tả khi gõ (opt-in, preedit only)
 
 /// TelexEngine.hasSpellingError(autoRestore:) — asked per key only when the setting is on.

@@ -89,6 +89,10 @@ bool dateCandidate(uint32_t boundary, const std::string &prevRun, const std::str
 // TypoFixLogic.worthChecking: boundary in "  ,;!?)", raw 3–10 ASCII letters, word all
 // letters and NOT a valid Vietnamese syllable.
 bool typoWorthChecking(uint32_t boundary, const std::string &raw, const std::string &word);
+// The raw keys (ASCII letters, any case) spell a word of the engine's English list
+// (vt_is_english_word): TypoFixLogic.correction rejects it (isKnown) before any lookup, so
+// the Session never sends it to the helper — most English words never wake the helper.
+bool typoKnownEnglish(const std::string &raw);
 
 // ToneRunLogic.Tracker: counts unaccented syllables at boundaries.
 enum class ToneTrigger { None, SentenceEnd, Pause };

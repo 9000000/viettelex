@@ -461,7 +461,7 @@ gboolean processKeyEvent(IBusEngine *engine, guint keyval, guint keycode, guint 
 }
 
 void focusCommon(VtIBusEngine *self) {
-    if (G().watcher->changedOnDisk()) applySettingsToAll();  // inotify fallback
+    if (G().watcher->changedOnDiskUnwatched()) applySettingsToAll();  // inotify fallback
     self->surroundingProven = FALSE;  // prove it again for this field
     self->focused = TRUE;
     *self->appId = effectiveAppId(*self->clientId);
