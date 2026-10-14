@@ -102,6 +102,10 @@ object L10nTable {
         put("Giữ phím hàng trên để ra số", "Hold top-row keys for numbers")
         put("Giữ phím ra ký tự đặc biệt", "Hold keys for symbols")
         put("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh", "Swipe space to switch Vietnamese / English")
+        put("Vuốt phím để sao chép/dán", "Swipe keys to copy/paste")
+        put("Chạm phím rồi vuốt thẳng lên quá hàng phím trên cùng và nhấc tay: C sao chép, X cắt, V dán, A chọn hết, Z hoàn tác, Y làm lại. Kéo ngón trở xuống để huỷ. Giữ ⇧ rồi kéo phím cách để chọn chữ.",
+            "Touch a key, swipe straight up past the top key row and lift: C copy, X cut, V paste, A select all, Z undo, Y redo. Slide back down to cancel. Hold ⇧ while dragging the space bar to select text.")
+        put("Chưa chọn chữ", "Nothing selected")
         put("Chế độ một tay", "One-handed mode")
         put("Phóng to chữ khi bấm", "Key preview on press")
         put("Phím sẫm khi bấm", "Darken keys on press")
@@ -157,6 +161,7 @@ object L10nTable {
         put("Mẫu câu tắt", "Snippets off")
         put("Hàng số", "Number row")
         put("Vuốt phím cách", "Space swipe")
+        put("Vuốt sao chép/dán", "Swipe copy/paste")
         put("Rung", "Vibration")
         put("Một tay", "One-handed")
         put("Bàn phím cứng", "Hardware keyboard")

@@ -490,7 +490,7 @@ class KeyboardSession(
     /** IME bật/tắt gõ vuốt cho ô hiện tại (sau [startInput]). Tắt ⇒ bridge thôi ghi checkpoint. */
     fun setSwipeTyping(on: Boolean) {
         swipeTypingActive = on
-        bridge.trackLetterUndo = on || letterAlternates
+        bridge.trackLetterUndo = on || letterAlternates || keyCommands
         if (!on) clearSwipe()
     }
 
@@ -498,7 +498,14 @@ class KeyboardSession(
     private var letterAlternates = false
     fun setLetterAlternates(on: Boolean) {
         letterAlternates = on
-        bridge.trackLetterUndo = swipeTypingActive || on
+        bridge.trackLetterUndo = swipeTypingActive || on || keyCommands
+    }
+
+    /** "Vuốt phím để sao chép/dán" bật ở ô này ([KeyCommandGesture]) — cần checkpoint huỷ phím chữ. */
+    private var keyCommands = false
+    fun setKeyCommands(on: Boolean) {
+        keyCommands = on
+        bridge.trackLetterUndo = swipeTypingActive || letterAlternates || on
     }
 
     private fun clearSwipe() {

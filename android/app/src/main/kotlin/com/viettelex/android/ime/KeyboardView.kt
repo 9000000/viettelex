@@ -21,6 +21,8 @@ import com.viettelex.keyboard.EmojiSearch
 import com.viettelex.keyboard.EmojiSearchSession
 import com.viettelex.keyboard.GestureClassifier
 import com.viettelex.keyboard.Key
+import com.viettelex.keyboard.KeyCommand
+import com.viettelex.keyboard.KeyCommandGesture
 import com.viettelex.keyboard.KeyCommitQueue
 import com.viettelex.keyboard.KeyboardLanguage
 import com.viettelex.keyboard.SpaceFlick
@@ -66,6 +68,16 @@ class KeyboardView(
         fun onTrackpadMove(delta: Int, vertical: Boolean) { onKey(Key.MoveCursor(delta, vertical)) }
         /** Nhả trackpad (sau bước cuối): IME cập nhật auto-shift + gợi ý một lần. */
         fun onTrackpadEnd() {}
+        /** Trackpad trong lúc GIỮ ⇧: mở rộng vùng chọn [delta] grapheme / dòng (thay vì dời con trỏ). */
+        fun onTrackpadSelect(delta: Int, vertical: Boolean) { onTrackpadMove(delta, vertical) }
+
+        // --- "Vuốt phím để sao chép/dán" (chỉ gọi khi [keyCommands] bật) ---
+        /** Ô đang có vùng chọn (chạm phím có lệnh: chữ chờ nhấc mới chèn để vùng chọn còn nguyên). */
+        fun keyCommandHasSelection(): Boolean = false
+        /** Nhãn xem trước khi lệnh vừa bật: tên lệnh, hoặc lý do không chạy được ("Chưa chọn chữ"). */
+        fun keyCommandLabel(cmd: KeyCommand): String = tr(cmd.label)
+        /** Nhấc tay lúc lệnh đang bật. [letterDeferred] = chữ của phím CHƯA chèn (không phải huỷ). */
+        fun onKeyCommand(cmd: KeyCommand, letterDeferred: Boolean) {}
         /** Vuốt nhanh phím cách (chỉ khi [configureSpaceFlick] bật): đổi Tiếng Việt ↔ Tiếng Anh. */
         fun onSpaceFlick() {}
         /** Giữ ⌫ > 3 s — xoá theo từ. */
@@ -309,6 +321,21 @@ class KeyboardView(
     private var swipePath: SwipePath? = null
     private var swipeLayout: SwipeLayout? = null
     private var lastLetterDownT = Long.MIN_VALUE / 2
+
+    // --- vuốt phím chữ thẳng lên ⇒ lệnh (KeyCommandGesture, Keys.SWIPE_KEY_COMMANDS) ---
+    /** IME đặt theo cài đặt (tắt khi TalkBack). Tắt ⇒ một phép so bool mỗi chạm phím chữ. */
+    var keyCommands = false
+        set(v) { if (field != v) { field = v; if (!v) endKeyCmd() } }
+    private var keyCmd: KeyCommandGesture? = null
+    private var keyCmdPid = -1
+    private var keyCmdDeferred = false
+    private var keyCmdShiftWas = Shift.OFF
+    private var keyCmdShown = false
+    /** Giữ ⇧ (ngón đang đè phím shift) — trackpad thành chọn chữ. */
+    private var shiftPtr = -1
+    private var shiftBeforeTap = Shift.OFF
+    private var shiftUsedAsModifier = false
+    private var trackpadSelect = false
     private val yOffPx = TouchGeometry.yOffset * d
 
     private val emojiPane = EmojiPane(this, theme, feedback)
@@ -1016,6 +1043,7 @@ class KeyboardView(
             MotionEvent.ACTION_MOVE -> for (i in 0 until e.pointerCount) {
                 val pid = e.getPointerId(i)
                 if (pid == altPid) altMove(e.getX(i), e.getY(i))
+                if (pid == keyCmdPid) keyCmdMove(e.getX(i), e.getY(i))
                 if (pid == swipePid) swipeMove(e, i) else move(pid, e.getX(i), e.getY(i))
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
@@ -1033,6 +1061,7 @@ class KeyboardView(
         // Đang vuốt: ngón khác bỏ qua (không gõ chữ lạc); đang chờ phân loại: khoá là chạm.
         if (swiping) return
         if (swipePid >= 0 && pid != swipePid) { classifier.pointerAdded(); stopSwipeTracking() }
+        if (keyCmdPid >= 0 && pid != keyCmdPid) rejectKeyCmd()   // ngón thứ hai ⇒ không phải lệnh
         settleAlt()                       // ký tự phụ đang giữ chốt TRƯỚC phím mới
         settlePopover()                   // popup đang mở chốt ô đang chọn TRƯỚC phím mới
         ptrDownX[pid] = x; ptrDownY[pid] = y
@@ -1074,16 +1103,31 @@ class KeyboardView(
                 if (keyPreview) showBalloon(k, if (shift == Shift.OFF) k.label else k.upper)
                 val ch = (if (shift == Shift.OFF) k.label else k.upper)[0]
                 val shiftWas = shift
-                if (plane == Plane.LETTERS) listener?.onLetterTouch(
-                    (x - (k.left + k.right) / 2) / (k.right - k.left),
-                    (y - TouchGeometry.yOffset * d - (k.top + k.bottom) / 2) / (k.bottom - k.top))
-                emit(Key.Letter(ch))
+                // Vuốt phím ra lệnh: chỉ phím có lệnh (c x v a z y). Ô đang có vùng chọn ⇒ chữ CHỜ
+                // nhấc mới chèn (KeyCommitQueue) để sao chép/cắt còn vùng chọn; lượt này không gõ
+                // vuốt, không ký tự phụ (cả hai cần chữ đã chèn để huỷ).
+                val cmdGesture = if (keyCommands && plane == Plane.LETTERS && forced == null && activeCount() == 1)
+                    KeyCommandGesture.start(true, k.label[0], x / d, y / d, keyAreaTop() / d, (k.right - k.left) / d)
+                    else null
+                val defer = cmdGesture != null && listener?.keyCommandHasSelection() == true
+                if (defer) {
+                    val letter = Key.Letter(ch)
+                    commits.arm(k) { emit(letter) }
+                } else {
+                    if (plane == Plane.LETTERS) listener?.onLetterTouch(
+                        (x - (k.left + k.right) / 2) / (k.right - k.left),
+                        (y - TouchGeometry.yOffset * d - (k.top + k.bottom) / 2) / (k.bottom - k.top))
+                    emit(Key.Letter(ch))
+                }
                 if (shift == Shift.ON) { shift = Shift.OFF; invalidate() }
                 val since = e.eventTime - lastLetterDownT
                 lastLetterDownT = e.eventTime
-                if (swipeTyping && plane == Plane.LETTERS && activeCount() == 1)
+                if (cmdGesture != null) {
+                    keyCmd = cmdGesture; keyCmdPid = pid; keyCmdDeferred = defer; keyCmdShiftWas = shiftWas
+                }
+                if (!defer && swipeTyping && plane == Plane.LETTERS && activeCount() == 1)
                     startSwipeTracking(pid, k, x, y, e.eventTime, since, shiftWas)
-                if (alts.isNotEmpty()) armAlt(pid, k, x, y, shiftWas)
+                if (!defer && alts.isNotEmpty()) armAlt(pid, k, x, y, shiftWas)
             }
             KeyKind.CHAR -> {
                 feedback.click(Feedback.LETTER, this)
@@ -1131,9 +1175,11 @@ class KeyboardView(
             KeyKind.SHIFT -> {
                 feedback.click(Feedback.MODIFIER, this)
                 val now = SystemClock.uptimeMillis()
+                shiftBeforeTap = shift
                 shift = if (now - lastShiftTap < SHIFT_DOUBLE_MS) Shift.CAPS
                         else if (shift == Shift.OFF) Shift.ON else Shift.OFF
                 lastShiftTap = now
+                shiftPtr = pid; shiftUsedAsModifier = false
                 k.pressed = true
                 invalidate()   // mọi nhãn chữ đổi hoa/thường
             }
@@ -1230,6 +1276,7 @@ class KeyboardView(
             return
         }
         pressUp(pid)
+        if (pid == keyCmdPid && keyCmdUp(pid, x, y, cancelled, t)) return
         if (pid == swipePid) {
             val wasSwiping = swiping
             stopSwipeTracking()
@@ -1241,6 +1288,7 @@ class KeyboardView(
         when (k.kind) {
             KeyKind.LETTER -> {
                 hideBalloon(k)
+                commits.release(k)        // chữ chờ nhấc (vuốt-ra-lệnh khi có vùng chọn); thường là no-op
                 if (pid == altPid) {
                     val alt = altHold?.commit
                     dropAlt()
@@ -1288,7 +1336,11 @@ class KeyboardView(
                     if (a != null && !cancelled) runMenuAction(a)
                 } else if (!globeFired && !cancelled) controlAction(k)
             }
-            KeyKind.SHIFT -> Unit
+            KeyKind.SHIFT -> if (pid == shiftPtr) {
+                shiftPtr = -1
+                // ⇧ vừa dùng làm phím bổ trợ (giữ + kéo phím cách chọn chữ): trả shift như trước khi chạm.
+                if (shiftUsedAsModifier) { shift = shiftBeforeTap; lastShiftTap = 0L; shiftUsedAsModifier = false }
+            }
             KeyKind.EDIT -> if (pid == editPtr) {
                 removeCallbacks(editRepeatRun); editPtr = -1; editRepeatKey = null
             } else if (!cancelled) fireEdit(k)
@@ -1346,6 +1398,8 @@ class KeyboardView(
 
     private fun cancelAllTouches() {
         abortSwipe()
+        endKeyCmd()
+        shiftPtr = -1; shiftUsedAsModifier = false
         dropAlt()
         // Bàn phím ẩn / đổi một tay giữa lúc popup mở: không chèn đuôi đang chọn (flush dưới).
         popKey?.let { if (popHold?.fired == true) commits.disarm(it) }
@@ -1415,6 +1469,8 @@ class KeyboardView(
         val p = swipePath ?: return
         p.add(x, y - yOffPx, t / 1000.0)
         if (swiping) { trail?.add(x, y, t); return }
+        // Đang là ứng viên vuốt-lên-ra-lệnh: chưa cho thành gõ vuốt (bị loại ⇒ chạy tiếp với cả đường).
+        if (swipePid == keyCmdPid && keyCmd?.live == true) return
         when (classifier.move(x / d, y / d, t)) {
             GestureClassifier.State.SWIPE -> beginSwipe(p)
             GestureClassifier.State.TAP -> stopSwipeTracking()
@@ -1466,6 +1522,87 @@ class KeyboardView(
         listener?.onSwipeTypingCancel()
     }
 
+    // MARK: vuốt phím thẳng lên ⇒ lệnh (KeyCommandGesture)
+
+    /** Mép trên hàng phím (kể cả hàng số) — toạ độ view. Chỉ gọi lúc chạm phím CÓ lệnh. */
+    private fun keyAreaTop(): Float {
+        var t = Float.MAX_VALUE
+        for (k in keys) if (k.top < t) t = k.top
+        return if (t == Float.MAX_VALUE) 0f else t
+    }
+
+    private fun keyCmdMove(x: Float, y: Float) {
+        val g = keyCmd ?: return
+        when (g.move(x / d, y / d)) {
+            KeyCommandGesture.Event.ARMED -> showKeyCmd(g.command, x)
+            KeyCommandGesture.Event.DISARMED -> hideKeyCmd()
+            KeyCommandGesture.Event.REJECTED -> rejectKeyCmd()
+            KeyCommandGesture.Event.NONE -> Unit
+        }
+    }
+
+    /** Nhãn lệnh nổi trên hàng phím đầu (ngón đang ở thanh gợi ý nên không che) + rung nhẹ. */
+    private fun showKeyCmd(cmd: KeyCommand, x: Float) {
+        ptrKey[keyCmdPid]?.let { hideBalloon(it) }
+        dropAlt()
+        val label = listener?.keyCommandLabel(cmd) ?: tr(cmd.label)
+        val w = theme.dp(132f); val h = theme.dp(if (theme.tablet) 52f else 46f)
+        val l = (x - w / 2).coerceIn(0f, maxOf(0f, width - w))
+        val t = keyAreaTop() + top + theme.dp(4f)
+        balloon.showPopup(l, t, l + w, t + h, floatArrayOf(l + theme.dp(4f)), w - theme.dp(8f), listOf(label), 17f, 0)
+        keyCmdShown = true
+        feedback.tick(this)
+    }
+
+    private fun hideKeyCmd() {
+        if (!keyCmdShown) return
+        keyCmdShown = false
+        balloon.hidePopup()
+    }
+
+    /** Không còn là lệnh (ngón thứ hai / lệch ngang / kéo xuống / popup): chữ giữ nguyên như chạm thường. */
+    private fun rejectKeyCmd() {
+        keyCmd?.reject()
+        hideKeyCmd()
+        keyCmd = null; keyCmdPid = -1
+        // Chữ đang chờ (vùng chọn) vẫn trong commits: chèn ở lúc nhấc / phím kế như phím thường.
+    }
+
+    private fun endKeyCmd() {
+        hideKeyCmd()
+        keyCmd = null; keyCmdPid = -1; keyCmdDeferred = false
+    }
+
+    /**
+     * Nhấc ngón đang theo dõi lệnh. true = lệnh đã chạy. false = chạm/vuốt thường tiếp tục ở
+     * [up]; ứng viên chưa bật mà gõ vuốt đang chờ ⇒ cho bộ phân loại xem điểm cuối (vuốt dọc
+     * "xe" nhấc trong vùng phím vẫn là gõ vuốt).
+     */
+    private fun keyCmdUp(pid: Int, x: Float, y: Float, cancelled: Boolean, t: Long): Boolean {
+        val g = keyCmd ?: return false
+        val wasLive = g.live
+        val cmd = if (cancelled) null else g.release(x / d, y / d)
+        val deferred = keyCmdDeferred
+        endKeyCmd()
+        if (cmd == null) {
+            if (wasLive && pid == swipePid && !swiping) swipePoint(x, y, t)
+            return false
+        }
+        if (pid == swipePid) stopSwipeTracking()
+        if (pid == altPid) dropAlt()
+        val k = ptrKey[pid]
+        ptrKey[pid] = null
+        if (k != null) {
+            hideBalloon(k)
+            if (deferred) commits.disarm(k)
+            if (k.pressed) { k.pressed = false; invalidateKey(k) }
+        }
+        // Chữ đầu đã nhả shift một lần — trả lại (lệnh không gõ chữ).
+        if (keyCmdShiftWas == Shift.ON && shift == Shift.OFF) { shift = Shift.ON; invalidate() }
+        listener?.onKeyCommand(cmd, deferred)
+        return true
+    }
+
     // MARK: giữ phím ra ký tự phụ
 
     /** Chạm phím có ký tự phụ: hẹn giờ [KeyAlternates.HOLD_MS]; chữ đã chèn lúc chạm. */
@@ -1487,6 +1624,7 @@ class KeyboardView(
         val k = altKey ?: return
         if (swiping || !h.fire()) return
         if (swipePid == altPid) stopSwipeTracking()   // đã là giữ: trôi sau đó không thành vuốt
+        if (keyCmdPid == altPid) rejectKeyCmd()       // popup ký tự phụ ⇒ không phải lệnh
         feedback.longPress(this)
         showBalloon(k, h.alt)
     }
@@ -1693,13 +1831,17 @@ class KeyboardView(
 
     private fun sendTrackpadStep(s: TrackpadGesture.Step) {
         if (plane == Plane.EMOJI_SEARCH) return
-        listener?.onTrackpadMove(s.count, s.axis == TrackpadGesture.Axis.V)
+        // Giữ ⇧ lúc kéo (chỉ khi bật "Vuốt phím để sao chép/dán") ⇒ chọn chữ; chốt tới khi nhả trackpad.
+        if (keyCommands && shiftPtr >= 0) { trackpadSelect = true; shiftUsedAsModifier = true }
+        if (trackpadSelect) listener?.onTrackpadSelect(s.count, s.axis == TrackpadGesture.Axis.V)
+        else listener?.onTrackpadMove(s.count, s.axis == TrackpadGesture.Axis.V)
     }
 
     private fun endTrackpad() {
         trackpad = false
         if (trackpadFramePosted) { Choreographer.getInstance().removeFrameCallback(trackpadFrame); trackpadFramePosted = false }
         trackpadBatch.drain()?.let { sendTrackpadStep(it) }
+        trackpadSelect = false
         listener?.onTrackpadEnd()
         invalidate()
     }

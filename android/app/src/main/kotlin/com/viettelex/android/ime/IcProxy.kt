@@ -330,6 +330,42 @@ class IcProxy(
         shadow.invalidate()
     }
 
+    /**
+     * Giữ ⇧ + kéo phím cách: bắt đầu mở rộng vùng chọn ([ShiftSelect]). null ⇒ không biết chắc
+     * vị trí (TYPE_NULL / ô URI / con trỏ chưa tin được) — IME dùng [shiftArrow].
+     */
+    fun beginShiftSelect(): ShiftSelect? {
+        val c = conn() ?: return null
+        if (rawKeys || uriField) return null
+        val s: Int; val e: Int
+        if (tracker.hasSelection) { s = tracker.selectionStart; e = tracker.selectionEnd }
+        else if (tracker.reliable && tracker.cursor >= 0) { s = tracker.cursor; e = s }
+        else return null
+        val before = c.textBefore(CONTEXT_CAP)?.toString() ?: return null
+        val after = c.textAfter(CONTEXT_CAP)?.toString() ?: return null
+        val sel = if (e > s) c.selectedText()?.toString() ?: return null else ""
+        return ShiftSelect.begin(s, e, before, sel, after)
+    }
+
+    /** Áp [ShiftSelect] hiện tại: setSelection(neo, focus); false ⇒ app từ chối (con trỏ thành chưa biết). */
+    fun applyShiftSelect(x: ShiftSelect): Boolean {
+        val c = conn() ?: return false
+        afterCache = null
+        if (!c.setSelection(x.anchor, x.focus)) { tracker.unknown(); shadow.invalidate(); return false }
+        if (x.anchor == x.focus) tracker.movedTo(x.focus) else tracker.selectedByMe(x.anchor, x.focus)
+        shadow.invalidate()
+        return true
+    }
+
+    /** Dự phòng: Shift + mũi tên [n] lần (app tự mở rộng vùng chọn). */
+    fun shiftArrow(key: EditorPort.PortKey, n: Int) {
+        val c = conn() ?: return
+        afterCache = null
+        repeat(minOf(n, 64)) { c.sendKeyMeta(key, shift = true) }
+        tracker.unknown()
+        shadow.invalidate()
+    }
+
     // Văn bản SAU con trỏ khi kéo trackpad sang phải: đọc 1 lần rồi tự trượt theo từng bước
     // (không getTextAfterCursor mỗi bước). Chỉ tin khi con trỏ vẫn ở [afterPos]; mọi edit/
     // đổi từ ngoài (begin, invalidateShadow, fail, editorPort) xoá cache.

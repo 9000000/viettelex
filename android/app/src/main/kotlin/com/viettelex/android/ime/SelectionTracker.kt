@@ -39,6 +39,9 @@ class SelectionTracker {
     private var selStart = -1
     private var selEnd = -1
     val hasSelection: Boolean get() = selStart >= 0
+    /** Đầu/cuối selection app báo ([hasSelection]); -1 = không có. */
+    val selectionStart: Int get() = selStart
+    val selectionEnd: Int get() = selEnd
 
     fun reset(selStart: Int, selEnd: Int) {
         n = 0

@@ -32,6 +32,18 @@ enum class EditAction {
     }
 }
 
+/** Lệnh vuốt phím ([com.viettelex.keyboard.KeyCommandGesture]) → ô bảng sửa tương ứng (cùng [EditCommands]). */
+object KeyCommands {
+    fun editAction(c: com.viettelex.keyboard.KeyCommand): EditAction = when (c) {
+        com.viettelex.keyboard.KeyCommand.COPY -> EditAction.COPY
+        com.viettelex.keyboard.KeyCommand.CUT -> EditAction.CUT
+        com.viettelex.keyboard.KeyCommand.PASTE -> EditAction.PASTE
+        com.viettelex.keyboard.KeyCommand.SELECT_ALL -> EditAction.SELECT_ALL
+        com.viettelex.keyboard.KeyCommand.UNDO -> EditAction.UNDO
+        com.viettelex.keyboard.KeyCommand.REDO -> EditAction.REDO
+    }
+}
+
 object EditPanel {
     /** Lưới theo hàng (trên → dưới). Mũi tên xếp hình chữ thập quanh "Chọn". */
     val GRID: List<List<EditAction>> = listOf(

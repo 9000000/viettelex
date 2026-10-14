@@ -61,12 +61,13 @@ class BackupTests {
         val p = BackupCodec.decode(fixture("backup-ios-v1"))
         assertEquals("ios", p.platform)
         assertEquals(Instant.parse("2026-09-27T08:00:00Z"), p.createdAt)
-        assertEquals(39, p.settings!!.size)             // emojiSuggest/pasteButton chỉ iOS, bị bỏ qua
+        assertEquals(40, p.settings!!.size)             // emojiSuggest/pasteButton chỉ iOS, bị bỏ qua
         assertEquals(true, p.settings!![Keys.TEXT_TOOLS_ENABLED])
         assertEquals("wood", p.settings!![Keys.KEY_SOUND_STYLE])
         assertEquals(true, p.settings!![Keys.KEY_SOUND])
         assertEquals(70, p.settings!![Keys.KEY_SOUND_VOLUME])
         assertEquals(true, p.settings!!["autoSpaceAfterPunct"])
+        assertEquals(false, p.settings!![Keys.SWIPE_KEY_COMMANDS])   // iOS ghi (mặc định tắt)
         assertEquals(false, p.settings!![Keys.SUGGEST_IN_NO_SUGGEST_FIELDS])   // #113, mặc định BẬT
         assertEquals("en", p.settings!![Keys.UI_LANGUAGE])   // ngôn ngữ giao diện (chuỗi) đi qua sao lưu
         assertEquals(40, p.settings!!["keyboardTransparency"])
@@ -127,7 +128,7 @@ class BackupTests {
             "keyboardTransparency" to 250, "keyLabelTransparency" to 35,
             BackupPrefs.SHORTCUTS_KEY to "# VietTelex — bảng gõ tắt\nko: không\n")
         val p = BackupPrefs.snapshot({ prefs[it] }, listOf(TemplateItem("", "a")), null)
-        assertEquals(44, p.settings!!.size)
+        assertEquals(45, p.settings!!.size)
         assertEquals("en", p.settings!![Keys.TRANSLATE_TARGET])   // Dịch trên máy: mặc định English
         assertEquals(false, p.settings!![Keys.NUMBER_ROW_FULL_HEIGHT])   // mặc định tắt
         assertEquals(true, p.settings!![Keys.TEXT_TOOLS_ENABLED])   // chưa đặt ⇒ BẬT (mặc định)
@@ -138,6 +139,7 @@ class BackupTests {
         assertEquals(false, p.settings!!["autoCorrect"])
         assertEquals(true, p.settings!!["autoCapitalize"])
         assertEquals(false, p.settings!!["spaceSwipeLanguage"])
+        assertEquals(false, p.settings!![Keys.SWIPE_KEY_COMMANDS])   // vuốt phím sao chép/dán: mặc định tắt
         assertEquals(false, p.settings!!["autoSpaceAfterPunct"])
         assertEquals(true, p.settings!!["quickTelex"])
         assertEquals(true, p.settings!!["simpleTelex"])

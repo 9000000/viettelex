@@ -47,6 +47,8 @@ object Keys {
     const val PASTE_OFFERED_ID = "pasteOfferedId"
     /** Vuốt phím cách đổi Tiếng Việt ↔ Tiếng Anh — mặc định TẮT (tắt ⇒ luôn Tiếng Việt). */
     const val SPACE_SWIPE_LANGUAGE = "spaceSwipeLanguage"
+    /** Vuốt phím chữ thẳng lên ra lệnh sao chép/cắt/dán… ([KeyCommandGesture]) — mặc định TẮT. Giống iOS. */
+    const val SWIPE_KEY_COMMANDS = "swipeKeyCommands"
     /** Tự thêm dấu cách sau . , ? ! ; : ([AutoSpace]) — mặc định TẮT. Giống iOS. */
     const val AUTO_SPACE_AFTER_PUNCT = "autoSpaceAfterPunct"
     /** Ngôn ngữ đang gõ ("vi" | "en") — trạng thái bàn phím, KHÔNG sao lưu. */

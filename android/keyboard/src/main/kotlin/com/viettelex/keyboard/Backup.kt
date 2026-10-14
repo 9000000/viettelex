@@ -68,6 +68,7 @@ object BackupSettings {
         Spec(Keys.AUTO_CORRECT, SettingKind.Bool(false)),
         Spec(Keys.AUTO_CAPITALIZE, SettingKind.Bool(true)),
         Spec(Keys.SPACE_SWIPE_LANGUAGE, SettingKind.Bool(false)),
+        Spec(Keys.SWIPE_KEY_COMMANDS, SettingKind.Bool(false)),
         Spec(Keys.LONG_PRESS_NUMBERS, SettingKind.Bool(true)),
         Spec(Keys.LONG_PRESS_SYMBOLS, SettingKind.Bool(false)),
         Spec(Keys.AUTO_SPACE_AFTER_PUNCT, SettingKind.Bool(false)),

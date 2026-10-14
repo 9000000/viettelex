@@ -70,6 +70,8 @@ data class KeyboardSettings(
     var autoCapitalize: Boolean = true,
     /** Vuốt phím cách đổi Tiếng Việt ↔ Tiếng Anh — mặc định TẮT. Giống iOS. */
     var spaceSwipeLanguage: Boolean = false,
+    /** Vuốt phím chữ thẳng lên ⇒ sao chép/cắt/dán/chọn hết/hoàn tác/làm lại ([KeyCommandGesture]) — mặc định TẮT. */
+    var swipeKeyCommands: Boolean = false,
     /** Tự thêm dấu cách sau . , ? ! ; : ([AutoSpace]) — mặc định TẮT; tắt ⇒ không đọc context. */
     var autoSpaceAfterPunct: Boolean = false,
     /** Telex cho bàn phím cứng — mặc định BẬT; tắt ⇒ IME không đụng KeyEvent. */
@@ -154,6 +156,7 @@ data class KeyboardSettings(
             s.autoCorrect = b(Keys.AUTO_CORRECT, s.autoCorrect)
             s.autoCapitalize = b(Keys.AUTO_CAPITALIZE, s.autoCapitalize)
             s.spaceSwipeLanguage = b(Keys.SPACE_SWIPE_LANGUAGE, s.spaceSwipeLanguage)
+            s.swipeKeyCommands = b(Keys.SWIPE_KEY_COMMANDS, s.swipeKeyCommands)
             s.autoSpaceAfterPunct = b(Keys.AUTO_SPACE_AFTER_PUNCT, s.autoSpaceAfterPunct)
             s.hardwareTelex = b(Keys.HARDWARE_TELEX, s.hardwareTelex)
             s.shortcutsEnabled = b(Keys.SHORTCUTS_ENABLED, s.shortcutsEnabled)

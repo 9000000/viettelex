@@ -34,6 +34,7 @@ import com.viettelex.keyboard.EmojiRecents
 import com.viettelex.keyboard.FieldTraits
 import com.viettelex.keyboard.FutoSwipe
 import com.viettelex.keyboard.Key
+import com.viettelex.keyboard.KeyCommand
 import com.viettelex.keyboard.KeyboardData
 import com.viettelex.keyboard.KeyboardSession
 import com.viettelex.keyboard.KeyboardSettings
@@ -788,7 +789,35 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         resetIfEditFailed()
     }
 
+    /** Giữ ⇧ + kéo phím cách: vùng chọn đang mở rộng (đọc văn bản một lần ở bước đầu). */
+    private var shiftSelect: ShiftSelect? = null
+    private var shiftSelectTried = false
+
+    override fun onTrackpadSelect(delta: Int, vertical: Boolean) {
+        if (!trackpadMoved) {
+            clearSwipeUndo()
+            if (!proxy.begin()) return
+            try { session.commitComposing(proxy) } finally { proxy.end() }
+            handler.removeCallbacks(autoShiftRun); handler.removeCallbacks(suggestRun)
+            trackpadMoved = true
+        }
+        if (vertical) {          // lên/xuống theo dòng hiển thị: app tự mở rộng (Shift+↑/↓)
+            shiftSelect = null; shiftSelectTried = true
+            proxy.shiftArrow(if (delta < 0) EditorPort.PortKey.UP else EditorPort.PortKey.DOWN, kotlin.math.abs(delta))
+            return
+        }
+        if (!shiftSelectTried) { shiftSelectTried = true; shiftSelect = proxy.beginShiftSelect() }
+        val sel = shiftSelect
+        if (sel == null) {
+            proxy.shiftArrow(if (delta < 0) EditorPort.PortKey.LEFT else EditorPort.PortKey.RIGHT, kotlin.math.abs(delta))
+            return
+        }
+        if (sel.move(delta) != null && !proxy.applyShiftSelect(sel)) shiftSelect = null
+        resetIfEditFailed()
+    }
+
     override fun onTrackpadEnd() {
+        shiftSelect = null; shiftSelectTried = false
         if (!trackpadMoved) return
         trackpadMoved = false
         applyAutoShift()
@@ -855,6 +884,10 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         keyboard?.setAlternates(m)
         keyboard?.popoversEnabled = accessibility?.isTouchExplorationEnabled != true
         session.setLetterAlternates(m.isNotEmpty())
+        // "Vuốt phím để sao chép/dán": tắt khi TalkBack (vuốt là cử chỉ của trình đọc).
+        val kc = st.swipeKeyCommands && accessibility?.isTouchExplorationEnabled != true
+        keyboard?.keyCommands = kc
+        session.setKeyCommands(kc)
     }
 
     /** Công tắc FUTO Swipe: bật ⇒ tạo + tải model ở nền (nhả lúc ẩn thì tải lại); tắt ⇒ bỏ. */
@@ -1303,6 +1336,32 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             EditCommands.run(action, selecting, proxy, tracker)
         } finally { proxy.end() }
         resetIfEditFailed()
+        applyAutoShift()
+        refreshBar()
+    }
+
+    // MARK: vuốt phím thẳng lên ⇒ lệnh (KeyCommandGesture)
+
+    override fun keyCommandHasSelection(): Boolean = proxy.hasSelection
+
+    override fun keyCommandLabel(cmd: KeyCommand): String =
+        if (cmd.needsSelection && !proxy.hasSelection) tr("Chưa chọn chữ") else tr(cmd.label)
+
+    /**
+     * Nhấc tay lúc lệnh đang bật: gỡ chữ của phím (đã chèn lúc chạm — checkpoint như gõ vuốt;
+     * không được thì ⌫), chốt từ đang gõ, rồi chạy lệnh của bảng sửa (performContextMenuAction,
+     * dự phòng Ctrl+phím). [letterDeferred] ⇒ chữ chưa chèn, vùng chọn còn nguyên.
+     */
+    override fun onKeyCommand(cmd: KeyCommand, letterDeferred: Boolean) {
+        clearSwipeUndo()
+        if (!proxy.begin()) return
+        try {
+            if (!letterDeferred && !session.undoLastLetter(proxy)) session.handle(Key.Backspace, proxy)
+            session.commitComposing(proxy)
+            if (!cmd.needsSelection || proxy.hasSelection) EditCommands.run(KeyCommands.editAction(cmd), false, proxy, tracker)
+        } finally { proxy.end() }
+        resetIfEditFailed()
+        handler.removeCallbacks(suggestRun)
         applyAutoShift()
         refreshBar()
     }

@@ -112,6 +112,7 @@ internal data class FeatureSearchEntry(val viTitle: String, val keywords: String
             FeatureSearchEntry("Giữ phím hàng trên để ra số", "số giữ lâu number long press", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Giữ phím hàng 2, 3 để ra ký tự đặc biệt", "ký hiệu symbol @ # giữ lâu long press", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh", "space ngôn ngữ english language", FeaturePage.Phim), // l10n-key
+            FeatureSearchEntry("Vuốt phím để sao chép/dán", "copy paste cut undo redo select sao chép dán cắt hoàn tác chọn hết clipboard vuốt lên swipe", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Chế độ một tay", "one hand một tay", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Bàn phím thả nổi", "floating nổi kéo di chuyển float", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Phóng to chữ khi bấm", "key preview popup", FeaturePage.Phim), // l10n-key
@@ -287,6 +288,7 @@ private fun FeatureHome(onOpen: (FeaturePage) -> Unit) {
     val templatesOn by rememberBoolPref(Keys.TEMPLATES_ENABLED, Prefs.D.templatesEnabled)
     val numberRow by rememberBoolPref(Keys.NUMBER_ROW, Prefs.D.numberRow)
     val spaceSwipe by rememberBoolPref(Keys.SPACE_SWIPE_LANGUAGE, Prefs.D.spaceSwipeLanguage)
+    val keyCmds by rememberBoolPref(Keys.SWIPE_KEY_COMMANDS, Prefs.D.swipeKeyCommands)
     val autoSpace by rememberBoolPref(Keys.AUTO_SPACE_AFTER_PUNCT, Prefs.D.autoSpaceAfterPunct)
     val haptic by rememberBoolPref(Keys.HAPTIC_FEEDBACK, Prefs.D.hapticFeedback)
     val keySound by rememberBoolPref(Keys.KEY_SOUND, Prefs.D.keySound)
@@ -311,6 +313,7 @@ private fun FeatureHome(onOpen: (FeaturePage) -> Unit) {
         FeaturePage.GoTat -> (if (!shortcutsOn) tr("Gõ tắt tắt") else if (shortcutCount == 0) tr("Gõ tắt bật") else tr("Gõ tắt: %d mục", shortcutCount)) +
             " · " + if (templatesOn) tr("Mẫu câu bật") else tr("Mẫu câu tắt")
         FeaturePage.Phim -> join(numberRow to tr("Hàng số"), spaceSwipe to tr("Vuốt phím cách"),
+            keyCmds to tr("Vuốt sao chép/dán"),
             autoSpace to tr("Cách sau dấu câu"), haptic to tr("Rung"), keySound to tr("Âm"),
             (oneHand != "off") to tr("Một tay"), floating to tr("Thả nổi"), hardware to tr("Bàn phím cứng"), none = tr("Mặc định"))
         FeaturePage.GiaoDien -> theme.effectiveTheme.title + (if (wallpaperOn) " · " + tr("Ảnh nền") else "") +
@@ -544,6 +547,9 @@ private fun PhimPage(onBack: () -> Unit) {
     VTSection(header = tr("Cử chỉ")) {
         BoolToggle(Keys.SPACE_SWIPE_LANGUAGE, Prefs.D.spaceSwipeLanguage, tr("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh"),
             tr("Vuốt nhanh phím cách sang trái/phải. Góc phím cách hiện VI / EN. Tiếng Anh gõ nguyên văn. Giữ rồi kéo vẫn là di con trỏ."))
+        RowDivider()
+        BoolToggle(Keys.SWIPE_KEY_COMMANDS, Prefs.D.swipeKeyCommands, tr("Vuốt phím để sao chép/dán"),
+            tr("Chạm phím rồi vuốt thẳng lên quá hàng phím trên cùng và nhấc tay: C sao chép, X cắt, V dán, A chọn hết, Z hoàn tác, Y làm lại. Kéo ngón trở xuống để huỷ. Giữ ⇧ rồi kéo phím cách để chọn chữ."))
         RowDivider()
         OneHandRow()
         RowDivider()
