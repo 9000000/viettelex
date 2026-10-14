@@ -101,6 +101,7 @@ struct FeatureSearchEntry: Identifiable {
             .init(viTitle: LK("Sửa dấu từ đã gõ"), keywords: "sửa dấu con trỏ backspace", page: .chinhTa),
             .init(viTitle: LK("Chọn phím thông minh"), keywords: "chạm trượt smart touch thử nghiệm", page: .chinhTa),
             .init(viTitle: LK("Tự sửa từ gõ sai"), keywords: "autocorrect sửa lỗi thử nghiệm", page: .chinhTa),
+            .init(viTitle: LK("Gợi ý sửa lỗi chạm trượt"), keywords: "chạm trượt phím bên cạnh adjacent typo gợi ý", page: .chinhTa),
             .init(viTitle: LK("Thanh gợi ý"), keywords: "suggestion học từ", page: .goiY),
             .init(viTitle: LK("Gợi ý emoji"), keywords: "emoji biểu tượng", page: .goiY),
             .init(viTitle: LK("Chip số"), keywords: "số tiền đọc số number", page: .goiY),
@@ -108,7 +109,7 @@ struct FeatureSearchEntry: Identifiable {
             .init(viTitle: LK("Nút Dán"), keywords: "paste dán clipboard", page: .goiY),
             .init(viTitle: LK("Lọc từ nhạy cảm"), keywords: "tục chửi filter", page: .goiY),
             .init(viTitle: LK("Từ điển cá nhân"), keywords: "dictionary tên riêng thuật ngữ", page: .goiY),
-            .init(viTitle: LK("Xóa từ đã học"), keywords: "xoá học reset", page: .goiY),
+            .init(viTitle: LK("Xoá từ đã học"), keywords: "xoá học reset", page: .goiY),
             .init(viTitle: LK("Gõ vuốt"), keywords: "swipe vuốt thử nghiệm", page: .goVuot),
             .init(viTitle: LK("Vuốt từ tiếng Anh"), keywords: "swipe english", page: .goVuot),
             .init(viTitle: LK("Mô hình neural gõ vuốt"), keywords: "futo neural swipe", page: .goVuot),
@@ -145,6 +146,9 @@ struct FeatureSearchEntry: Identifiable {
         }
         if PlusGate.isUnlocked(.textTools) {
             e.append(.init(viTitle: LK("Công cụ văn bản"), keywords: "text tools hoa thường bỏ dấu dịch translate plus", page: .goTat))
+        }
+        if PlusFeature.translate.isAvailableOnDevice, PlusGate.isUnlocked(.translate) {
+            e.append(.init(viTitle: LK("Dịch trên máy"), keywords: "translate dịch ngôn ngữ language gói dịch plus", page: .goTat))
         }
         if ICloudSync.isUnlocked() {
             e.append(.init(viTitle: LK("Đồng bộ iCloud"), keywords: "sync icloud đồng bộ", page: .saoLuu))
@@ -256,9 +260,12 @@ struct TinhNangSections: View {
     @AppStorage(ShortcutFile.enabledKey, store: featureDefaults) private var shortcutsEnabled = true
     @AppStorage("templatesEnabled", store: featureDefaults) private var templatesEnabled = true
     @AppStorage("numberRow", store: featureDefaults) private var numberRow = false
+    @AppStorage(KeyGeometry.numberRowFullHeightKey, store: featureDefaults) private var numberRowFullHeight = false
     @AppStorage("spaceSwipeLanguage", store: featureDefaults) private var spaceSwipeLanguage = false
     @AppStorage("autoSpaceAfterPunct", store: featureDefaults) private var autoSpaceAfterPunct = false
     @AppStorage("hapticFeedback", store: featureDefaults) private var hapticFeedback = false
+    @AppStorage("keySound", store: featureDefaults) private var keySound = false
+    @AppStorage(PlusFeature.textToolsKey, store: featureDefaults) private var textToolsEnabled = true
     @AppStorage("oneHandMode", store: featureDefaults) private var oneHandMode = "off"
     @AppStorage("clipboardHistory", store: featureDefaults) private var clipboardHistory = false
     @AppStorage("incognitoMode", store: featureDefaults) private var incognitoMode = false
@@ -283,11 +290,15 @@ struct TinhNangSections: View {
             return Self.join([(true, L("Bật")), (swipeEnglish, L("Tiếng Anh")), (swipeFuto, "Neural")], none: "")
         case .goTat:
             let st = shortcutsEnabled ? (shortcutCount == 0 ? L("Gõ tắt bật") : L("Gõ tắt: %@ mục", shortcutCount)) : L("Gõ tắt tắt")
+            let tools = templatesEnabled && textToolsEnabled && PlusGate.isUnlocked(.textTools)
             return st + " · " + (templatesEnabled ? L("Mẫu câu bật") : L("Mẫu câu tắt"))
+                + (tools ? " · " + L("Công cụ văn bản") : "")
         case .phim:
-            return Self.join([(numberRow, L("Hàng số")), (spaceSwipeLanguage, L("Vuốt phím cách")),
+            return Self.join([(numberRow, numberRowFullHeight ? L("Hàng số cao") : L("Hàng số")),
+                              (spaceSwipeLanguage, L("Vuốt phím cách")),
                               (autoSpaceAfterPunct, L("Cách sau dấu câu")),
-                              (hapticFeedback, L("Rung")), (oneHandMode != "off", L("Một tay"))], none: L("Mặc định"))
+                              (hapticFeedback, L("Rung")), (keySound, L("Âm phím")),
+                              (oneHandMode != "off", L("Một tay"))], none: L("Mặc định"))
         case .giaoDien:
             let wp = theme.wallpaperActive(fileExists: Wallpaper.url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false)
             return theme.effectiveTheme.title + (wp ? " · " + L("Ảnh nền") : "")
@@ -380,6 +391,9 @@ struct ChinhTaPage: View {
     @AppStorage("smartTouch", store: featureDefaults) private var smartTouch = true
     /// Thử nghiệm — mặc định TẮT, xem KeyboardSettings.autoCorrect.
     @AppStorage("autoCorrect", store: featureDefaults) private var autoCorrect = false
+    /// Mặc định BẬT (KeyboardSettings.autoFixAdjacent) — trước nằm ở tab Kiểu Gõ, chuyển về đây
+    /// cạnh hai công tắc chạm trượt anh em (14/10/2026).
+    @AppStorage("autoFixAdjacent", store: featureDefaults) private var autoFixAdjacent = true
 
     var body: some View {
         FeaturePageList(page: .chinhTa) {
@@ -391,8 +405,9 @@ struct ChinhTaPage: View {
             Section {
                 experimentalToggle(L("Chọn phím thông minh"), L("Chạm sát mép giữa hai phím thì chọn phím hợp với chữ đang gõ. Chạm giữa phím luôn ra đúng phím đó."), isOn: $smartTouch)
                 experimentalToggle(L("Tự sửa từ gõ sai"), L("Khi gõ dấu cách, sửa từ lỡ chạm phím kề (tpoi → tôi) nếu chắc chắn. ⌫ ngay sau đó để trả lại chữ gốc."), isOn: $autoCorrect)
+                settingToggle(L("Gợi ý sửa lỗi chạm trượt"), L("Khi từ đang gõ không phải tiếng Việt, gợi ý từ đúng nếu bạn lỡ chạm phím bên cạnh: nbjeeuf → nhiều, ohims → phím, cahcs → cách. Chạm gợi ý để thay."), isOn: $autoFixAdjacent)
             } header: { Text(L("Chạm trượt")) } footer: {
-                Text(L("Gợi ý sửa lỗi chạm trượt (hiện trên thanh gợi ý) nằm ở tab Kiểu Gõ."))
+                Text(L("Gợi ý sửa lỗi hiện trên thanh gợi ý (cần bật Thanh gợi ý)."))
             }
         }
     }
@@ -407,6 +422,8 @@ struct GoiYPage: View {
     @AppStorage("suggestInNoSuggestFields", store: featureDefaults) private var suggestInNoSuggestFields = true
     @AppStorage("pasteButton", store: featureDefaults) private var pasteButton = true
     @AppStorage("addTonesChip", store: featureDefaults) private var addTonesChip = false
+    @State private var confirmErase = false
+    @State private var erased = false
 
     var body: some View {
         FeaturePageList(page: .goiY) {
@@ -435,9 +452,22 @@ struct GoiYPage: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
-                Button(L("Xóa từ đã học"), role: .destructive) {
-                    // Xoá file + đổi mốc userlmResetAt ⇒ bàn phím bỏ bảng trong RAM lần hiện kế tiếp.
-                    UserDictStore.eraseAll()
+                // Không hoàn tác được ⇒ hỏi lại trước khi xoá, xoá xong báo ngay dưới nút.
+                Button(L("Xoá từ đã học"), role: .destructive) { confirmErase = true }
+                    .confirmationDialog(L("Xoá mọi từ bàn phím đã học?"), isPresented: $confirmErase,
+                                        titleVisibility: .visible) {
+                        Button(L("Xoá từ đã học"), role: .destructive) {
+                            // Xoá file + đổi mốc userlmResetAt ⇒ bàn phím bỏ bảng trong RAM lần hiện kế tiếp.
+                            UserDictStore.eraseAll()
+                            erased = true
+                        }
+                        Button(L("Huỷ"), role: .cancel) {}
+                    } message: {
+                        Text(L("Gợi ý sẽ học lại từ đầu. Từ bạn thêm tay trong Từ điển cá nhân cũng bị xoá. Không hoàn tác được."))
+                    }
+                if erased {
+                    Label(L("Đã xoá từ đã học."), systemImage: "checkmark.circle.fill")
+                        .font(.footnote).foregroundStyle(.green)
                 }
             } header: { Text(L("Từ đã học")) }
         }
@@ -495,8 +525,24 @@ struct GoTatPage: View {
             ShortcutsSection()
             Section {
                 settingToggle(L("Mẫu câu"), L("Nút ☰ trên bàn phím chèn câu soạn sẵn — quản lý ở tab Mẫu Câu. Tắt: ẩn nút ☰ và tab Mẫu Câu."), isOn: $templatesEnabled)
-                if templatesEnabled, PlusGate.isUnlocked(.textTools) {
+                if PlusGate.isUnlocked(.textTools) {
+                    // Mẫu câu tắt ⇒ chip Công cụ không có chỗ hiện: giữ công tắc (mờ) + lý do,
+                    // không giấu mất như trước.
                     settingToggle(L("Công cụ văn bản"), L("Chip ⚒️ Công cụ trong lưới mẫu câu: đổi HOA/thường, bỏ dấu, dịch…"), isOn: $textToolsEnabled)
+                        .disabled(!templatesEnabled)
+                    if !templatesEnabled {
+                        Text(L("Bật Mẫu câu để dùng Công cụ văn bản — chip nằm trong lưới mẫu câu."))
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                if PlusFeature.translate.isAvailableOnDevice, PlusGate.isUnlocked(.translate), #available(iOS 26.0, *) {
+                    NavigationLink { TranslateSettingsView() } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("Dịch trên máy"))
+                            Text(L("Chọn ngôn ngữ dịch + tải gói dịch cho chip “Dịch ↔ …” trong Công cụ."))
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
                 }
             } header: { Text(L("Mẫu câu")) }
         }

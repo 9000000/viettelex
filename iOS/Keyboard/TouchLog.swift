@@ -40,9 +40,11 @@ enum TouchLog {
     }()
     /// Append off-main; cap ~300 KB (keeps the newer half). No-op khi Debug mode
     /// TẮT — mọi caller (kể cả log nút Dán mỗi lần refresh bar) đi qua cổng này.
-    static func write(_ line: String) {
+    /// `@autoclosure`: chuỗi (nội suy, String(format:)…) CHỈ được dựng khi Debug mode bật —
+    /// tắt (mặc định) thì caller trên đường phím không tốn cấp phát nào.
+    static func write(_ line: @autoclosure () -> String) {
         guard enabled, let url = fileURL else { return }
-        let stamped = stampFormat.string(from: Date()) + " " + line + "\n"
+        let stamped = stampFormat.string(from: Date()) + " " + line() + "\n"
         queue.async {
             let fm = FileManager.default
             if !fm.fileExists(atPath: url.path) { fm.createFile(atPath: url.path, contents: nil) }

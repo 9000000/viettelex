@@ -39,6 +39,7 @@
 		19E10CBD380ADB2DE7B4FD84 /* futoswipe-LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = 906FFAA7A51DC0B6F109763A /* futoswipe-LICENSE.md */; };
 		1BDEABFA14745D76DB06262B /* AddTones.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11876FBB4C611F4A86CBCBB2 /* AddTones.swift */; };
 		1D3501D761DFD4F1BED9ED72 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 853A101B912DF1524B01E1A2 /* KeyboardViewController.swift */; };
+		1D563C25C56EE3DA89FCEAE2 /* Translation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 575059AED927C97A7E6E33CD /* Translation.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		1D815BBDFF3A950828D4A0B5 /* AddTones.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11876FBB4C611F4A86CBCBB2 /* AddTones.swift */; };
 		1E175ED9F1FE58CFBD01BD44 /* AddTonesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D6434BF385E0EB2AC3B5010 /* AddTonesTests.swift */; };
 		1E3BA256F62480AA94474E72 /* TextToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E5388BE246A2014C812518 /* TextToolsTests.swift */; };
@@ -94,7 +95,6 @@
 		3E96D77C5495AF76D505EA0F /* SpaceLogoEN@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 0C290F16D4A2A71703AFCDE2 /* SpaceLogoEN@3x.png */; };
 		3F0366EF5CE5E712413ECA83 /* KeyboardHeightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DBDDC2765D27AF7C83556EE /* KeyboardHeightTests.swift */; };
 		3F1292ACF1A9EB3E13E3E0F6 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BDB49FABB2F78D2A96902FA /* L10n.swift */; };
-		3F30A0003B665DA1FA90BE41 /* Translation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 575059AED927C97A7E6E33CD /* Translation.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		4059F85D6472E1CC2601D5DF /* ReEditWordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A9F065C3D6400280AE99D7 /* ReEditWordTests.swift */; };
 		40614AF54533871C40393A5D /* ClipboardFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CD9AC3759F73AB2A6C0BC1B /* ClipboardFeature.swift */; };
 		4126B82B172C1B5BE3EDB352 /* EmojiSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CD1ABEB72F0DCCF278A46E7 /* EmojiSearch.swift */; };
@@ -134,7 +134,6 @@
 		5F2C618E98766EB94AA1D538 /* enlexicon.bin in Resources */ = {isa = PBXBuildFile; fileRef = 7EA567D02615989E6D0A4A64 /* enlexicon.bin */; };
 		60C989F7964D8F6A731FF0AF /* UXFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3892A75525A06BACCAE066AB /* UXFeedbackTests.swift */; };
 		622B106FC86E5387CEA108B4 /* HapticTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C79C970EC7D5AB3D9A9C662 /* HapticTests.swift */; };
-		635BBEF20890FF1801E21EE2 /* enlexicon.bin in Resources */ = {isa = PBXBuildFile; fileRef = 7EA567D02615989E6D0A4A64 /* enlexicon.bin */; };
 		644451BA58FBD5F6C99AD6E4 /* VietTelex.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 161158B158034E15B97338F4 /* VietTelex.storekit */; };
 		64BE6CE8C0FDE071DE06E625 /* FieldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480410FD8F2A324AF6A742C1 /* FieldPolicy.swift */; };
 		65166E5AC9C25B09D34BCE5E /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8ED337D5676E88733DA615 /* Shortcuts.swift */; };
@@ -144,15 +143,18 @@
 		6774A0A250BD2EC8623C7C77 /* SwipeReviseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5934AB6CE713D08F46A5E0C1 /* SwipeReviseTests.swift */; };
 		68638B723D1A630DC68B3727 /* SuggestBigramTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF6388E96DDD2233A554472A /* SuggestBigramTests.swift */; };
 		6883E23E2D9C7A63C862B4AC /* KeyCommitQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8F1F925F053BA5BF36C118C /* KeyCommitQueue.swift */; };
+		691A8436633BE0A93E74C70A /* MainDebouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A5ACFCC85098E199869C169 /* MainDebouncer.swift */; };
 		69793AB17BAB31D9B59FBDDD /* UserLangModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F316CA910C58A9377DC754A0 /* UserLangModel.swift */; };
 		6D6F9E75269F8D8410CB106F /* HostRewriteCompositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27D10BA36AFF204B214098B2 /* HostRewriteCompositionTests.swift */; };
 		6E288C02E8191203ECFB80E3 /* TouchTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E700B266A47DAAAD5A72343 /* TouchTarget.swift */; };
 		6F62D529E361DD85CF4B72AD /* KeyVariants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7394A70103C67353E530BD3C /* KeyVariants.swift */; };
 		6F940AB27CEBC63AD4FD7F12 /* SuggestionSlots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E2A0AFF771A8FB37173583D /* SuggestionSlots.swift */; };
 		709378BF50A391137F4F48C6 /* KeyboardTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B2DDC0E24D11BD96525161 /* KeyboardTheme.swift */; };
+		71E1B2497AB798436D5D3CC3 /* VTTranslate.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = CE0588321F07A1A67271DE4E /* VTTranslate.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		733D3888524809658B6A04D3 /* VTCatch.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F35DEB1416616443DB332E0 /* VTCatch.m */; };
 		752FB9D5D429DB659988F787 /* ICloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AD519DC648CF654359B2C8 /* ICloudSync.swift */; };
 		7535E3D6E42FAAF982A6BC34 /* SuggestionSlots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E2A0AFF771A8FB37173583D /* SuggestionSlots.swift */; };
+		762A75417D368A04E70970E7 /* TranslateEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD345381A7158ECF3B158383 /* TranslateEngine.swift */; };
 		76E858DA9F6E92C01F7D638B /* KeySound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AF5F8C17DF806D66D530AA6 /* KeySound.swift */; };
 		777DFD50684EBFD29E6F41C8 /* ios-mau-cau.yml in Resources */ = {isa = PBXBuildFile; fileRef = E07A3B8533DF185DE4EC05F4 /* ios-mau-cau.yml */; };
 		7860D4A1B59605C50D702BAC /* PlusGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D488C3ADF837AC9FCDD9EC1D /* PlusGate.swift */; };
@@ -172,6 +174,7 @@
 		89E603918708D39C00616ABB /* FieldPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480410FD8F2A324AF6A742C1 /* FieldPolicy.swift */; };
 		8B2674020C20D7CCCE423A49 /* VNSuggest.swift in Sources */ = {isa = PBXBuildFile; fileRef = C445BEBA75DFC20101EC3BA9 /* VNSuggest.swift */; };
 		8B6BED5B1B01ACD6B3AB1439 /* KeySoundImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D146E8AD1DCD530316701E0E /* KeySoundImport.swift */; };
+		8B89B17286B3F485499B1548 /* PerfSizeUXFixTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97ECEDAAFA381A793709FAE3 /* PerfSizeUXFixTests.swift */; };
 		8C36E56F67059CC68F98AA21 /* SpaceFlickTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11DFA0E70EB963455C306748 /* SpaceFlickTests.swift */; };
 		8CFA1F2B11ADA1997EEA16AD /* FutoSwipeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B731DCA56D699168C41DAC /* FutoSwipeModel.swift */; };
 		8D12FF20ED51C2AEE54AE456 /* SwipeEnglish.swift in Sources */ = {isa = PBXBuildFile; fileRef = E360BCC27ECE43C8DEB11CC7 /* SwipeEnglish.swift */; };
@@ -180,6 +183,7 @@
 		8ECAE0FEE3CD0AD5D5A6F10D /* KeyVariantsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AFA2F7162222243B187E853 /* KeyVariantsTests.swift */; };
 		8ED2C863FDB34599CA463016 /* TranslatePrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79FD55F59F8275BCD7B566DD /* TranslatePrefs.swift */; };
 		9158E85419EC0E211D76DEC8 /* NumberRowFullHeightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57EA9452496184AC2ED6BA5 /* NumberRowFullHeightTests.swift */; };
+		91A901E0BDF972D22FEEF80B /* MainDebouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A5ACFCC85098E199869C169 /* MainDebouncer.swift */; };
 		920B9D9A3BF68E640F1CE801 /* TranslateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 360B593D7FFB9CC01D2AFAA7 /* TranslateTests.swift */; };
 		925E9207BD1E9E7D10D7310B /* VTCatch.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F35DEB1416616443DB332E0 /* VTCatch.m */; };
 		9260F02C1EE77FA0A069A54A /* SwipeDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 705734FC03226DA179E14A71 /* SwipeDecoder.swift */; };
@@ -236,7 +240,6 @@
 		BC7C55450CA36CBF6D0F8297 /* vnlexicon.bin in Resources */ = {isa = PBXBuildFile; fileRef = 915FC9A836F82E797FA0AEA1 /* vnlexicon.bin */; };
 		C0F883065272FE06DAE56D0E /* WordDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0599154D3A43772DC7456968 /* WordDeleteTests.swift */; };
 		C1206085EB6077DC29ECB44C /* FutoSwipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76444B4521814651DA2C026A /* FutoSwipe.swift */; };
-		C2D650DE8BC245DCC6E1A61A /* vnlexicon.bin in Resources */ = {isa = PBXBuildFile; fileRef = 915FC9A836F82E797FA0AEA1 /* vnlexicon.bin */; };
 		C31A1027B7B30D20C5429A3E /* ThemeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BD0E4DE3C769A2EDE19180 /* ThemeSettingsView.swift */; };
 		C369B25A2E4F67F28AA9088B /* ShortcutsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BFF48078EDB3236A1B9C795 /* ShortcutsView.swift */; };
 		C432D76ABEF98EE7C97F3A48 /* StockSizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 939D0D4BB91E134BA501CBFF /* StockSizeTests.swift */; };
@@ -245,6 +248,7 @@
 		C618DE16B7A564F8E5BD4DA2 /* TouchGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359BC071F163E8255C943DA7 /* TouchGeometry.swift */; };
 		C6465DB2FD6BA0B131DB30D7 /* NumericKeypadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0396F7F4C967F32F6246FFB /* NumericKeypadTests.swift */; };
 		C672009CA9A75C96AC55BFFF /* FoldableLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E85DE7FE9317FE348701314F /* FoldableLayoutTests.swift */; };
+		C69D23D3FF84035D3DC3F478 /* VTTranslate.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = CE0588321F07A1A67271DE4E /* VTTranslate.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C73A709E5B0D36C4E69B092F /* KeySoundImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D146E8AD1DCD530316701E0E /* KeySoundImport.swift */; };
 		C9C973EB878B8C06CDF7393A /* AdjacentKeyFixerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB8B0DA94C5E17697D6DE9E7 /* AdjacentKeyFixerTests.swift */; };
 		C9ED085F787CE2F94907BAD6 /* UserDictionaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56C41B594797A8B06ED5012D /* UserDictionaryTests.swift */; };
@@ -317,6 +321,20 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		0E351AAF1D6B52F70E7B76E5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A287EF72D90D197DBD4B8E9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0EC9921E47534F11C9483482;
+			remoteInfo = VTTranslate;
+		};
+		18B81C58821DCE6D882162A7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A287EF72D90D197DBD4B8E9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0EC9921E47534F11C9483482;
+			remoteInfo = VTTranslate;
+		};
 		C67E34E4140A550D65AEF935 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1A287EF72D90D197DBD4B8E9 /* Project object */;
@@ -327,6 +345,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		04B4B7B2B6858D813F4F3776 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				71E1B2497AB798436D5D3CC3 /* VTTranslate.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		50C6CD8FDEFFC2F62BE61922 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -336,6 +365,17 @@
 				CF7F1ABF1498FE511CA6CA87 /* VietTelexKeyboard.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8F3D007F7C70B82396372268 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				C69D23D3FF84035D3DC3F478 /* VTTranslate.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -377,6 +417,7 @@
 		24A08F7D2F73879EBEC99BEB /* sample-shortcuts.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = "sample-shortcuts.yml"; sourceTree = "<group>"; };
 		27D10BA36AFF204B214098B2 /* HostRewriteCompositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostRewriteCompositionTests.swift; sourceTree = "<group>"; };
 		283B18B560C805EFBE10D839 /* backup-too-new.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "backup-too-new.json"; sourceTree = "<group>"; };
+		2A5ACFCC85098E199869C169 /* MainDebouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainDebouncer.swift; sourceTree = "<group>"; };
 		2A7C16DB3F7238439276C90B /* ClipboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardTests.swift; sourceTree = "<group>"; };
 		2B96A58C6EE35D288C488202 /* number-chips.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "number-chips.txt"; sourceTree = "<group>"; };
 		2BDB49FABB2F78D2A96902FA /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
@@ -463,6 +504,7 @@
 		939D0D4BB91E134BA501CBFF /* StockSizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StockSizeTests.swift; sourceTree = "<group>"; };
 		941319FB73DCEB18DDE2E232 /* KeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardView.swift; sourceTree = "<group>"; };
 		95F2B6D4AD796E9D33B623BA /* DomainPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainPopup.swift; sourceTree = "<group>"; };
+		97ECEDAAFA381A793709FAE3 /* PerfSizeUXFixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerfSizeUXFixTests.swift; sourceTree = "<group>"; };
 		9A253A0432EF946B10B4E511 /* SyllableLM.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyllableLM.swift; sourceTree = "<group>"; };
 		9BD2C6C345D6A11225ECC3C7 /* PromoFramesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromoFramesTests.swift; sourceTree = "<group>"; };
 		A087DB1153D19136851D711B /* KeyboardThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardThemeTests.swift; sourceTree = "<group>"; };
@@ -507,6 +549,7 @@
 		CAD72939A03B2CDB528A0C4A /* Keyboard.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Keyboard.entitlements; sourceTree = "<group>"; };
 		CBD24780DBDAEB07E6645C3E /* ScrollEdgeEffectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollEdgeEffectTests.swift; sourceTree = "<group>"; };
 		CCEDEE554C73498F36146A9D /* VietTelexApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VietTelexApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CE0588321F07A1A67271DE4E /* VTTranslate.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = VTTranslate.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		CFEF10E3C02C542D5C49792E /* swipe-lang-sentences.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "swipe-lang-sentences.txt"; sourceTree = "<group>"; };
 		D0E5388BE246A2014C812518 /* TextToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToolsTests.swift; sourceTree = "<group>"; };
 		D146E8AD1DCD530316701E0E /* KeySoundImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeySoundImport.swift; sourceTree = "<group>"; };
@@ -523,6 +566,7 @@
 		DB94721D99CEB3A5D2CA8A8B /* SlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlowTests.swift; sourceTree = "<group>"; };
 		DBA09810793F0754E1A9C3F7 /* SpaceLogo@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "SpaceLogo@3x.png"; sourceTree = "<group>"; };
 		DBCB7D7DAA868C8FB4B96C87 /* KeyGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyGeometry.swift; sourceTree = "<group>"; };
+		DD345381A7158ECF3B158383 /* TranslateEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslateEngine.swift; sourceTree = "<group>"; };
 		DF447D2ACACB4E96B9438498 /* key-alternates.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "key-alternates.txt"; sourceTree = "<group>"; };
 		E07A3B8533DF185DE4EC05F4 /* ios-mau-cau.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = "ios-mau-cau.yml"; sourceTree = "<group>"; };
 		E20D4C3E7DAFC3853FBEF994 /* BackupSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSection.swift; sourceTree = "<group>"; };
@@ -555,6 +599,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		13837914B8E9C1520FFE4855 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D563C25C56EE3DA89FCEAE2 /* Translation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		87E1F1E46F2E12B36BD37FF9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -568,7 +620,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				5219B81A88BC7A0F77DC8467 /* TelexCore in Frameworks */,
-				3F30A0003B665DA1FA90BE41 /* Translation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -614,6 +665,7 @@
 				7D398E9EE329A73C8620EBFB /* Shared */,
 				FAFFB2CAD61DDABA741DAA0D /* StoreKit */,
 				968E2C214A1AF99C3F83F278 /* VietTelex */,
+				D1587473BF6CB453210A7CCB /* VTTranslate */,
 				01272B6532043F67ED824A91 /* Frameworks */,
 				ACA2EF74601F7B3D920485DD /* Products */,
 			);
@@ -736,6 +788,7 @@
 				F0396F7F4C967F32F6246FFB /* NumericKeypadTests.swift */,
 				769E76C687A1221F2389FD54 /* OneHandTests.swift */,
 				EF30CED4269435719F2F5392 /* PasteOfferOnceTests.swift */,
+				97ECEDAAFA381A793709FAE3 /* PerfSizeUXFixTests.swift */,
 				0129B5AA6C2F6547A9634969 /* PerfSwitchTests.swift */,
 				6EAFABBBF6544841D633BFD9 /* PlaneCacheLayoutTests.swift */,
 				E2A6BDCAE323FDEA73473DB7 /* PlanePolicyTests.swift */,
@@ -796,6 +849,7 @@
 				CCEDEE554C73498F36146A9D /* VietTelexApp.app */,
 				09561C431C2FC4B6BAFD5DB7 /* VietTelexKeyboard.appex */,
 				097463B6895C7327459CEF6A /* VietTelexKeyboardTests.xctest */,
+				CE0588321F07A1A67271DE4E /* VTTranslate.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -820,6 +874,14 @@
 				E3465DA8FF0BC03D9F14941A /* Practice */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		D1587473BF6CB453210A7CCB /* VTTranslate */ = {
+			isa = PBXGroup;
+			children = (
+				DD345381A7158ECF3B158383 /* TranslateEngine.swift */,
+			);
+			path = VTTranslate;
 			sourceTree = "<group>";
 		};
 		D31F988D110CA9E478B35C27 /* Keyboard */ = {
@@ -856,6 +918,7 @@
 				0D77A862B4CBC51471E43C21 /* KeyLayout.swift */,
 				8AF5F8C17DF806D66D530AA6 /* KeySound.swift */,
 				7394A70103C67353E530BD3C /* KeyVariants.swift */,
+				2A5ACFCC85098E199869C169 /* MainDebouncer.swift */,
 				A1859475A5F95F02805768CA /* MathResults.swift */,
 				3DF8BE49B914D1B4B31116F3 /* NumberChips.swift */,
 				C007A36B32C0446F5DA0D89F /* NumericKeypad.swift */,
@@ -925,6 +988,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0EC9921E47534F11C9483482 /* VTTranslate */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF1408B149285AF1285022B8 /* Build configuration list for PBXNativeTarget "VTTranslate" */;
+			buildPhases = (
+				4EF70BA805760760E55389AF /* Sources */,
+				13837914B8E9C1520FFE4855 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VTTranslate;
+			packageProductDependencies = (
+			);
+			productName = VTTranslate;
+			productReference = CE0588321F07A1A67271DE4E /* VTTranslate.framework */;
+			productType = "com.apple.product-type.framework";
+		};
 		32544ABB657019963CB395F0 /* VietTelexApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 8A03A47E7620CB66F23051BC /* Build configuration list for PBXNativeTarget "VietTelexApp" */;
@@ -933,11 +1014,13 @@
 				CB536D937CF8FDB69ADA35CB /* Resources */,
 				A3040E7AA5F2F59223ED34E4 /* Frameworks */,
 				50C6CD8FDEFFC2F62BE61922 /* Embed Foundation Extensions */,
+				8F3D007F7C70B82396372268 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				DDEE133D48454C285B67D91A /* PBXTargetDependency */,
+				C408DF3E50F8172253972431 /* PBXTargetDependency */,
 			);
 			name = VietTelexApp;
 			packageProductDependencies = (
@@ -954,10 +1037,12 @@
 				BE8947E5410721EE491143E9 /* Sources */,
 				8543D6DA204B06362A3665FF /* Resources */,
 				87E1F1E46F2E12B36BD37FF9 /* Frameworks */,
+				04B4B7B2B6858D813F4F3776 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E1789944B47DB17B8A27568E /* PBXTargetDependency */,
 			);
 			name = VietTelexKeyboardTests;
 			packageProductDependencies = (
@@ -996,6 +1081,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					0EC9921E47534F11C9483482 = {
+						DevelopmentTeam = 84T567KMYD;
+					};
 					32544ABB657019963CB395F0 = {
 						DevelopmentTeam = 84T567KMYD;
 					};
@@ -1026,6 +1114,7 @@
 			targets = (
 				32544ABB657019963CB395F0 /* VietTelexApp */,
 				B616D69D459514C86CBAC48E /* VietTelexKeyboard */,
+				0EC9921E47534F11C9483482 /* VTTranslate */,
 				9BFE3D381D857B4356C8A530 /* VietTelexKeyboardTests */,
 			);
 		};
@@ -1091,15 +1180,21 @@
 			buildActionMask = 2147483647;
 			files = (
 				3DE25701A4C0DB5C7124618A /* Assets.xcassets in Resources */,
-				635BBEF20890FF1801E21EE2 /* enlexicon.bin in Resources */,
 				777DFD50684EBFD29E6F41C8 /* ios-mau-cau.yml in Resources */,
-				C2D650DE8BC245DCC6E1A61A /* vnlexicon.bin in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4EF70BA805760760E55389AF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				762A75417D368A04E70970E7 /* TranslateEngine.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		607477B7E605AF0A89A20B21 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1136,6 +1231,7 @@
 				54B0665D29CB3187CEBF5157 /* KeyboardView.swift in Sources */,
 				1D3501D761DFD4F1BED9ED72 /* KeyboardViewController.swift in Sources */,
 				AAD686F0EFFB0502D1BC32E9 /* L10n.swift in Sources */,
+				691A8436633BE0A93E74C70A /* MainDebouncer.swift in Sources */,
 				217BFFCE84C84D2083F2A528 /* MathResults.swift in Sources */,
 				E0E2190351D069CBD17F6B8C /* NumberChips.swift in Sources */,
 				81C0F52CD34495D609EC6D0B /* NumericKeypad.swift in Sources */,
@@ -1289,6 +1385,7 @@
 				277D00FD560ECE145713C213 /* L10nTests.swift in Sources */,
 				2B019DB27C4B5571D08103E7 /* LegacyUserLangModel.swift in Sources */,
 				175CED36E0C29E01403A284F /* LetterUndoTests.swift in Sources */,
+				91A901E0BDF972D22FEEF80B /* MainDebouncer.swift in Sources */,
 				3918D6C9CF7ED09C9D68DBEB /* MathResults.swift in Sources */,
 				06A12CC4391529A62752829A /* MathResultsTests.swift in Sources */,
 				B7ABF18E21AA806DFDB67928 /* NumberChips.swift in Sources */,
@@ -1301,6 +1398,7 @@
 				0838D223301F8D5042A2F43D /* OneHandTests.swift in Sources */,
 				D59FEC004410CCD1216A4438 /* PasteOfferOnce.swift in Sources */,
 				EA30B87C4D7AE6B3A7AFFCB7 /* PasteOfferOnceTests.swift in Sources */,
+				8B89B17286B3F485499B1548 /* PerfSizeUXFixTests.swift in Sources */,
 				B5C9CB675A5310946844B520 /* PerfSwitchTests.swift in Sources */,
 				4F177B14857E493A92E95B00 /* PlaneCacheLayoutTests.swift in Sources */,
 				5C1E68D1CE795950C634F366 /* PlanePolicy.swift in Sources */,
@@ -1381,10 +1479,20 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		C408DF3E50F8172253972431 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0EC9921E47534F11C9483482 /* VTTranslate */;
+			targetProxy = 0E351AAF1D6B52F70E7B76E5 /* PBXContainerItemProxy */;
+		};
 		DDEE133D48454C285B67D91A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = B616D69D459514C86CBAC48E /* VietTelexKeyboard */;
 			targetProxy = C67E34E4140A550D65AEF935 /* PBXContainerItemProxy */;
+		};
+		E1789944B47DB17B8A27568E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0EC9921E47534F11C9483482 /* VTTranslate */;
+			targetProxy = 18B81C58821DCE6D882162A7 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1443,6 +1551,31 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		69035DD5FB81516076F9CCE3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = NO;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.viettelex.ios.translate;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VT_TRANSLATE_FRAMEWORK";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
 		};
 		794B72575B0AF9D12C6FB0F3 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -1532,6 +1665,31 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
+		};
+		8CDD9E3D78984760FBAF6960 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = NO;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.viettelex.ios.translate;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VT_TRANSLATE_FRAMEWORK";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
 		};
 		8FBAF83EED491AFB304E8433 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -1670,6 +1828,15 @@
 			buildConfigurations = (
 				794B72575B0AF9D12C6FB0F3 /* Debug */,
 				8FBAF83EED491AFB304E8433 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CF1408B149285AF1285022B8 /* Build configuration list for PBXNativeTarget "VTTranslate" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				69035DD5FB81516076F9CCE3 /* Debug */,
+				8CDD9E3D78984760FBAF6960 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

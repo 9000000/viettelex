@@ -139,7 +139,7 @@ struct RootView: View {
             .bottomBarScrollMargin()
             .collapseBarOnScroll($barCollapsed)
             // Ô "Thử gõ": cuộn là đóng bàn phím. KHÔNG gắn TapGesture lên List —
-            // nó nuốt tap của mọi Button trong row (+, Import, Export, Xóa từ đã học…).
+            // nó nuốt tap của mọi Button trong row (+, Import, Export, Xoá từ đã học…).
             .scrollDismissesKeyboard(.immediately)
         }
         // Đổi tab ⇒ dựng lại stack: trang con đang mở (vd Tính Năng → Giao diện) không
@@ -280,7 +280,9 @@ struct RootView: View {
                     .multilineTextAlignment(.leading)
             }
             .font(.footnote).foregroundStyle(.secondary)
-            Text(L("Toàn quyền Truy cập là tuỳ chọn — chỉ cần cho Rung phím và Mẫu câu động (https://); VietTelex không dùng quyền này cho bất kỳ việc gì khác."))
+            // Liệt kê ĐỦ mọi tính năng cần quyền (FullAccessNotice + kiểm hasFullAccess ở bàn phím) —
+            // L10nTests.testFullAccessFooterListsEveryGatedFeature giữ danh sách khỏi lệch.
+            Text(L("Toàn quyền Truy cập là tuỳ chọn — chỉ cần cho Rung phím, Âm thanh phím, Nút Dán, Lịch sử clipboard, Mẫu câu động (https://) và lưu từ đã học; VietTelex không dùng quyền này cho bất kỳ việc gì khác."))
                 .font(.footnote).foregroundStyle(.secondary)
         } header: { Text(L("Giới thiệu")) }
     }
@@ -843,8 +845,6 @@ struct KieuGoSection: View {
     private var quickTelex = false
     @AppStorage("modernTone", store: UserDefaults(suiteName: "group.com.viettelex"))
     private var modernTone = false
-    @AppStorage("autoFixAdjacent", store: UserDefaults(suiteName: "group.com.viettelex"))
-    private var autoFixAdjacent = true
     @AppStorage("contextualEnglish", store: UserDefaults(suiteName: "group.com.viettelex"))
     private var contextualEnglish = true
     @AppStorage("teencode", store: UserDefaults(suiteName: "group.com.viettelex"))
@@ -884,7 +884,6 @@ struct KieuGoSection: View {
             // iOS không cho bàn phím bên thứ ba đọc công tắc Tự động viết hoa của hệ thống.
             settingToggle(L("Tự động viết hoa đầu câu"), L("Bật shift ở đầu ô, sau . ! ? và khi xuống dòng. Công tắc “Tự động viết hoa” trong Cài đặt → Bàn phím của iOS không áp dụng cho bàn phím bên thứ ba — tắt ở đây."), isOn: $autoCapitalize)
             settingToggle(L("Quyết định theo ngữ cảnh"), L("Sau một từ tiếng Anh, từ nhập nhằng kế tiếp mà chuỗi phím tạo thành một từ tiếng Anh sẽ được giữ tiếng Anh thay vì tiếng Việt — “he is” → “he is”, không phải “he í”. Sau từ tiếng Việt hoặc không rõ thì để tiếng Việt — “sao í”."), isOn: $contextualEnglish)
-            settingToggle(L("Gợi ý sửa lỗi chạm trượt"), L("Khi từ đang gõ không phải tiếng Việt, gợi ý từ đúng nếu bạn lỡ chạm phím bên cạnh: nbjeeuf → nhiều, ohims → phím, cahcs → cách. Chạm gợi ý để thay."), isOn: $autoFixAdjacent)
             if !vniMode {
                 settingToggle(L("Chính tả teencode"), L("Chấp nhận cách viết khi chat: w/z/k thay cho qu/d/c (wá, zui zẻ, kó) và bíe, thík, gòy, ừk. Tắt = chỉ chính tả chuẩn, từ tiếng Anh như was, war, zoo giữ nguyên."), isOn: $teencode)
             }
