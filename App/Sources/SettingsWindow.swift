@@ -1,5 +1,6 @@
 // SettingsWindow.swift
-// SwiftUI settings (3 tabs: Tùy chỉnh, Gõ tắt, Giới thiệu). The window is created
+// SwiftUI settings (5 tabs: Gõ phím, Công cụ & gợi ý, Gõ tắt, Ứng dụng, Chung — sắp xếp
+// lại 14/10/2026, bỏ tab Thử nghiệm + "Ẩn tính năng nâng cao"). The window is created
 // only when opened from the IMK menu and released when closed (windowWillClose
 // drops the reference).
 //
@@ -11,7 +12,32 @@ import AppKit
 import SwiftUI
 import TelexCore
 
-enum SettingsTab: Hashable { case general, shortcuts, modeTable, experimental, about }
+/// Thứ tự case = thứ tự tab trên thanh tab (allCases). Mọi tab luôn hiện.
+enum SettingsTab: Hashable, CaseIterable {
+    case typing, tools, shortcuts, apps, general
+
+    /// Khoá chuỗi (VTLocalized) của nhãn tab.
+    var titleKey: String {
+        switch self {
+        case .typing: return "Typing"
+        case .tools: return "Tools & suggestions"
+        case .shortcuts: return "Shortcuts"
+        case .apps: return "Apps"
+        case .general: return "General"
+        }
+    }
+
+    /// SF Symbol (macOS 13+) của tab.
+    var icon: String {
+        switch self {
+        case .typing: return "keyboard"
+        case .tools: return "wand.and.stars"
+        case .shortcuts: return "text.badge.plus"
+        case .apps: return "square.grid.2x2"
+        case .general: return "gearshape"
+        }
+    }
+}
 
 // MARK: - Window controller
 
@@ -22,22 +48,15 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var model: SettingsModel?
 
     /// `modeFilter`: điền sẵn ô lọc của Bảng cơ chế gõ (menu "Cơ chế gõ" truyền bundle
-    /// id của app đang gõ — maintainer 12/09/2026). Mở tab nâng cao theo đường này
-    /// thì tự tắt "Ẩn tính năng nâng cao": user bấm là muốn thấy bảng, không phải
-    /// rơi về Tùy chỉnh.
-    /// `revealTextTools`: mở sẵn mục Công cụ văn bản (Dịch thiếu gói → tải ở đó).
-    func show(tab: SettingsTab, modeFilter: String? = nil, revealTextTools: Bool = false) {
+    /// id của app đang gõ — maintainer 12/09/2026).
+    /// `revealUpdate`: cuộn tab Chung tới khối cập nhật (mục menu "Có bản cập nhật",
+    /// thông báo cập nhật hằng tuần).
+    func show(tab: SettingsTab, modeFilter: String? = nil, revealUpdate: Bool = false) {
         NSApp.setActivationPolicy(.regular)
-        if tab == .modeTable || tab == .experimental, !AppState.shared.advancedFeatures {
-            AppState.shared.advancedFeatures = true       // trước khi model đọc (init fallback về .general)
-        }
         buildWindowIfNeeded(tab: tab)
-        if model?.hideAdvanced == true, tab == .modeTable || tab == .experimental {
-            model?.hideAdvanced = false
-        }
         model?.selectedTab = tab
         if let modeFilter { model?.modeFilter = modeFilter }
-        if revealTextTools { model?.revealTextTools = true }
+        if revealUpdate { model?.revealUpdate = true }
         // NOT in this runloop turn: the .accessory→.regular policy flip above needs a
         // window-server round trip before an activation can stick. Activating in the
         // same turn intermittently loses the race — the window is created but never
@@ -69,12 +88,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let win = NSWindow(contentViewController: hosting)
         win.title = VTLocalized("VietTelex — Settings")
         win.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        // 660, not the old 560: the About tab has no scroll container, and at 560 its
-        // fixed content (icon + links + update block + copyright) already consumed the
-        // full height once padding and the tab bar came out. The changelog box added
-        // there is the only compressible child, so it absorbed the whole deficit and
-        // collapsed to a sliver. Height is a first-creation default — users who resized
-        // keep their own frame.
+        // Height is a first-creation default — users who resized keep their own frame.
+        // (660 dates from the old scroll-less About tab; its content now lives in the
+        // scrolling General form, but the mode table still likes the room.)
         win.setContentSize(NSSize(width: 680, height: 660))
         win.contentMinSize = NSSize(width: 640, height: 500)
         win.delegate = self
@@ -142,8 +158,8 @@ final class SettingsModel: ObservableObject {
     @Published var textToolsInMenu: Bool { didSet { AppState.shared.textToolsInMenu = textToolsInMenu } }
     /// Công cụ → Dịch: ngôn ngữ đích (TranslatePrefs; chỉ hiện trên macOS 26+).
     @Published var translateTarget: String { didSet { AppState.shared.translateTarget = translateTarget } }
-    /// Mở sẵn mục Công cụ văn bản (ô báo "chưa tải gói dịch" dẫn tới đây).
-    @Published var revealTextTools = false
+    /// Cuộn tab Chung tới khối cập nhật (xem SettingsWindowController.show).
+    @Published var revealUpdate = false
     @Published var mathResults: Bool { didSet { AppState.shared.mathResults = mathResults } }
     @Published var numberChips: Bool { didSet { AppState.shared.numberChips = numberChips } }
     @Published var typoHints: Bool { didSet { AppState.shared.typoHints = typoHints } }
@@ -153,6 +169,13 @@ final class SettingsModel: ObservableObject {
         didSet {
             AppState.shared.addTonesHotkey = addTonesHotkey
             TextActionHotkey.apply(addTonesHotkey)
+        }
+    }
+    /// Phím tắt mở bảng Công cụ… — đăng ký/gỡ ngay khi đổi (mặc định tắt = không đăng ký).
+    @Published var toolsPanelHotkey: String {
+        didSet {
+            AppState.shared.toolsPanelHotkey = toolsPanelHotkey
+            TextActionHotkey.applyToolsPanel(toolsPanelHotkey)
         }
     }
     @Published var icloudSync: Bool { didSet { ICloudSync.shared.setEnabled(icloudSync) } }
@@ -176,24 +199,8 @@ final class SettingsModel: ObservableObject {
         }
     }
     @Published var safeUnknownApps: Bool { didSet { AppState.shared.safeUnknownApps = safeUnknownApps } }
-    /// Advanced (terminal tap latency) — see AppState for the full semantics.
-    @Published var tapSkipSyntheticKeyUp: Bool { didSet { AppState.shared.tapSkipSyntheticKeyUp = tapSkipSyntheticKeyUp } }
-    @Published var axSelectionReplace: Bool { didSet { AppState.shared.axSelectionReplace = axSelectionReplace } }
     @Published var debugLogging: Bool { didSet { AppState.shared.debugLogging = debugLogging } }
     @Published var autoUpdateCheck: Bool { didSet { AppState.shared.autoUpdateCheck = autoUpdateCheck } }
-    /// INVERTED view of AppState.advancedFeatures (maintainer 09/09/2026: label đổi
-    /// thành "Ẩn tính năng nâng cao", default TẮT = tab vẫn hiện). Storage giữ
-    /// nguyên key advancedFeatures nên setting cũ của user không đổi nghĩa.
-    /// When hiding while an advanced tab is frontmost, selection falls back to Tùy chỉnh.
-    @Published var hideAdvanced: Bool {
-        didSet {
-            AppState.shared.advancedFeatures = !hideAdvanced
-            if hideAdvanced,
-               selectedTab == .modeTable || selectedTab == .experimental {
-                selectedTab = .general
-            }
-        }
-    }
     /// UI language: "system" / "en" / "vi". Changing it re-renders every view that
     /// observes this model (they call `loc(_:)`), so the switch is live — no relaunch.
     @Published var uiLanguage: String { didSet { AppState.shared.uiLanguage = uiLanguage } }
@@ -221,11 +228,7 @@ final class SettingsModel: ObservableObject {
     @Published var accessibilityTrusted: Bool = Accessibility.isTrusted
 
     init(selected: SettingsTab) {
-        // Tab bar tự vẽ render THẲNG selectedTab (không còn TabView tự né tab ẩn):
-        // mở thẳng vào tab advanced khi advancedFeatures đang tắt phải rơi về Chung.
-        selectedTab = (!AppState.shared.advancedFeatures
-                       && (selected == .modeTable || selected == .experimental))
-            ? .general : selected
+        selectedTab = selected
         autoRestore = AppState.shared.autoRestore
         freeMarking = AppState.shared.freeMarking
         modernOrthography = AppState.shared.modernOrthography
@@ -246,6 +249,9 @@ final class SettingsModel: ObservableObject {
         toneHints = AppState.shared.toneHints
         dateHints = AppState.shared.dateHints
         addTonesHotkey = AppState.shared.addTonesHotkey
+        // Giá trị lạ (không thuộc danh sách) ⇒ "off", để Picker luôn có tag khớp.
+        let tools = AppState.shared.toolsPanelHotkey
+        toolsPanelHotkey = TextActionHotkey.toolsChoices.contains { $0.id == tools } ? tools : "off"
         icloudSync = ICloudSync.shared.isEnabled
         menuIcon = AppState.shared.menuIcon
         bracketVowels = AppState.shared.bracketVowels
@@ -256,11 +262,8 @@ final class SettingsModel: ObservableObject {
         keyboardLayoutID = KeyboardLayoutOverride.isInstalled(savedLayout)
             ? savedLayout : KeyboardLayoutOverride.systemDefault
         safeUnknownApps = AppState.shared.safeUnknownApps
-        tapSkipSyntheticKeyUp = AppState.shared.tapSkipSyntheticKeyUp
-        axSelectionReplace = AppState.shared.axSelectionReplace
         debugLogging = AppState.shared.debugLogging
         autoUpdateCheck = AppState.shared.autoUpdateCheck
-        hideAdvanced = !AppState.shared.advancedFeatures
         uiLanguage = AppState.shared.uiLanguage
         reloadShortcuts()
         reloadModeTable()
@@ -275,6 +278,14 @@ final class SettingsModel: ObservableObject {
     lazy var keyboardLayouts: [KeyboardLayoutOption] = KeyboardLayoutOverride.installed()
 
     func loc(_ key: String) -> String { VTLocalized(key) }
+
+    /// Khoá chú thích mục Công cụ văn bản theo số công cụ thật của bảng (6, hoặc 7 khi
+    /// máy dịch được) — chú thích cũ ghi cứng "1–6" kể cả khi bảng có Dịch ở phím 7.
+    static func textToolsCaptionKey(toolCount: Int) -> String {
+        toolCount >= 7
+            ? "Select text in any app, then open Tools… (VietTelex menu or the hotkey below) and pick a tool or press its number 1–7: add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones, translate."
+            : "Select text in any app, then open Tools… (VietTelex menu or the hotkey below) and pick a tool or press its number 1–6: add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones."
+    }
 
     /// Re-read the Accessibility trust snapshot (see `accessibilityTrusted`).
     /// `readTrustNow`, not `isTrusted`: this is a UI path, and the cached reader can
@@ -605,27 +616,22 @@ struct SettingsView: View {
     // sidebar rồi quay lại tab ngang, nên giữ đúng hình khối đó).
     private var tabBar: some View {
         HStack(spacing: 2) {
-            tabButton(.general, "Settings", "slider.horizontal.3")
-            tabButton(.shortcuts, "Shortcuts", "keyboard")
-            if !model.hideAdvanced {
-                tabButton(.modeTable, "Typing modes", "list.bullet.rectangle")
-                tabButton(.experimental, "Experimental", "flask")
-            }
-            tabButton(.about, "About", "info.circle")
+            ForEach(SettingsTab.allCases, id: \.self) { tabButton($0) }
         }
         .padding(3)
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
             .fill(Color.primary.opacity(0.06)))
     }
 
-    private func tabButton(_ tab: SettingsTab, _ titleKey: String, _ icon: String) -> some View {
+    private func tabButton(_ tab: SettingsTab) -> some View {
         let selected = model.selectedTab == tab
         return Button { model.selectedTab = tab } label: {
-            Label(model.loc(titleKey), systemImage: icon)
+            Label(model.loc(tab.titleKey), systemImage: tab.icon)
                 .labelStyle(.titleAndIcon)
                 .font(.callout)
+                .lineLimit(1)
                 .padding(.vertical, 5)
-                .padding(.horizontal, 11)
+                .padding(.horizontal, 10)
                 .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(selected ? Color.accentColor : Color.clear))
                 .foregroundStyle(selected ? Color.white : Color.primary)
@@ -636,14 +642,12 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var activeTab: some View {
-        // selectedTab không bao giờ trỏ vào tab advanced khi đang ẩn nâng cao —
-        // SettingsModel tự đưa về .general (xem didSet của hideAdvanced).
         switch model.selectedTab {
-        case .general:      GeneralTab()
-        case .shortcuts:    ShortcutsTab()
-        case .modeTable:    ModeTableTab()
-        case .experimental: ExperimentalTab()
-        case .about:        AboutTab()
+        case .typing:    TypingTab()
+        case .tools:     ToolsTab()
+        case .shortcuts: ShortcutsTab()
+        case .apps:      ModeTableTab()
+        case .general:   GeneralTab()
         }
     }
 
@@ -657,18 +661,16 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Tab: Tùy chỉnh
+// MARK: - Tab: Gõ phím
 
-struct GeneralTab: View {
+struct TypingTab: View {
     @EnvironmentObject var model: SettingsModel
-    @State private var textToolsExpanded = false   // gọn mặc định (Phil 28/09)
 
     var body: some View {
         Form {
             // Recovery path for the single most damaging state the app can be in: no
             // Accessibility permission means Terminal/Chrome silently don't get tones.
-            // Until now the only hint was a ⚠️ badge buried in the (hidden-by-default)
-            // Typing modes tab.
+            // First tab = what "Settings…" opens, so the warning can't be missed.
             if !model.accessibilityTrusted {
                 Section {
                     Text("⚠️ " + model.loc("No Accessibility permission — typing will be underlined"))
@@ -724,20 +726,17 @@ struct GeneralTab: View {
                 Text(model.loc("Off = old style (hòa, thủy, khỏe). On = new style (hoà, thuý, khoẻ). Only oa/oe/uy differ."))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section {
-                Button {
-                    TelexInputController.openKeyboardInputSources()
-                } label: {
-                    Label(model.loc("System Settings…"), systemImage: "gearshape")
+            // Từ tab Thử nghiệm (14/10/2026): bố cục phím thuộc về "gõ phím".
+            Section(header: Label(model.loc("Keyboard layout"), systemImage: "keyboard.badge.ellipsis")) {
+                Picker(model.loc("Compose on"), selection: $model.keyboardLayoutID) {
+                    Text(model.loc("Follow the previous input source"))
+                        .tag(KeyboardLayoutOverride.systemDefault)
+                    Divider()
+                    ForEach(model.keyboardLayouts) { layout in
+                        Text(layout.name).tag(layout.id)
+                    }
                 }
-                Text(model.loc("Opens Keyboard settings — set automatic input-source switching per app / document there."))
-                    .font(.caption).foregroundStyle(.secondary)
-                Button {
-                    TelexInputController.openInputSourceHotkeySettings()
-                } label: {
-                    Label(model.loc("Input source hotkey…"), systemImage: "command")
-                }
-                Text(model.loc("Opens Keyboard Shortcuts → Input Sources, where the shortcut for switching between VietTelex and other input sources lives."))
+                Text(model.loc("Which physical keyboard Telex reads. Pick Colemak, Dvorak… to type Vietnamese with that layout. Left on “follow”, the layout is inherited from whichever input source you switched from — so the same keys give different letters depending on where you came from."))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section(header: Label(model.loc("Spelling"), systemImage: "textformat.abc.dottedunderline")) {
@@ -766,88 +765,25 @@ struct GeneralTab: View {
                 Text(model.loc("After an English word, an ambiguous next word whose keys spell an English word is kept English instead of Vietnamese — “he is” → “he is”, not “he í”. After a Vietnamese or unclear word it stays Vietnamese — “sao í”."))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section(header: Button {
-                withAnimation(.easeInOut(duration: 0.15)) { textToolsExpanded.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Label(model.loc("Text tools"), systemImage: "textformat")
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .rotationEffect(.degrees(textToolsExpanded ? 90 : 0))
-                        .foregroundStyle(.secondary)
+            Section {
+                Button {
+                    TelexInputController.openKeyboardInputSources()
+                } label: {
+                    Label(model.loc("System Settings…"), systemImage: "gearshape")
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)) {
-                if textToolsExpanded {
-                    Text(model.loc("Select text in any app, then open the VietTelex menu → Tools… and pick (or press 1–6): add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones."))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Toggle(model.loc("Show text tools in the VietTelex menu"), isOn: $model.textToolsInMenu)
-                    if #available(macOS 26.0, *) {
-                        TranslateSettingsRows()
-                    }
-                    Picker(model.loc("Add-tones hotkey"), selection: $model.addTonesHotkey) {
-                        ForEach(TextActionHotkey.choices, id: \.id) { c in
-                            Text(c.id == "off" ? model.loc("Off") : c.label).tag(c.id)
-                        }
-                    }
-                    Text(model.loc("Works in any app, even when another input source is active. Needs Accessibility permission (copies the selection, then pastes the result — your clipboard is restored)."))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Toggle(model.loc("Show maths results"), isOn: $model.mathResults)
-                    Text(model.loc("Type a calculation followed by “=” (12*3=, 200+10%=) — the result shows next to the cursor; press Tab or Enter to insert it."))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Toggle(model.loc("Number chips"), isOn: $model.numberChips)
-                    Text(model.loc("Type an amount with k/tr/tỷ (50k, 1tr2, 2 tỷ) and a space — the money format (1.200.000 ₫) shows next to the cursor; press Tab to replace it."))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Toggle(model.loc("Suggest typo fixes"), isOn: $model.typoHints)
-                    Text(model.loc("After a word that isn’t Vietnamese or English (tpoi, nayd), a likely fix (tôi, này) shows next to the cursor; press Tab to replace it. Esc stops suggesting that word."))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Toggle(model.loc("Suggest tones for unaccented sentences"), isOn: $model.toneHints)
-                    Text(model.loc("After 3+ unaccented syllables (toi di hoc), when you type . ! ? or pause after a space, the toned text (tôi đi học) shows next to the cursor; press Tab to replace it."))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Toggle(model.loc("Suggest dates and times"), isOn: $model.dateHints)
-                    Text(model.loc("Type “hôm nay”, “ngày mai”, “hôm qua” or “bây giờ” (after an English word: today, tomorrow, yesterday, now) and a space — the date (28/09/2026) or time (21:35) shows next to the cursor; press Tab to replace the words with it."))
-                        .font(.caption).foregroundStyle(.secondary)
-            
-                } else {
-                    Text(model.loc("Maths results, number chips, typo/tone/date suggestions, add-tones hotkey…"))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Section(header: Label(model.loc("iCloud sync"), systemImage: "icloud")) {
-                Toggle(model.loc("Sync typing settings and shortcuts with iPhone/iPad"), isOn: $model.icloudSync)
-                    .disabled(!ICloudSync.hasEntitlement)
-                Text(model.loc(ICloudSync.hasEntitlement
-                    ? "Same Apple ID as the VietTelex iOS app. Syncs Telex options and the shortcut table (not sentence templates or learned words). On first sync, values already in iCloud win."
-                    : "Not available in this build (it isn’t signed with iCloud)."))
+                Text(model.loc("Opens Keyboard settings — set automatic input-source switching per app / document there."))
                     .font(.caption).foregroundStyle(.secondary)
-                if model.icloudSync, !ICloudSync.shared.iCloudAvailable {
-                    Text("⚠️ " + model.loc("This Mac isn’t signed in to iCloud."))
-                        .font(.caption).foregroundStyle(.orange)
+                Button {
+                    TelexInputController.openInputSourceHotkeySettings()
+                } label: {
+                    Label(model.loc("Input source hotkey…"), systemImage: "command")
                 }
-            }
-            // No Section header: the Picker's own label already says "Language" —
-            // two identical labels stacked read as a bug.
-            Section {
-                Picker(model.loc("Language"), selection: $model.uiLanguage) {
-                    Text(model.loc("System")).tag("system")
-                    Text("Tiếng Việt").tag("vi")
-                    Text("English").tag("en")
-                }
-            }
-            Section {
-                Toggle(model.loc("Hide advanced features"), isOn: $model.hideAdvanced)
-                Text(model.loc("Hides the Typing modes and Experimental tabs — per-app overrides, latency flags, debug log. Not needed for everyday typing."))
+                Text(model.loc("Opens Keyboard Shortcuts → Input Sources, where the shortcut for switching between VietTelex and other input sources lives."))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .onAppear { model.refreshAccessibilityStatus() }
-        .onReceive(model.$revealTextTools) { reveal in
-            guard reveal else { return }
-            textToolsExpanded = true
-            model.revealTextTools = false
-        }
         // Event-driven, like the mode table: the user leaves for System Settings and
         // comes back, which makes this window key again.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
@@ -866,6 +802,58 @@ struct GeneralTab: View {
             .receive(on: DispatchQueue.main)) { _ in
             model.accessibilityMayHaveChanged()
         }
+    }
+}
+
+// MARK: - Tab: Công cụ & gợi ý
+
+/// Trước 14/10/2026 là một mục thu gọn được trong Tùy chỉnh; giờ phẳng, hai mục.
+struct ToolsTab: View {
+    @EnvironmentObject var model: SettingsModel
+
+    var body: some View {
+        Form {
+            Section(header: Label(model.loc("Text tools"), systemImage: "textformat")) {
+                Text(model.loc(SettingsModel.textToolsCaptionKey(toolCount: TextToolsPanelLogic.tools.count)))
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle(model.loc("Show text tools in the VietTelex menu"), isOn: $model.textToolsInMenu)
+                Picker(model.loc("Tools panel hotkey"), selection: $model.toolsPanelHotkey) {
+                    ForEach(TextActionHotkey.toolsChoices, id: \.id) { c in
+                        Text(c.id == "off" ? model.loc("Off") : c.label).tag(c.id)
+                    }
+                }
+                Text(model.loc("Opens Tools… next to the cursor from any app, even when another input source is active. Press it again to close."))
+                    .font(.caption).foregroundStyle(.secondary)
+                Picker(model.loc("Add-tones hotkey"), selection: $model.addTonesHotkey) {
+                    ForEach(TextActionHotkey.choices, id: \.id) { c in
+                        Text(c.id == "off" ? model.loc("Off") : c.label).tag(c.id)
+                    }
+                }
+                Text(model.loc("Works in any app, even when another input source is active. Needs Accessibility permission (copies the selection, then pastes the result — your clipboard is restored)."))
+                    .font(.caption).foregroundStyle(.secondary)
+                if #available(macOS 26.0, *) {
+                    TranslateSettingsRows()
+                }
+            }
+            Section(header: Label(model.loc("Suggestions next to the cursor"), systemImage: "text.cursor")) {
+                Toggle(model.loc("Show maths results"), isOn: $model.mathResults)
+                Text(model.loc("Type a calculation followed by “=” (12*3=, 200+10%=) — the result shows next to the cursor; press Tab or Enter to insert it."))
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle(model.loc("Number chips"), isOn: $model.numberChips)
+                Text(model.loc("Type an amount with k/tr/tỷ (50k, 1tr2, 2 tỷ) and a space — the money format (1.200.000 ₫) shows next to the cursor; press Tab to replace it."))
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle(model.loc("Suggest typo fixes"), isOn: $model.typoHints)
+                Text(model.loc("After a word that isn’t Vietnamese or English (tpoi, nayd), a likely fix (tôi, này) shows next to the cursor; press Tab to replace it. Esc stops suggesting that word."))
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle(model.loc("Suggest tones for unaccented sentences"), isOn: $model.toneHints)
+                Text(model.loc("After 3+ unaccented syllables (toi di hoc), when you type . ! ? or pause after a space, the toned text (tôi đi học) shows next to the cursor; press Tab to replace it."))
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle(model.loc("Suggest dates and times"), isOn: $model.dateHints)
+                Text(model.loc("Type “hôm nay”, “ngày mai”, “hôm qua” or “bây giờ” (after an English word: today, tomorrow, yesterday, now) and a space — the date (28/09/2026) or time (21:35) shows next to the cursor; press Tab to replace the words with it."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 
@@ -995,6 +983,19 @@ struct ModeTableTab: View {
             }
             Text(model.loc("An app types wrong or shows underlines? Pick Tap — real keystrokes, no underline (needs Accessibility). Marked text always renders correctly but underlines while typing. The modes below the divider are for special cases — leave them unless you know the app needs one. Clear forgets everything learned; manual picks are kept."))
                 .font(.caption).foregroundStyle(.secondary)
+
+            // Từ tab Thử nghiệm (14/10/2026): cả hai quyết định "app nào gõ thế nào".
+            Divider().padding(.vertical, 2)
+            Toggle(model.loc("Unknown apps use the safe channel (tap/marked)"),
+                   isOn: $model.safeUnknownApps)
+            Text(model.loc("Apps without a rule type via backspace-retype (or underlined composition without Accessibility) instead of trying direct insertion and guessing. Turn off to restore the old probe-and-learn behavior."))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Toggle(model.loc("Keep VietTelex when macOS auto-switches the input source"),
+                   isOn: $model.stickyInputSource)
+            Text(model.loc("Some apps (Word comments…) make macOS fall back to the default input source for every new field when “Automatically switch to a document's input source” is on. This switches back to VietTelex — only when the change wasn't yours (no ⌃Space, no menu click, same app)."))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { model.reloadModeTable() }
         // The user's flow is: keep Settings open → type a tone word in the target
@@ -1045,89 +1046,99 @@ struct ModeTableTab: View {
     }
 }
 
-// MARK: - Tab: Thử Nghiệm
+// MARK: - Tab: Chung
 
-struct ExperimentalTab: View {
+/// Tab cuối (14/10/2026): phím chuyển bộ gõ + icon menu bar (từ Thử nghiệm), ngôn ngữ,
+/// iCloud, rồi Giới thiệu + cập nhật (gộp tab Giới thiệu cũ), Chẩn đoán ở cuối.
+struct GeneralTab: View {
+    @EnvironmentObject var model: SettingsModel
+
+    /// `.id` của dòng đầu khối cập nhật — đích cuộn của `revealUpdate`.
+    static let updateAnchor = "update"
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            Form {
+                Section(header: Label(model.loc("Switch hotkey"), systemImage: "keyboard.badge.eye")) {
+                    Picker(model.loc("Toggle VietTelex with"), selection: $model.switchHotkey) {
+                        Text(model.loc("Off — use the macOS shortcut")).tag("off")
+                        Text("⌃⇧  Control + Shift").tag("ctrl-shift")
+                        Text("⌥⇧  Option + Shift").tag("opt-shift")
+                        Text("⌘⇧  Command + Shift").tag("cmd-shift")
+                    }
+                    Text(model.loc("Press and release the modifiers alone to toggle between VietTelex and your previous input source — the modifier-only combos macOS's own Keyboard Shortcuts can't assign. Ignored if you type a key or click while holding them. Needs Accessibility permission."))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section(header: Label(model.loc("Menu bar icon"), systemImage: "star.square")) {
+                    Picker(model.loc("Icon"), selection: $model.menuIcon) {
+                        Text("Vᴛ — " + model.loc("default")).tag("vt")
+                        Text("★ — " + model.loc("five-pointed star")).tag("star")
+                        Text("🇻🇳 — " + model.loc("Vietnam flag")).tag("flag")
+                    }
+                    Text(model.loc("Menu bar icons are drawn in a single color that follows the menu bar (no full-color icons — macOS strips the colors). Changing the icon rewrites a file inside the app, which breaks the app's code signature seal (the app keeps working and keeps its permissions). Requires a Mac restart to take effect."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    if model.menuIconApplied {
+                        Text(model.loc("Icon saved — restart your Mac to see it."))
+                            .font(.caption).foregroundStyle(.orange)
+                    }
+                }
+                // No Section header: the Picker's own label already says "Language" —
+                // two identical labels stacked read as a bug.
+                Section {
+                    Picker(model.loc("Language"), selection: $model.uiLanguage) {
+                        Text(model.loc("System")).tag("system")
+                        Text("Tiếng Việt").tag("vi")
+                        Text("English").tag("en")
+                    }
+                }
+                Section(header: Label(model.loc("iCloud sync"), systemImage: "icloud")) {
+                    Toggle(model.loc("Sync typing settings and shortcuts with iPhone/iPad"), isOn: $model.icloudSync)
+                        .disabled(!ICloudSync.hasEntitlement)
+                    Text(model.loc(ICloudSync.hasEntitlement
+                        ? "Same Apple ID as the VietTelex iOS app. Syncs Telex options and the shortcut table (not sentence templates or learned words). On first sync, values already in iCloud win."
+                        : "Not available in this build (it isn’t signed with iCloud)."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    if model.icloudSync, !ICloudSync.shared.iCloudAvailable {
+                        Text("⚠️ " + model.loc("This Mac isn’t signed in to iCloud."))
+                            .font(.caption).foregroundStyle(.orange)
+                    }
+                }
+                AboutSection()
+                UpdateSection()
+                DiagnosticsSection()
+            }
+            .formStyle(.grouped)
+            .onReceive(model.$revealUpdate) { reveal in
+                guard reveal else { return }
+                model.revealUpdate = false
+                // Một hop để Form dựng xong (mở mới: cửa sổ vừa tạo) rồi mới cuộn.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    withAnimation { proxy.scrollTo(Self.updateAnchor, anchor: .top) }
+                }
+            }
+        }
+    }
+}
+
+/// Chẩn đoán (từ tab Thử nghiệm): nhật ký gỡ lỗi — ghi / chép / lưu / xoá.
+struct DiagnosticsSection: View {
     @EnvironmentObject var model: SettingsModel
     @State private var saveResult: String?
 
     var body: some View {
-        Form {
-            // VNI + phím ngoặc đã tốt nghiệp sang tab Tùy chỉnh; "gõ thêm dấu cho từ
-            // ngay trước con trỏ" ổn định → bỏ UI, mặc định bật (maintainer 17/08/2026).
-            Section(header: Label(model.loc("Input method"), systemImage: "character.textbox")) {
-                Toggle(model.loc("Keep VietTelex when macOS auto-switches the input source (experimental)"),
-                       isOn: $model.stickyInputSource)
-                Text(model.loc("Some apps (Word comments…) make macOS fall back to the default input source for every new field when “Automatically switch to a document's input source” is on. This switches back to VietTelex — only when the change wasn't yours (no ⌃Space, no menu click, same app)."))
-                    .font(.caption).foregroundStyle(.secondary)
+        Section(header: Label(model.loc("Diagnostics"), systemImage: "stethoscope")) {
+            Toggle(model.loc("Record debug log"), isOn: $model.debugLogging)
+            Text(model.loc("Records tap health events in memory (never the text you type). Turn it on, reproduce the problem, then Copy debug log and paste it into your report — or save it as a file."))
+                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button { copyLog() } label: { Label(model.loc("Copy debug log"), systemImage: "doc.on.doc") }
+                Button { saveLog() } label: { Label(model.loc("Save debug log…"), systemImage: "square.and.arrow.down") }
+                Button { DebugLog.clear(); saveResult = nil } label: { Label(model.loc("Clear"), systemImage: "trash") }
             }
-            Section(header: Label(model.loc("Switch hotkey"), systemImage: "keyboard.badge.eye")) {
-                Picker(model.loc("Toggle VietTelex with"), selection: $model.switchHotkey) {
-                    Text(model.loc("Off — use the macOS shortcut")).tag("off")
-                    Text("⌃⇧  Control + Shift").tag("ctrl-shift")
-                    Text("⌥⇧  Option + Shift").tag("opt-shift")
-                    Text("⌘⇧  Command + Shift").tag("cmd-shift")
-                }
-                Text(model.loc("Press and release the modifiers alone to toggle between VietTelex and your previous input source — the modifier-only combos macOS's own Keyboard Shortcuts can't assign. Ignored if you type a key or click while holding them. Needs Accessibility permission."))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section(header: Label(model.loc("Menu bar icon"), systemImage: "star.square")) {
-                Picker(model.loc("Icon"), selection: $model.menuIcon) {
-                    Text("Vᴛ — " + model.loc("default")).tag("vt")
-                    Text("★ — " + model.loc("five-pointed star")).tag("star")
-                    Text("🇻🇳 — " + model.loc("Vietnam flag")).tag("flag")
-                }
-                Text(model.loc("Menu bar icons are drawn in a single color that follows the menu bar (no full-color icons — macOS strips the colors). Changing the icon rewrites a file inside the app, which breaks the app's code signature seal (the app keeps working and keeps its permissions). Requires a Mac restart to take effect."))
-                    .font(.caption).foregroundStyle(.secondary)
-                if model.menuIconApplied {
-                    Text(model.loc("Icon saved — restart your Mac to see it."))
-                        .font(.caption).foregroundStyle(.orange)
-                }
-            }
-            Section(header: Label(model.loc("Keyboard layout"), systemImage: "keyboard.badge.ellipsis")) {
-                Picker(model.loc("Compose on"), selection: $model.keyboardLayoutID) {
-                    Text(model.loc("Follow the previous input source"))
-                        .tag(KeyboardLayoutOverride.systemDefault)
-                    Divider()
-                    ForEach(model.keyboardLayouts) { layout in
-                        Text(layout.name).tag(layout.id)
-                    }
-                }
-                Text(model.loc("Which physical keyboard Telex reads. Pick Colemak, Dvorak… to type Vietnamese with that layout. Left on “follow”, the layout is inherited from whichever input source you switched from — so the same keys give different letters depending on where you came from."))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section(header: Label(model.loc("Unknown apps"), systemImage: "questionmark.app")) {
-                Toggle(model.loc("Unknown apps use the safe channel (tap/marked)"),
-                       isOn: $model.safeUnknownApps)
-                Text(model.loc("Apps without a rule type via backspace-retype (or underlined composition without Accessibility) instead of trying direct insertion and guessing. Turn off to restore the old probe-and-learn behavior."))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            // "Sửa sự kiện phím tại chỗ" + "Bộ ngắt chống tràn sự kiện" ổn định →
-            // bỏ UI, mặc định bật; giá trị OFF cũ của tester bị xoá lúc khởi động
-            // (graduatedKeys trong AppState — maintainer 17/08/2026).
-            Section(header: Label(model.loc("Terminal typing latency"), systemImage: "terminal")) {
-                Toggle(model.loc("Skip synthetic key-up"), isOn: $model.tapSkipSyntheticKeyUp)
-                Text(model.loc("Post only the key-down for inserted letters in terminals, halving events per keystroke."))
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle(model.loc("AX replace (Chrome/Spotlight)"), isOn: $model.axSelectionReplace)
-                Text(model.loc("Apply tone edits in Chrome and Spotlight with one Accessibility edit instead of a burst of Shift+Left key events."))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section(header: Label(model.loc("Diagnostics"), systemImage: "stethoscope")) {
-                Toggle(model.loc("Record debug log"), isOn: $model.debugLogging)
-                Text(model.loc("Records tap health events in memory (never the text you type). Turn it on, reproduce the problem, then Copy debug log and paste it into your report — or save it as a file."))
-                    .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button { copyLog() } label: { Label(model.loc("Copy debug log"), systemImage: "doc.on.doc") }
-                    Button { saveLog() } label: { Label(model.loc("Save debug log…"), systemImage: "square.and.arrow.down") }
-                    Button { DebugLog.clear(); saveResult = nil } label: { Label(model.loc("Clear"), systemImage: "trash") }
-                }
-                if let saveResult {
-                    Text(saveResult).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                }
+            if let saveResult {
+                Text(saveResult).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
-        .formStyle(.grouped)
     }
 
     /// Clipboard, not a file. The report flow (BAO-LOI.md) ends with the log pasted
@@ -1135,7 +1146,7 @@ struct ExperimentalTab: View {
     /// the slowest step of it — for a user who is, by definition, already annoyed.
     /// Same snapshot as saveLog(), so a pasted log and a saved one are identical.
     private func copyLog() {
-        let text = DebugLog.snapshot(header: debugHeader())
+        let text = DebugLog.snapshot(header: DebugHeader.build())
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         saveResult = model.loc("Copied — paste it into your bug report.")
@@ -1146,7 +1157,7 @@ struct ExperimentalTab: View {
         panel.allowedContentTypes = [.plainText]
         panel.nameFieldStringValue = "VietTelex-debug.txt"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let text = DebugLog.snapshot(header: debugHeader())
+        let text = DebugLog.snapshot(header: DebugHeader.build())
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
             saveResult = String(format: model.loc("Saved to %@"), url.lastPathComponent)
@@ -1154,12 +1165,9 @@ struct ExperimentalTab: View {
             saveResult = model.loc("Couldn’t save the file.")
         }
     }
-
-    /// Current runtime state prepended to the log for context (no typed text).
-    private func debugHeader() -> [String] { DebugHeader.build() }
 }
 
-/// Extracted from ExperimentalTab so it's testable without a SwiftUI environment —
+/// Extracted from the diagnostics UI so it's testable without a SwiftUI environment —
 /// debugHeader() never touched `model`, only AppState.shared and statics.
 enum DebugHeader {
     static func build() -> [String] {
@@ -1225,9 +1233,10 @@ enum DebugHeader {
     }
 }
 
-// MARK: - Tab: Giới thiệu
+// MARK: - Chung: Giới thiệu + cập nhật (tab Giới thiệu cũ)
 
-struct AboutTab: View {
+/// Icon, tên, phiên bản, liên kết, gỡ cài đặt — một mục của tab Chung.
+struct AboutSection: View {
     @EnvironmentObject var model: SettingsModel
 
     private var appVersion: String {
@@ -1251,6 +1260,68 @@ struct AboutTab: View {
         NSImage(named: NSImage.applicationIconName) ?? NSImage()
     }
 
+    var body: some View {
+        Section(header: Label(model.loc("About"), systemImage: "info.circle")) {
+            HStack(spacing: 14) {
+                Image(nsImage: appIcon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 64, height: 64)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(AppState.isDevelopmentBuild ? "VietTelex Dev" : "VietTelex").font(.title3).bold()
+                    Text(String(format: model.loc("Version %@ · %@"), appVersion, buildDate))
+                        .foregroundStyle(.secondary)
+                    Text("© \(String(currentYear)) Phil Trinh").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            HStack(spacing: 14) {
+                Link("Website", destination: URL(string: "https://ptrinh.github.io/viettelex/")!)
+                Link(model.loc("User guide"),
+                     // UI đang tiếng Anh (kể cả "system" ra en) ⇒ bản tiếng Anh của trang.
+                     destination: URL(string: model.loc("User guide") == "User guide"
+                                      ? "https://viettelex.com/en/guide/?os=macos"
+                                      : "https://viettelex.com/hdsd/?os=macos")!)
+                Link(model.loc("Learn Telex typing"),
+                     destination: URL(string: "https://ptrinh.github.io/viettelex/learn")!)
+                Link(model.loc("FAQ"),
+                     destination: URL(string: "https://ptrinh.github.io/viettelex/#faq")!)
+                Link(model.loc("How to report a bug"),
+                     destination: URL(string: "https://github.com/ptrinh/viettelex/blob/main/BAO-LOI.md")!)
+            }
+            .font(.callout)
+            // Gỡ cài đặt trọn gói — hỏi xác nhận bằng NSAlert kiểu critical trước khi
+            // làm gì (không hoàn tác được: xoá app + toàn bộ settings/gõ tắt).
+            Button(role: .destructive) { confirmUninstall() } label: {
+                Label(model.loc("Uninstall VietTelex…"), systemImage: "trash")
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    /// Hỏi xác nhận (Huỷ là nút mặc định — Enter không được gỡ nhầm) rồi giao cho
+    /// Uninstaller. Xong hiện tổng kết và thoát process — app đã tự xoá, không còn
+    /// gì để chạy tiếp.
+    private func confirmUninstall() {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = model.loc("Uninstall VietTelex?")
+        alert.informativeText = model.loc("This removes the app, every setting and all your shortcuts. It cannot be undone.")
+        alert.addButton(withTitle: model.loc("Cancel"))          // nút đầu = default (Return)
+        alert.addButton(withTitle: model.loc("Uninstall"))
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        let summary = Uninstaller.run()
+        let done = NSAlert()
+        done.messageText = summary
+        done.runModal()
+        exit(0)
+    }
+}
+
+/// Kiểm tra / cài cập nhật — đích của mục menu "Có bản cập nhật" (`GeneralTab.updateAnchor`).
+struct UpdateSection: View {
+    @EnvironmentObject var model: SettingsModel
+
     @State private var checking = false
     @State private var status: String?     // result line under the button
     /// Set only when a newer release exists — the version the button will install.
@@ -1265,58 +1336,37 @@ struct AboutTab: View {
     @State private var installing = false
 
     var body: some View {
-        VStack(spacing: 10) {
-            Spacer()
-            Image(nsImage: appIcon)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 128, height: 128)
-            Text(AppState.isDevelopmentBuild ? "VietTelex Dev" : "VietTelex").font(.title2).bold()
-            Text(String(format: model.loc("Version %@ · %@"), appVersion, buildDate))
-                .foregroundStyle(.secondary)
-            Link("Website", destination: URL(string: "https://ptrinh.github.io/viettelex/")!)
-            Link(model.loc("User guide"),
-                 // UI đang tiếng Anh (kể cả "system" ra en) ⇒ bản tiếng Anh của trang.
-                 destination: URL(string: model.loc("User guide") == "User guide"
-                                  ? "https://viettelex.com/en/guide/?os=macos"
-                                  : "https://viettelex.com/hdsd/?os=macos")!)
-            Link(model.loc("Learn Telex typing"),
-                 destination: URL(string: "https://ptrinh.github.io/viettelex/learn")!)
-            Link(model.loc("FAQ"),
-                 destination: URL(string: "https://ptrinh.github.io/viettelex/#faq")!)
-            Link(model.loc("How to report a bug"),
-                 destination: URL(string: "https://github.com/ptrinh/viettelex/blob/main/BAO-LOI.md")!)
-
+        Section(header: Label(model.loc("Updates"), systemImage: "arrow.triangle.2.circlepath")) {
             // Manual update check — the only thing that touches the network, and
             // only on this click (see Updater.swift).
-            VStack(spacing: 4) {
-                if checking || installing {
-                    ProgressView().controlSize(.small)
-                } else if let updateVersion {
-                    // Self-install, the SAME path the weekly notification's "Update now"
-                    // uses: download the release app.zip → verify Developer ID + our team
-                    // → atomic bundle swap → relaunch. This button used to only open the
-                    // releases page, so the "I want it now" path was the manual one
-                    // (user decision 2026-07-27). A failure falls back to that page via
-                    // SelfUpdater's own alert.
-                    Button {
-                        installing = true
-                        status = model.loc("Downloading and installing…")
-                        SelfUpdater.run(version: updateVersion) {
-                            installing = false
-                            status = nil                     // SelfUpdater showed the reason
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
+                    if checking || installing {
+                        ProgressView().controlSize(.small)
+                    } else if let updateVersion {
+                        // Self-install, the SAME path the weekly notification's "Update now"
+                        // uses: download the release app.zip → verify Developer ID + our team
+                        // → atomic bundle swap → relaunch. A failure falls back to the
+                        // releases page via SelfUpdater's own alert.
+                        Button {
+                            installing = true
+                            status = model.loc("Downloading and installing…")
+                            SelfUpdater.run(version: updateVersion) {
+                                installing = false
+                                status = nil                     // SelfUpdater showed the reason
+                            }
+                        } label: {
+                            Label(model.loc("Update now"), systemImage: "arrow.down.circle")
                         }
-                    } label: {
-                        Label(model.loc("Update now"), systemImage: "arrow.down.circle")
-                    }
-                    .prominentGlass()
-                } else {
-                    Button { runCheck() } label: { Label(model.loc("Check for updates"), systemImage: "arrow.triangle.2.circlepath") }
                         .prominentGlass()
-                }
-                if let status {
-                    Text(status).font(.caption).foregroundStyle(.secondary)
-                        .lineLimit(2).multilineTextAlignment(.center)
+                    } else {
+                        Button { runCheck() } label: { Label(model.loc("Check for updates"), systemImage: "arrow.triangle.2.circlepath") }
+                            .prominentGlass()
+                    }
+                    if let status {
+                        Text(status).font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                 }
                 // "Update available: 1.6.3" alone asks the user to install on faith. The
                 // release body answers what changed — same box for both channels, since
@@ -1324,34 +1374,20 @@ struct AboutTab: View {
                 if !noteBlocks.isEmpty {
                     releaseNotesBox()
                 }
-                // Opt-in weekly auto-check (default OFF): the toggle IS the user's
-                // consent, so the "no network unless you ask" stance holds.
-                Toggle(model.loc("Check weekly and notify me"), isOn: $model.autoUpdateCheck)
-                    .toggleStyle(.checkbox).font(.caption)
-                // The two checks deliberately follow DIFFERENT channels (Updater.swift) —
-                // say so, or "check" finding 1.4.21 right after the weekly notice said
-                // 1.4.20 looks broken.
-                Text(model.loc("Manual check: the newest release on GitHub. Weekly check: the stable channel."))
-                    .font(.caption2).foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
             }
-            // minHeight, not a fixed height: a long localized status line (or a wrapped
-            // error) used to be clipped by the 66pt box.
-            .frame(minHeight: 66)
+            .id(GeneralTab.updateAnchor)
             // The release updater always installs into the stable app path.
             .disabled(!AppState.isStableBuild)
-
-            Text("© \(String(currentYear)) Phil Trinh").foregroundStyle(.secondary)
-            Spacer()
-            // Gỡ cài đặt trọn gói — hỏi xác nhận bằng NSAlert kiểu critical trước khi
-            // làm gì (không hoàn tác được: xoá app + toàn bộ settings/gõ tắt).
-            Button(role: .destructive) { confirmUninstall() } label: {
-                Label(model.loc("Uninstall VietTelex…"), systemImage: "trash")
-                    .foregroundStyle(.red)
-            }
-            .padding(.bottom, 4)
+            // Opt-in weekly auto-check (default OFF): the toggle IS the user's
+            // consent, so the "no network unless you ask" stance holds.
+            Toggle(model.loc("Check weekly and notify me"), isOn: $model.autoUpdateCheck)
+                .disabled(!AppState.isStableBuild)
+            // The two checks deliberately follow DIFFERENT channels (Updater.swift) —
+            // say so, or "check" finding 1.4.21 right after the weekly notice said
+            // 1.4.20 looks broken.
+            Text(model.loc("Manual check: the newest release on GitHub. Weekly check: the stable channel."))
+                .font(.caption).foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             // Weekly auto-check result, surfaced HERE rather than as a modal that steals
             // focus mid-sentence. This is also the fallback when notification permission
@@ -1367,8 +1403,7 @@ struct AboutTab: View {
     }
 
     /// The changelog, rendered from the release body's Markdown. Scrolls rather than
-    /// stretching the window: a release can have three bullets or thirty, and the About
-    /// tab keeps its shape either way.
+    /// stretching the form: a release can have three bullets or thirty.
     @ViewBuilder
     private func releaseNotesBox() -> some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -1394,7 +1429,7 @@ struct AboutTab: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(6)
             }
-            .frame(maxHeight: 140)
+            .frame(height: 140)
             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
             // Long bodies are cut at notesCharacterCap, and a body can also out-scroll the
             // box — either way the release page is where the rest lives. Derived from the
@@ -1403,11 +1438,7 @@ struct AboutTab: View {
                 Link(model.loc("Full changelog"), destination: full).font(.caption2)
             }
         }
-        .frame(maxWidth: 380)
         .padding(.top, 2)
-        // The About tab has no scroll container: without this the box is the only
-        // compressible child and takes the whole squeeze when the window is short.
-        .layoutPriority(1)
     }
 
     /// `Text` interprets inline Markdown only, and only via AttributedString — bold, code
@@ -1418,24 +1449,6 @@ struct AboutTab: View {
             markdown: s,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(s)
-    }
-
-    /// Hỏi xác nhận (Huỷ là nút mặc định — Enter không được gỡ nhầm) rồi giao cho
-    /// Uninstaller. Xong hiện tổng kết và thoát process — app đã tự xoá, không còn
-    /// gì để chạy tiếp.
-    private func confirmUninstall() {
-        let alert = NSAlert()
-        alert.alertStyle = .critical
-        alert.messageText = model.loc("Uninstall VietTelex?")
-        alert.informativeText = model.loc("This removes the app, every setting and all your shortcuts. It cannot be undone.")
-        alert.addButton(withTitle: model.loc("Cancel"))          // nút đầu = default (Return)
-        alert.addButton(withTitle: model.loc("Uninstall"))
-        guard alert.runModal() == .alertSecondButtonReturn else { return }
-        let summary = Uninstaller.run()
-        let done = NSAlert()
-        done.messageText = summary
-        done.runModal()
-        exit(0)
     }
 
     private func runCheck() {

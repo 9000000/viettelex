@@ -117,7 +117,7 @@ final class AppSupportTests: XCTestCase {
         s.defaults.removeObject(forKey: "uiLanguage")
         XCTAssertEqual(s.uiLanguage, "vi", "default ngôn ngữ UI phải là tiếng Việt")
         // Và VTLocalized phải THẬT SỰ ra tiếng Việt ở default đó, không chỉ trả về key.
-        XCTAssertEqual(VTLocalized("Settings"), "Tùy chỉnh")
+        XCTAssertEqual(VTLocalized("General"), "Chung")
         if let saved { s.defaults.set(saved, forKey: "uiLanguage") }
     }
 
@@ -888,7 +888,6 @@ extension AppSupportTests {
             ({ s.axSelectionReplace }, { s.axSelectionReplace = $0 }),
             ({ s.tapCascadeBreaker }, { s.tapCascadeBreaker = $0 }),
             ({ s.debugLogging }, { s.debugLogging = $0 }),
-            ({ s.advancedFeatures }, { s.advancedFeatures = $0 }),
             ({ s.autoUpdateCheck }, { s.autoUpdateCheck = $0 }),
             ({ s.axPromptShown }, { s.axPromptShown = $0 }),
         ]
@@ -911,21 +910,25 @@ extension AppSupportTests {
         _ = s.tapNativeFastPath
     }
 
-    /// Maintainer decision 2026-08-12: the power-user surface (Bảng chế độ gõ +
-    /// Thử Nghiệm) ships VISIBLE — hiding it made every support round-trip start
-    /// with "bật advanced lên đã". A fresh install (key absent) must read true;
-    /// an explicit user OFF must still stick.
-    func testAdvancedFeaturesDefaultsOn() {
-        let s = AppState.shared
-        let saved = s.defaults.object(forKey: "advancedFeatures") as? Bool
-        defer {
-            if let saved { s.defaults.set(saved, forKey: "advancedFeatures") }
-            else { s.defaults.removeObject(forKey: "advancedFeatures") }
+    /// Toggles bỏ UI (tab Thử nghiệm gỡ 14/10/2026) nằm trong graduatedKeys: giá trị OFF
+    /// cũ của tester bị xoá lúc khởi động ⇒ hành vi luôn bật (default true).
+    func testGraduatedKeysClearOldOffValues() throws {
+        for key in ["tapSkipSyntheticKeyUp", "axSelectionReplace",
+                    "reEditWord", "tapCascadeBreaker", "tapModifyEventInPlace"] {
+            XCTAssertTrue(AppState.graduatedKeys.contains(key), key)
         }
-        s.defaults.removeObject(forKey: "advancedFeatures")
-        XCTAssertTrue(s.advancedFeatures, "fresh install (no stored value) must show the advanced tabs")
-        s.advancedFeatures = false
-        XCTAssertFalse(s.advancedFeatures, "explicit OFF must survive the ON default")
+        let suite = "test.viettelex.graduated.\(UUID().uuidString)"
+        let d = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { d.removePersistentDomain(forName: suite) }
+        for key in AppState.graduatedKeys { d.set(false, forKey: key) }
+        d.set(false, forKey: "safeUnknownApps")              // không tốt nghiệp: giữ nguyên
+        AppState.clearGraduatedKeys(in: d)
+        for key in AppState.graduatedKeys {
+            XCTAssertNil(d.object(forKey: key), key)
+            // Cùng biểu thức đọc như AppState.init ⇒ mặc định bật.
+            XCTAssertTrue((d.object(forKey: key) as? Bool) ?? true, key)
+        }
+        XCTAssertEqual(d.object(forKey: "safeUnknownApps") as? Bool, false)
     }
 
     /// Issue #40 (Discord): the markActive AX poke fires only when a reach-back

@@ -2291,31 +2291,32 @@ final class TelexInputController: IMKInputController {
         }
 
 
-        // Chế độ gõ đang áp dụng + click = copy snapshot giải thích VÌ SAO chọn nó
-        // (maintainer 19/08/2026). Trả lời đúng câu hỏi hay gặp nhất trong bug report:
-        // "app này đang gõ kiểu gì, và vì sao".
-        let strategy = NSMenuItem(title: VTLocalized("Typing mode") + ": "
-                                    + strategyLabel(AppState.shared.currentBundleID, localized: true),
-                                 action: #selector(copyStrategySnapshot(_:)), keyEquivalent: "")
-        strategy.target = self
-        strategy.toolTip = VTLocalized("Click: open the Typing modes table + copy debug info")
-        menu.addItem(strategy)
-
-        // Everything else lives in the Settings window (Chung + Gõ tắt tabs). The menu
-        // stays minimal: status + Settings + System Settings (Keyboard → Input Sources,
-        // where users add/remove the source) + Công cụ….
-        // Công cụ văn bản (TextActions.swift): MỘT mục "Công cụ…" ngay dưới Cài đặt hệ
-        // thống… mở bảng nổi cạnh con trỏ (TextToolsPanel). Không dùng menu con: macOS 27
-        // TextInputMenuAgent vẽ menu con nhưng không chuyển action của mục con về IME
-        // (thử d765295, revert fd8ef15); 6 mục phẳng thì làm menu vướng (maintainer 27/09).
-        for key in Self.trailingMenuKeys(textToolsInMenu: AppState.shared.textToolsInMenu) {
-            let action: Selector
+        // Phần còn lại — PHẲNG, không menu con: macOS 27 TextInputMenuAgent vẽ menu con
+        // nhưng không chuyển action của mục con về IME (thử d765295, revert fd8ef15).
+        // Thứ tự (maintainer 14/10/2026): Công cụ… (dùng nhiều nhất) → Cơ chế gõ →
+        // Cài đặt… → Nguồn nhập liệu… (Keyboard → Input Sources của macOS).
+        // Phím tắt mở Công cụ KHÔNG gắn làm keyEquivalent: TextInputMenuAgent tự vẽ
+        // menu từ bản sao, keyEquivalent ở đây không chắc hiện/chạy đúng — để Cài đặt nói.
+        for key in Self.menuItemKeys(textToolsInMenu: AppState.shared.textToolsInMenu) {
+            let item: NSMenuItem
             switch key {
-            case "Settings…": action = #selector(openSettings(_:))
-            case "System Settings…": action = #selector(openSystemKeyboardSettings(_:))
-            default: action = #selector(openTextTools(_:))
+            case Self.typingModeItemKey:
+                // Chế độ gõ đang áp dụng + click = copy snapshot giải thích VÌ SAO chọn nó
+                // (maintainer 19/08/2026) và mở Bảng cơ chế gõ (tab Ứng dụng).
+                item = NSMenuItem(title: VTLocalized(key) + ": "
+                                    + strategyLabel(AppState.shared.currentBundleID, localized: true),
+                                  action: #selector(copyStrategySnapshot(_:)), keyEquivalent: "")
+                item.toolTip = VTLocalized("Click: open the Typing modes table + copy debug info")
+            case Self.settingsItemKey:
+                item = NSMenuItem(title: VTLocalized(key), action: #selector(openSettings(_:)), keyEquivalent: "")
+            case Self.inputSourcesItemKey:
+                item = NSMenuItem(title: VTLocalized(key), action: #selector(openSystemKeyboardSettings(_:)),
+                                  keyEquivalent: "")
+            default:
+                // Công cụ văn bản (TextActions.swift): MỘT mục mở bảng nổi cạnh con trỏ
+                // (TextToolsPanel) thay cho 6 mục phẳng (maintainer 27/09).
+                item = NSMenuItem(title: VTLocalized(key), action: #selector(openTextTools(_:)), keyEquivalent: "")
             }
-            let item = NSMenuItem(title: VTLocalized(key), action: action, keyEquivalent: "")
             item.target = self
             menu.addItem(item)
         }
@@ -2325,9 +2326,14 @@ final class TelexInputController: IMKInputController {
 
     /// Khoá chuỗi của mục menu mở bảng công cụ (vi: "Công cụ…").
     static let toolsItemKey = "Tools…"
-    /// Thứ tự các mục cuối menu (sau dòng Cơ chế gõ) — test giữ đúng vị trí.
-    static func trailingMenuKeys(textToolsInMenu: Bool) -> [String] {
-        ["Settings…", "System Settings…"] + (textToolsInMenu ? [toolsItemKey] : [])
+    /// Dòng "Cơ chế gõ: …" (tiêu đề thật = khoá + ": " + cơ chế của app đang gõ).
+    static let typingModeItemKey = "Typing mode"
+    static let settingsItemKey = "Settings…"
+    /// Mở Keyboard → Input Sources của macOS (trước 14/10/2026 tên "Cài đặt hệ thống…").
+    static let inputSourcesItemKey = "Input Sources…"
+    /// Thứ tự các mục sau dòng trạng thái / cập nhật — test giữ đúng vị trí.
+    static func menuItemKeys(textToolsInMenu: Bool) -> [String] {
+        (textToolsInMenu ? [toolsItemKey] : []) + [typingModeItemKey, settingsItemKey, inputSourcesItemKey]
     }
 
     @objc private func openSystemKeyboardSettings(_ sender: Any?) {
@@ -2595,11 +2601,12 @@ final class TelexInputController: IMKInputController {
 
 
     @objc private func openSettings(_ sender: Any?) {
-        SettingsWindowController.shared.show(tab: .general)
+        SettingsWindowController.shared.show(tab: .typing)
     }
 
+    /// "Có bản cập nhật" → tab Chung, cuộn tới khối cập nhật (nút "Cập nhật ngay").
     @objc private func openAboutForUpdate(_ sender: Any?) {
-        SettingsWindowController.shared.show(tab: .about)
+        SettingsWindowController.shared.show(tab: .general, revealUpdate: true)
     }
 
     /// Trang giải thích các kiểu gõ (In-place/Tap/Marked…) — GitHub render sẵn
@@ -2615,7 +2622,7 @@ final class TelexInputController: IMKInputController {
         // ĐỔI cơ chế cho app đang gõ, bảng hiện ra là feedback đủ rõ, không alert).
         DispatchQueue.main.async { [weak self] in
             self?.showDebugLog(alert: false)
-            SettingsWindowController.shared.show(tab: .modeTable,
+            SettingsWindowController.shared.show(tab: .apps,
                                                  modeFilter: AppState.shared.currentBundleID)
         }
     }

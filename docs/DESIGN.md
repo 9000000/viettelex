@@ -38,8 +38,9 @@ VietTelex.app  (một bundle duy nhất, LSUIElement)
 ├── SyllableValidator  (rule-based, không từ điển)
 ├── AppState           (UserDefaults, cache in-memory, học chiến lược per-app;
 │     rule mặc định load từ typing-modes.yml bundle — sửa rule = sửa data, không sửa Swift)
-└── SettingsWindow     (SwiftUI: Chung, Gõ tắt + khi bật "tính năng nâng cao":
-      Bảng cơ chế gõ, Thử Nghiệm; chỉ tạo khi mở, đóng là giải phóng)
+└── SettingsWindow     (SwiftUI: Gõ phím, Công cụ & gợi ý, Gõ tắt, Ứng dụng
+      (bảng cơ chế gõ), Chung (giới thiệu, cập nhật, chẩn đoán); chỉ tạo khi mở,
+      đóng là giải phóng)
 ```
 
 Quy tắc cứng:

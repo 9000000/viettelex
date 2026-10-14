@@ -112,17 +112,26 @@ final class AppState: @unchecked Sendable {
     // hot path còn dùng) nhưng giá trị OFF mà tester từng đặt bị xoá ở đây — không
     // còn UI nào để họ bật lại, giữ override cũ là kẹt vĩnh viễn ở đường chậm/kém
     // an toàn mà không ai biết. Khác legacyKeys (không còn đọc), đừng gộp chung.
-    private static let graduatedKeys = [
+    // 14/10/2026 (sắp xếp lại Cài đặt, bỏ tab Thử nghiệm): thêm "Bỏ qua key-up tổng
+    // hợp" + "Thay thế qua AX (Chrome/Spotlight)" — cả hai mặc định bật từ lâu.
+    static let graduatedKeys = [
         "reEditWord",             // Gõ thêm dấu cho từ ngay trước con trỏ
         "tapCascadeBreaker",      // Bộ ngắt chống tràn sự kiện
         "tapModifyEventInPlace",  // Sửa sự kiện phím tại chỗ
+        "tapSkipSyntheticKeyUp",  // Bỏ qua key-up tổng hợp
+        "axSelectionReplace",     // Thay thế qua AX (Chrome/Spotlight)
     ]
+
+    /// Xoá override cũ của các toggle đã tốt nghiệp (tách ra để test với suite riêng).
+    static func clearGraduatedKeys(in defaults: UserDefaults) {
+        for key in graduatedKeys { defaults.removeObject(forKey: key) }
+    }
 
     private init() {
         // graduatedKeys xoá TRƯỚC mọi lần đọc bên dưới — xoá sau thì cache in-memory
         // của phiên này vẫn giữ giá trị OFF cũ và default-bật chỉ có hiệu lực từ lần
         // khởi động sau.
-        for key in Self.graduatedKeys { defaults.removeObject(forKey: key) }
+        Self.clearGraduatedKeys(in: defaults)
         // Engine toggles: cached in memory (see the property docs) — every one of these
         // was read from UserDefaults on EVERY keystroke, on both hot paths.
         _autoRestore = (defaults.object(forKey: Key.autoRestore) as? Bool) ?? true
@@ -447,15 +456,8 @@ final class AppState: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "lastNotifiedUpdateVersion") }
     }
 
-    /// Show the power-user surface (Bảng chế độ gõ + Thử Nghiệm tabs). Default ON
-    /// (maintainer decision 2026-08-12 — was OFF under the "cài xong là gõ"
-    /// philosophy, but hiding the mode table / debug log made every support
-    /// round-trip start with "bật advanced lên đã"). Toggle stays for users who
-    /// prefer the minimal surface. Settings-UI only (main thread), no lock.
-    var advancedFeatures: Bool {
-        get { (defaults.object(forKey: "advancedFeatures") as? Bool) ?? true }
-        set { defaults.set(newValue, forKey: "advancedFeatures") }
-    }
+    // "advancedFeatures" (Ẩn tính năng nâng cao) bỏ 14/10/2026: mọi tab luôn hiện. Khoá
+    // cũ trong defaults không còn được đọc — vô hại, để nguyên.
 
     /// Tap-mode native fast path: non-transforming letters pass through natively
     /// (zero synthetic events) when no synthetic burst is in flight. Default ON.
@@ -1241,6 +1243,13 @@ final class AppState: @unchecked Sendable {
     var addTonesHotkey: String {
         get { defaults.string(forKey: "addTonesHotkey") ?? "off" }
         set { defaults.set(newValue, forKey: "addTonesHotkey") }
+    }
+
+    /// Phím tắt mở bảng Công cụ…: "off" (mặc định — không đăng ký gì) /
+    /// TextActionHotkey.toolsChoices. Như addTonesHotkey: chỉ máy này, không đồng bộ iCloud.
+    var toolsPanelHotkey: String {
+        get { defaults.string(forKey: "toolsPanelHotkey") ?? "off" }
+        set { defaults.set(newValue, forKey: "toolsPanelHotkey") }
     }
 
     /// Công cụ → Dịch: ngôn ngữ đích (cùng khoá + luật với iOS — TranslatePrefs; đồng bộ

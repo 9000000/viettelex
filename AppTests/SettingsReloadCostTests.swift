@@ -24,7 +24,7 @@ final class SettingsReloadCostTests: XCTestCase {
     /// while a window is open, so each id must be looked up at most once per session.
     func testInstalledLookupsAreMemoized() {
         SettingsModel.installedCache.removeAll()
-        let model = SettingsModel(selected: .modeTable)
+        let model = SettingsModel(selected: .apps)
         model.reloadModeTable()
         let afterFirst = SettingsModel.installedCache.count
         XCTAssertGreaterThan(afterFirst, 0, "the reload must populate the cache")
@@ -38,7 +38,7 @@ final class SettingsReloadCostTests: XCTestCase {
     /// ROW (~20-60 of them) on every reload. One resolve per bundle id per session.
     func testAppNameLookupsAreMemoized() {
         SettingsModel.nameCache.removeAll()
-        let model = SettingsModel(selected: .modeTable)
+        let model = SettingsModel(selected: .apps)
         model.reloadModeTable()
         let afterFirst = SettingsModel.nameCache.count
         XCTAssertGreaterThan(afterFirst, 0, "the reload must populate the name cache")
@@ -67,7 +67,7 @@ final class SettingsReloadCostTests: XCTestCase {
     /// Throttled reload: at most one rebuild per second, no matter how many windows become
     /// key. Observed through `modeRows`: a skipped reload leaves the emptied rows empty.
     func testThrottledReloadSkipsWithinTheWindow() {
-        let model = SettingsModel(selected: .modeTable)
+        let model = SettingsModel(selected: .apps)
         model.reloadModeTable()
         XCTAssertFalse(model.modeRows.isEmpty, "a direct reload always rebuilds")
 
@@ -77,7 +77,7 @@ final class SettingsReloadCostTests: XCTestCase {
     }
 
     func testThrottledReloadRunsOnceTheWindowHasPassed() {
-        let model = SettingsModel(selected: .modeTable)
+        let model = SettingsModel(selected: .apps)
         model.reloadModeTable()
         model.modeRows = []
         model.lastModeReloadAt -= 2               // pretend the last rebuild was 2s ago
@@ -88,7 +88,7 @@ final class SettingsReloadCostTests: XCTestCase {
     /// A direct (unthrottled) reload must also RESET the throttle clock, or the next
     /// window-focus reload would fire immediately after it and undo the guard.
     func testDirectReloadStampsTheThrottleClock() {
-        let model = SettingsModel(selected: .modeTable)
+        let model = SettingsModel(selected: .apps)
         model.lastModeReloadAt = 0
         model.reloadModeTable()
         XCTAssertGreaterThan(model.lastModeReloadAt, 0, "reloadModeTable must stamp the clock")

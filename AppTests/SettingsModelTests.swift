@@ -26,8 +26,46 @@ final class SettingsModelTests: XCTestCase {
         super.tearDown()
     }
 
+    /// 5 tab ngang, đúng thứ tự, luôn hiện (không còn "Ẩn tính năng nâng cao"); nhãn
+    /// có tiếng Việt; icon không trùng nhau.
+    func testSettingsTabsOrderAndLabels() throws {
+        XCTAssertEqual(SettingsTab.allCases, [.typing, .tools, .shortcuts, .apps, .general])
+        let path = try XCTUnwrap(Bundle.main.path(forResource: "vi", ofType: "lproj"))
+        let vi = try XCTUnwrap(Bundle(path: path))
+        let expected: [SettingsTab: String] = [
+            .typing: "Gõ phím", .tools: "Công cụ & gợi ý", .shortcuts: "Gõ tắt",
+            .apps: "Ứng dụng", .general: "Chung",
+        ]
+        for tab in SettingsTab.allCases {
+            XCTAssertEqual(vi.localizedString(forKey: tab.titleKey, value: nil, table: nil), expected[tab])
+        }
+        XCTAssertEqual(Set(SettingsTab.allCases.map(\.icon)).count, SettingsTab.allCases.count)
+    }
+
+    /// Mở thẳng vào bất kỳ tab nào (không còn rơi về tab đầu khi "nâng cao" tắt).
+    func testModelOpensRequestedTab() {
+        for tab in SettingsTab.allCases {
+            XCTAssertEqual(SettingsModel(selected: tab).selectedTab, tab)
+        }
+    }
+
+    /// Chú thích Công cụ văn bản theo đúng số dòng của bảng (7 khi có Dịch), có tiếng Việt.
+    func testTextToolsCaptionMatchesPanelRows() throws {
+        let path = try XCTUnwrap(Bundle.main.path(forResource: "vi", ofType: "lproj"))
+        let vi = try XCTUnwrap(Bundle(path: path))
+        XCTAssertTrue(SettingsModel.textToolsCaptionKey(toolCount: 6).contains("1–6"))
+        XCTAssertTrue(SettingsModel.textToolsCaptionKey(toolCount: 7).contains("1–7"))
+        let n = TextToolsPanelLogic.tools.count
+        XCTAssertTrue(SettingsModel.textToolsCaptionKey(toolCount: n).contains("1–\(n)"))
+        for k in [6, 7].map(SettingsModel.textToolsCaptionKey(toolCount:)) {
+            XCTAssertNotEqual(vi.localizedString(forKey: k, value: "∅", table: nil), "∅")
+        }
+        XCTAssertNotEqual(vi.localizedString(forKey: "Keep VietTelex when macOS auto-switches the input source",
+                                             value: "∅", table: nil), "∅")
+    }
+
     func testImportIsIdempotentAndValidates() {
-        let model = SettingsModel(selected: .modeTable)
+        let model = SettingsModel(selected: .apps)
         let dict = [
             "test.viettelex.import.a": "tap",
             "test.viettelex.import.b": "inPlace",
@@ -54,7 +92,7 @@ final class SettingsModelTests: XCTestCase {
               let data = try? Data(contentsOf: url),
               let dict = ShortcutImporter.parse(data)
         else { return XCTFail("bundled typing-modes.yml unreadable") }
-        let model = SettingsModel(selected: .modeTable)
+        let model = SettingsModel(selected: .apps)
         let n1 = model.importManualModes(dict)
         let snapshot = s.manualModes
         let n2 = model.importManualModes(dict)
@@ -64,7 +102,7 @@ final class SettingsModelTests: XCTestCase {
     }
 
     func testRowsFilterSortAndLabels() {
-        let model = SettingsModel(selected: .modeTable)
+        let model = SettingsModel(selected: .apps)
         model.reloadModeTable()
         // Terminal row exists with a truthful detected label under both trusts.
         Accessibility.testTrustOverride = true
@@ -92,7 +130,7 @@ final class SettingsModelTests: XCTestCase {
     }
 
     func testAddAndDeleteRow() {
-        let model = SettingsModel(selected: .modeTable)
+        let model = SettingsModel(selected: .apps)
         model.newModeAppID = "test.viettelex.added"
         model.addApp()
         XCTAssertTrue(model.visibleModeRows.contains { $0.id == "test.viettelex.added" })

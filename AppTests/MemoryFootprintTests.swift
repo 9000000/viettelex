@@ -42,11 +42,11 @@ final class MemoryFootprintTests: XCTestCase {
         // đường thật (controller là chủ duy nhất) và số đo sai.
         let c = SettingsWindowController()
         autoreleasepool {
-            c.buildWindowIfNeeded(tab: .general)
+            c.buildWindowIfNeeded(tab: .typing)
             c.currentWindow?.alphaValue = 0
             c.currentWindow?.ignoresMouseEvents = true
             c.currentWindow?.orderFrontRegardless()
-            for tab in [SettingsTab.general, .shortcuts, .modeTable, .experimental, .about] {
+            for tab in SettingsTab.allCases {
                 c.currentModel?.selectedTab = tab
                 spin(0.3)
                 c.currentWindow?.displayIfNeeded()
@@ -67,7 +67,7 @@ final class MemoryFootprintTests: XCTestCase {
         // Mở lại lần hai: heap sống không được cộng thêm một graph nữa (issue #59).
         let live1 = mallocInUse().inUse
         autoreleasepool {
-            c.buildWindowIfNeeded(tab: .modeTable)
+            c.buildWindowIfNeeded(tab: .apps)
             c.currentWindow?.alphaValue = 0
             c.currentWindow?.orderFrontRegardless()
             spin(0.3)
@@ -89,7 +89,7 @@ final class MemoryFootprintTests: XCTestCase {
     /// Chi phí từng tab (cửa sổ mới cho mỗi tab, relief giữa các lần) — chỉ in, không assert.
     func testPrintPerTabCost() {
         let c = SettingsWindowController()
-        for tab in [SettingsTab.general, .shortcuts, .modeTable, .experimental, .about, .general] {
+        for tab in SettingsTab.allCases + [.typing] {
             malloc_zone_pressure_relief(nil, 0)
             let before = MemoryFootprint.sample().current, liveBefore = mallocInUse().inUse
             var open: UInt64 = 0, liveOpen = 0
@@ -113,17 +113,17 @@ final class MemoryFootprintTests: XCTestCase {
     /// Đóng Cài đặt phải giải phóng TOÀN BỘ đồ thị SwiftUI (window, hosting controller,
     /// model) — không thì mỗi lần mở lại cộng thêm một graph (issue #59).
     func testSettingsWindowDeallocatesOnClose() {
-        assertDeallocates(tab: .general)
+        assertDeallocates(tab: .typing)
     }
 
     func testEachTabDeallocatesOnClose() {
-        for tab in [SettingsTab.shortcuts, .modeTable, .experimental, .about] {
+        for tab in SettingsTab.allCases where tab != .typing {
             assertDeallocates(tab: tab)
         }
     }
 
     func testSwitchingAllTabsDeallocatesOnClose() {
-        assertDeallocates(tab: .general, visitAll: true)
+        assertDeallocates(tab: .typing, visitAll: true)
     }
 
     private func assertDeallocates(tab: SettingsTab, visitAll: Bool = false, line: UInt = #line) {
@@ -141,7 +141,7 @@ final class MemoryFootprintTests: XCTestCase {
             c.currentWindow?.orderFrontRegardless()
             spin(0.3)
             if visitAll {
-                for t in [SettingsTab.shortcuts, .modeTable, .experimental, .about, .general] {
+                for t in SettingsTab.allCases.dropFirst() + [.typing] {
                     c.currentModel?.selectedTab = t
                     spin(0.3)
                     c.currentWindow?.displayIfNeeded()

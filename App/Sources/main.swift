@@ -91,9 +91,10 @@ StickyInputSource.shared.start()
 // (no-op khi nội dung đã đúng, tức bundle chỉ bị chạm khi user thật sự đổi icon).
 MenuIconSwitcher.applyIfNeeded(choice: AppState.shared.menuIcon)
 
-// Phím tắt Thêm dấu (mặc định tắt) + đồng bộ iCloud (mặc định tắt, cần entitlement):
-// cả hai no-op khi tắt.
+// Phím tắt Thêm dấu + mở bảng Công cụ (mặc định tắt) + đồng bộ iCloud (mặc định tắt,
+// cần entitlement): tất cả no-op khi tắt.
 TextActionHotkey.apply(AppState.shared.addTonesHotkey)
+TextActionHotkey.applyToolsPanel(AppState.shared.toolsPanelHotkey)
 ICloudSync.shared.start()
 
 // Accessibility permission toggled (System Settings): react IMMEDIATELY, not on the
@@ -150,7 +151,7 @@ NSApplication.shared.mainMenu = mainMenu
 final class ReopenDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication,
                                        hasVisibleWindows flag: Bool) -> Bool {
-        if !isTestHost { SettingsWindowController.shared.show(tab: .general) }
+        if !isTestHost { SettingsWindowController.shared.show(tab: .typing) }
         return false
     }
 }

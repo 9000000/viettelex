@@ -2,7 +2,6 @@
    Vietnamese-language macOS shows these values, everything else shows the keys. */
 
 /* Tabs */
-"Settings" = "Tùy chỉnh";
 "Shortcuts" = "Gõ tắt";
 "About" = "Giới thiệu";
 
@@ -33,10 +32,6 @@
 "Advanced" = "Nâng cao";
 "Modify key events in place" = "Sửa sự kiện phím tại chỗ";
 "In terminals, apply a one-letter tone edit (w→ư) by rewriting the real keystroke instead of posting two synthetic events — lower latency." = "Trong terminal, sửa một ký tự (w→ư) bằng cách viết lại phím thật thay vì gửi hai sự kiện tổng hợp — giảm độ trễ.";
-"Skip synthetic key-up" = "Bỏ qua key-up tổng hợp";
-"Post only the key-down for inserted letters in terminals, halving events per keystroke." = "Chỉ gửi key-down cho ký tự chèn trong terminal, giảm nửa số sự kiện mỗi phím.";
-"AX replace (Chrome/Spotlight)" = "Thay thế qua AX (Chrome/Spotlight)";
-"Apply tone edits in Chrome and Spotlight with one Accessibility edit instead of a burst of Shift+Left key events — lower latency." = "Sửa dấu trong Chrome và Spotlight bằng một thao tác Accessibility thay vì loạt phím Shift+Trái — giảm độ trễ.";
 
 /* About tab */
 "Version %@ · %@" = "Version %@ ngày %@";
@@ -82,16 +77,12 @@
 "Close" = "Đóng";
 
 /* Experimental tab (Thử Nghiệm) */
-"Experimental" = "Thử nghiệm";
-"Input method" = "Kiểu gõ";
 "VNI typing (experimental)" = "Gõ kiểu VNI (thử nghiệm)";
-"Unknown apps" = "App chưa nhận diện";
 "Unknown apps use the safe channel (tap/marked)" = "App lạ dùng kênh gõ an toàn (tap/marked)";
 "Apps without a rule type via backspace-retype (or underlined composition without Accessibility) instead of trying direct insertion and guessing. Turn off to restore the old probe-and-learn behavior." = "App chưa có rule sẽ gõ bằng backspace-retype (hoặc gạch chân khi thiếu quyền Trợ năng) thay vì thử gõ trực tiếp rồi tự đoán. Tắt để quay lại cơ chế dò-và-học cũ.";
 "Type diacritics with digits instead of Telex letters: 1-5 = sắc/huyền/hỏi/ngã/nặng, 6 = â/ê/ô, 7 = ơ/ư, 8 = ă, 9 = đ, 0 = clear tone. Letters stay literal. Keep Live spell-check on so numbers like “mp3” aren’t turned into tones." = "Gõ dấu bằng chữ số thay cho chữ cái Telex: 1-5 = sắc/huyền/hỏi/ngã/nặng, 6 = â/ê/ô, 7 = ơ/ư, 8 = ă, 9 = đ, 0 = bỏ dấu. Chữ cái giữ nguyên. Nên bật “Kiểm tra chính tả khi gõ” để số như “mp3” không bị biến thành dấu.";
 "Context-based decision" = "Quyết định theo ngữ cảnh";
 "After an English word, an ambiguous next word whose keys spell an English word is kept English instead of Vietnamese — “he is” → “he is”, not “he í”. After a Vietnamese or unclear word it stays Vietnamese — “sao í”." = "Sau một từ tiếng Anh, từ nhập nhằng kế tiếp mà chuỗi phím tạo thành một từ tiếng Anh sẽ được giữ tiếng Anh thay vì tiếng Việt — “he is” → “he is”, không phải “he í”. Sau từ tiếng Việt hoặc không rõ thì để tiếng Việt — “sao í”.";
-"Terminal typing latency" = "Độ trễ gõ trong terminal";
 "Safety" = "An toàn";
 "Cascade circuit breaker" = "Bộ ngắt chống tràn sự kiện";
 "Keep this ON. Stops the terminal tap if it ever floods the keyboard with synthetic events, so a bug can’t freeze typing." = "Nên để BẬT. Tự ngắt tap terminal nếu nó phát quá nhiều sự kiện phím, để lỗi không thể làm treo bàn phím.";
@@ -104,7 +95,6 @@
 "Copied — paste it into your bug report." = "Đã chép — dán vào phần báo lỗi.";
 "Saved to %@" = "Đã lưu vào %@";
 "Couldn’t save the file." = "Không lưu được file.";
-"Apply tone edits in Chrome and Spotlight with one Accessibility edit instead of a burst of Shift+Left key events." = "Bỏ dấu trong Chrome và Spotlight bằng một thao tác Accessibility thay vì một loạt phím Shift+Trái.";
 
 /* App mode override (Experimental) */
 "App mode" = "Chế độ ứng dụng";
@@ -124,7 +114,6 @@
 "…or enter a bundle id:" = "…hoặc nhập bundle id:";
 
 /* Mode table tab (Bảng chế độ gõ) */
-"Typing modes" = "Bảng cơ chế gõ";
 "App" = "Ứng dụng";
 "Detected" = "Đã nhận diện";
 "Manual" = "Ép tay";
@@ -146,12 +135,10 @@
 "Merged into the table (existing pins for the same app take the imported value). Entries with an unknown mode were skipped." = "Đã gộp vào bảng (app trùng lấy giá trị nhập vào). Mục có chế độ không hợp lệ bị bỏ qua.";
 
 /* Advanced features toggle */
-"Hide advanced features" = "Ẩn tính năng nâng cao";
 "When a word is both English and Vietnamese" = "Khi từ vừa là tiếng Anh vừa là tiếng Việt";
 "Prefer Vietnamese" = "Ưu tiên tiếng Việt";
 "Prefer English" = "Ưu tiên tiếng Anh";
 "For words like last/lát, list/lít, his/hí. Prefer Vietnamese: double the tone key to keep English (lisst → list). Prefer English: put the tone at the end for Vietnamese (lits → lít). Inside an English sentence the word stays English either way." = "Cho các từ như last/lát, list/lít, his/hí. Ưu tiên tiếng Việt: gõ đúp phím dấu để giữ tiếng Anh (lisst → list). Ưu tiên tiếng Anh: đặt dấu ở cuối từ để ra tiếng Việt (lits → lít). Trong câu tiếng Anh thì từ vẫn giữ tiếng Anh dù chọn gì.";
-"Hides the Typing modes and Experimental tabs — per-app overrides, latency flags, debug log. Not needed for everyday typing." = "Ẩn tab Bảng cơ chế gõ và Thử nghiệm — ép chế độ theo app, cờ độ trễ, nhật ký gỡ lỗi. Dùng hằng ngày thì không cần.";
 
 /* UX batch 21/07 pm */
 "Missing Accessibility permission — click to open System Settings" = "Thiếu quyền Trợ năng — bấm để mở System Settings";
@@ -245,7 +232,6 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 "Switch to %@ (then click away)" = "Bấm sang %@ (rồi bấm ra)";
 
 /* Sticky input source (field report 15/08/2026 — ô comment Word reset bộ gõ) */
-"Keep VietTelex when macOS auto-switches the input source (experimental)" = "Giữ VietTelex khi macOS tự đổi bộ gõ (thử nghiệm)";
 "Some apps (Word comments…) make macOS fall back to the default input source for every new field when “Automatically switch to a document's input source” is on. This switches back to VietTelex — only when the change wasn't yours (no ⌃Space, no menu click, same app)." = "Một số app (ô comment của Word…) làm macOS rơi về bộ gõ mặc định ở mỗi ô mới khi bật “Automatically switch to a document's input source”. Tính năng này tự chuyển lại VietTelex — chỉ khi thay đổi không phải do bạn (không ⌃Space, không click menu, không đổi app).";
 
 /* Menu bar icon picker (maintainer 17/08/2026 — cho chọn MenuIcon, chấp nhận gãy seal) */
@@ -316,7 +302,6 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 "Tools… → Translate translates the selection into this language; text already in this language is translated back to Vietnamese. Runs entirely on this Mac with Apple’s translation packs — your text is never sent anywhere." = "Công cụ… → Dịch dịch vùng chọn sang ngôn ngữ này; chữ vốn đã là ngôn ngữ này thì dịch về tiếng Việt. Dịch hoàn toàn trên máy bằng gói dịch của Apple — chữ của bạn không gửi đi đâu.";
 "Text tools" = "Công cụ văn bản";
 "Tools…" = "Công cụ…";
-"Select text in any app, then open the VietTelex menu → Tools… and pick (or press 1–6): add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones." = "Bôi đen chữ ở app bất kỳ rồi mở menu VietTelex → Công cụ… và chọn (hoặc bấm 1–6): thêm dấu cho đoạn không dấu (toi di hoc → tôi đi học), HOA, thường, Hoa Đầu Từ, Hoa đầu câu, xoá dấu.";
 "Show text tools in the VietTelex menu" = "Hiện công cụ văn bản trong menu VietTelex";
 "Show maths results" = "Hiện kết quả phép tính";
 "Type a calculation followed by “=” (12*3=, 200+10%=) — the result shows next to the cursor; press Tab or Enter to insert it." = "Gõ phép tính rồi “=” (12*3=, 200+10%=) — kết quả hiện cạnh con trỏ, bấm Tab hoặc Enter để chèn.";
@@ -327,7 +312,6 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 "Suggest tones for unaccented sentences" = "Gợi ý thêm dấu cho câu không dấu";
 "After 3+ unaccented syllables (toi di hoc), when you type . ! ? or pause after a space, the toned text (tôi đi học) shows next to the cursor; press Tab to replace it." = "Sau từ 3 âm tiết không dấu trở lên (toi di hoc), khi gõ . ! ? hoặc dừng tay sau dấu cách, câu có dấu (tôi đi học) hiện cạnh con trỏ, bấm Tab để thay.";
 "Suggest dates and times" = "Gợi ý ngày giờ";
-"Maths results, number chips, typo/tone/date suggestions, add-tones hotkey…" = "Phép tính, chip số, gợi ý sửa lỗi / thêm dấu / ngày giờ, phím tắt Thêm dấu…";
 "Type “hôm nay”, “ngày mai”, “hôm qua” or “bây giờ” (after an English word: today, tomorrow, yesterday, now) and a space — the date (28/09/2026) or time (21:35) shows next to the cursor; press Tab to replace the words with it." = "Gõ “hôm nay”, “ngày mai”, “hôm qua” hoặc “bây giờ” (sau một từ tiếng Anh: today, tomorrow, yesterday, now) rồi dấu cách — ngày (28/09/2026) hoặc giờ (21:35) hiện cạnh con trỏ, bấm Tab để thay cụm đó bằng ngày giờ.";
 "Add-tones hotkey" = "Phím tắt Thêm dấu";
 "Off" = "Tắt";
@@ -343,3 +327,17 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 "Chrome, Edge and Electron apps (Lark, Slack…) apply macOS Text Replacements too, so VietTelex leaves these keys to macOS there to avoid a double expansion. A short macOS replacement (like “h”) can still break Vietnamese words in those apps — delete it from macOS: VietTelex’s shortcut works in every app." = "Chrome, Edge và các app Electron (Lark, Slack…) cũng tự áp Thay thế văn bản của macOS, nên ở đó VietTelex nhường các khoá này cho macOS để không bị nở hai lần. Khoá ngắn bên macOS (như “h”) vẫn có thể làm hỏng chữ Việt trong các app đó — nên xoá nó khỏi macOS: gõ tắt VietTelex chạy ở mọi app.";
 "Open Keyboard Settings…" = "Mở Cài đặt Bàn phím…";
 "Check again" = "Kiểm tra lại";
+
+/* Settings reorganized (14/10/2026): 5 tabs, Tools panel hotkey, menu order */
+"Typing" = "Gõ phím";
+"Tools & suggestions" = "Công cụ & gợi ý";
+"Apps" = "Ứng dụng";
+"General" = "Chung";
+"Updates" = "Cập nhật";
+"Suggestions next to the cursor" = "Gợi ý cạnh con trỏ";
+"Tools panel hotkey" = "Phím tắt mở Công cụ";
+"Opens Tools… next to the cursor from any app, even when another input source is active. Press it again to close." = "Mở Công cụ… cạnh con trỏ ở app bất kỳ, kể cả khi đang dùng bộ gõ khác. Bấm lại để đóng.";
+"Select text in any app, then open Tools… (VietTelex menu or the hotkey below) and pick a tool or press its number 1–6: add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones." = "Bôi đen chữ ở app bất kỳ rồi mở Công cụ… (menu VietTelex hoặc phím tắt bên dưới) và chọn, hoặc bấm số 1–6: thêm dấu cho đoạn không dấu (toi di hoc → tôi đi học), HOA, thường, Hoa Đầu Từ, Hoa đầu câu, xoá dấu.";
+"Select text in any app, then open Tools… (VietTelex menu or the hotkey below) and pick a tool or press its number 1–7: add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones, translate." = "Bôi đen chữ ở app bất kỳ rồi mở Công cụ… (menu VietTelex hoặc phím tắt bên dưới) và chọn, hoặc bấm số 1–7: thêm dấu cho đoạn không dấu (toi di hoc → tôi đi học), HOA, thường, Hoa Đầu Từ, Hoa đầu câu, xoá dấu, dịch.";
+"Keep VietTelex when macOS auto-switches the input source" = "Giữ VietTelex khi macOS tự đổi bộ gõ";
+"Input Sources…" = "Nguồn nhập liệu…";

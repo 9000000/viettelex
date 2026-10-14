@@ -19,8 +19,8 @@ Lỗi hiển thị (chữ nhảy, bôi đen, mất chữ…) → kèm video quay
 
 Nhật ký chỉ ghi sự kiện của bộ gõ, **không ghi nội dung bạn gõ**.
 
-1. Menu **Ｖ** → **Cài đặt…** → tab **Tùy chỉnh** → bật **Mở tính năng nâng cao** (cuối trang).
-2. Sang tab **Thử nghiệm** → mục **Chẩn đoán** → bật **Ghi nhật ký gỡ lỗi** → bấm **Xoá**.
+1. Menu **Ｖ** → **Cài đặt…** → tab **Chung**.
+2. Mục **Chẩn đoán** (cuối trang) → bật **Ghi nhật ký gỡ lỗi** → bấm **Xoá**.
 3. Tái hiện lỗi trong app bị lỗi, rồi quay lại bấm **Chép nhật ký gỡ lỗi** ngay và dán thẳng vào issue (log chỉ giữ 2000 dòng gần nhất). Cần file thì bấm **Lưu nhật ký gỡ lỗi…**.
 
 <img src="assets/debug-log-1.png" alt="Bật Mở tính năng nâng cao" width="440"> <img src="assets/debug-log-2.png" alt="Ghi nhật ký gỡ lỗi" width="440">

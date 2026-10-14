@@ -309,6 +309,10 @@ final class TextToolsPanel {
         // Gõ phím khác (không phải phím panel bắt) = user bỏ panel, gõ tiếp. Cần quyền
         // Accessibility; không có thì chỉ mất tiện ích này.
         if let m = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { e in
+            // Phím tắt mở Công cụ (TextActionHotkey) tự bật/tắt bảng — đóng ở đây thì
+            // handler hotkey lại mở ra, thành "bấm lại không đóng được".
+            if TextActionHotkey.isToolsPanelHotkey(keyCode: Int(e.keyCode), flags: e.modifierFlags,
+                                                   choice: AppState.shared.toolsPanelHotkey) { return }
             let shift = e.modifierFlags.contains(.shift)
             if TextToolsPanelLogic.command(keyCode: Int(e.keyCode), shift: shift) == nil
                 || !e.modifierFlags.intersection([.command, .control, .option]).isEmpty {

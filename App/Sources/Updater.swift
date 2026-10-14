@@ -12,7 +12,7 @@ import Security
 
 enum UpdateCheck {
     /// Set by the weekly auto-check when a newer STABLE version exists, so the About tab
-    /// can show it (see `AboutTab.onAppear`). This is the whole point of the notification
+    /// can show it (see `UpdateSection.onAppear`). This is the whole point of the notification
     /// rewrite: the news must never arrive as a modal in the middle of a sentence, and if
     /// notifications are denied the About tab is the only place left to say it.
     /// Persisted so it survives the IME being relaunched between the check and the visit.
@@ -430,14 +430,14 @@ enum UpdateNotifier {
         }
     }
 
-    /// Tapping the banner opens Settings → Giới thiệu, where "Update now" is waiting —
+    /// Tapping the banner opens Settings → Chung (update block), where "Update now" is waiting —
     /// the user stays in control of WHEN the install happens.
     private final class Delegate: NSObject, UNUserNotificationCenterDelegate {
         func userNotificationCenter(_ center: UNUserNotificationCenter,
                                     didReceive response: UNNotificationResponse,
                                     withCompletionHandler completionHandler: @escaping () -> Void) {
             DispatchQueue.main.async {
-                SettingsWindowController.shared.show(tab: .about)
+                SettingsWindowController.shared.show(tab: .general, revealUpdate: true)
             }
             completionHandler()
         }

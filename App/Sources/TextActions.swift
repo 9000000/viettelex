@@ -253,7 +253,7 @@ enum TextActionRunner {
             case .notInstalled:
                 TranslateToast.show(VTLocalized("Translation pack not downloaded — open VietTelex Settings → Text tools."),
                                     client: client, sticky: false) {
-                    SettingsWindowController.shared.show(tab: .general, revealTextTools: true)
+                    SettingsWindowController.shared.show(tab: .tools)
                 }
             case .unsupported:
                 TranslateToast.show(VTLocalized("This Mac can’t translate this language pair."),

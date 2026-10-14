@@ -179,11 +179,23 @@ final class TextToolsPanelTests: XCTestCase {
         XCTAssertEqual(off.basis, .screen)
     }
 
-    func testMenuHasToolsItemRightBelowSystemSettings() {
-        XCTAssertEqual(TelexInputController.trailingMenuKeys(textToolsInMenu: true),
-                       ["Settings…", "System Settings…", "Tools…"])
-        XCTAssertEqual(TelexInputController.trailingMenuKeys(textToolsInMenu: false),
-                       ["Settings…", "System Settings…"])
+    /// Thứ tự menu (maintainer 14/10/2026): Công cụ… đầu tiên (chỉ khi bật), rồi dòng
+    /// Cơ chế gõ, Cài đặt…, Nguồn nhập liệu… (tên mới của "Cài đặt hệ thống…").
+    func testMenuOrderToolsFirstThenModeSettingsInputSources() {
+        XCTAssertEqual(TelexInputController.menuItemKeys(textToolsInMenu: true),
+                       ["Tools…", "Typing mode", "Settings…", "Input Sources…"])
+        XCTAssertEqual(TelexInputController.menuItemKeys(textToolsInMenu: false),
+                       ["Typing mode", "Settings…", "Input Sources…"])
+    }
+
+    func testMenuItemsLocalized() throws {
+        let path = try XCTUnwrap(Bundle.main.path(forResource: "vi", ofType: "lproj"))
+        let vi = try XCTUnwrap(Bundle(path: path))
+        XCTAssertEqual(vi.localizedString(forKey: TelexInputController.inputSourcesItemKey, value: nil, table: nil),
+                       "Nguồn nhập liệu…")
+        for key in TelexInputController.menuItemKeys(textToolsInMenu: true) {
+            XCTAssertNotEqual(vi.localizedString(forKey: key, value: "∅", table: nil), "∅", key)
+        }
     }
 
     func testToolsItemLocalized() throws {
