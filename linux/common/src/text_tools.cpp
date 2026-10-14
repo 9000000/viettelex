@@ -2,6 +2,8 @@
 
 #include "viettelex/text_tools.h"
 
+#include "viettelex/settings.h"
+
 #include <cctype>
 #include <cerrno>
 #include <chrono>
@@ -60,7 +62,7 @@ const std::map<std::string, std::string> &enTable() {
         {"English", "English"},
         {"Đang gõ tiếng Việt — bấm để chuyển sang English", "Typing Vietnamese — click to switch to English"},
         {"Đang gõ English — bấm để chuyển sang tiếng Việt", "Typing English — click to switch to Vietnamese"},
-        {"Chuyển Việt/Anh (Ctrl+Space)", "Switch Vietnamese/English (Ctrl+Space)"},
+        {"Chuyển Việt/Anh", "Switch Vietnamese/English"},
         {"Cài đặt…", "Settings…"},
         {"Mở VietTelex Settings", "Open VietTelex Settings"},
         {"Công cụ…", "Tools…"},
@@ -268,6 +270,22 @@ std::string uiText(const std::string &vi, bool english) {
     if (!english) return vi;
     auto it = enTable().find(vi);
     return it == enTable().end() ? vi : it->second;
+}
+
+std::string hotkeyLabel(const std::string &value) {
+    Hotkey hk;
+    if (!parseHotkey(value, hk)) return std::string();
+    size_t plus = value.rfind('+');
+    std::string mods = plus == std::string::npos ? std::string() : value.substr(0, plus + 1);
+    std::string key = plus == std::string::npos ? value : value.substr(plus + 1);
+    if (!key.empty()) key[0] = char(std::toupper(static_cast<unsigned char>(key[0])));  // space → Space, z → Z
+    return mods + key;
+}
+
+std::string toggleTooltip(const std::string &toggleHotkey, bool english) {
+    std::string t = uiText("Chuyển Việt/Anh", english);
+    std::string label = hotkeyLabel(toggleHotkey);
+    return label.empty() ? t : t + " (" + label + ")";
 }
 
 std::string textToolHelperPath() {

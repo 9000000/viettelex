@@ -86,10 +86,12 @@ struct GnomeAppMonitor::Impl {
         }
         if (type == G_DBUS_MESSAGE_TYPE_METHOD_RETURN) {
             const gchar *dest = g_dbus_message_get_destination(msg);
-            GVariant *body = g_dbus_message_get_body(msg);
+            const uint32_t serial = g_dbus_message_get_reply_serial(msg);
+            // Most of gnome-shell's replies answer something else: no parsing for those.
+            if (!dest || !tracker.expectsReply(dest, serial)) return false;
             std::vector<gnome::RunningApp> apps;
-            if (!dest || !gnome::parseRunningApplications(body, apps)) return false;
-            return tracker.onReply(dest, g_dbus_message_get_reply_serial(msg), apps);
+            if (!gnome::parseRunningApplications(g_dbus_message_get_body(msg), apps)) return false;
+            return tracker.onReply(dest, serial, apps);
         }
         return false;
     }

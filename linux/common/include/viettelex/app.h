@@ -3,8 +3,10 @@
 
 #include "viettelex/settings.h"
 
+#include <cstdint>
 #include <map>
 #include <string>
+#include <vector>
 
 namespace viettelex {
 
@@ -125,9 +127,38 @@ struct AppPolicy {
 AppPolicy resolveAppPolicy(const std::string &appId, const Settings &s, bool surroundingProven,
                            const FieldHints &field = FieldHints());
 
-// Vi/En memory per app ("app\tvi|en" lines). Saves atomically on change.
+// Memo of everything a frontend feeds resolveAppPolicy for one input context. The Fcitx5
+// addon refreshes the field policy before every key; with this it re-resolves (6–9
+// normalizeAppId calls + set lookups) only when an input changed, and a key costs a few
+// integer / string compares, no allocation. Equal inputs → equal policy, and re-applying an
+// equal policy to the Session is a no-op, so skipping it changes nothing.
+class PolicyCache {
+public:
+    // True when the inputs equal the last stored ones (the applied policy still holds);
+    // otherwise stores them and returns false (the caller resolves + applies the policy).
+    //   settingsGeneration: SettingsWatcher::generation() (any reload);
+    //   caps: the frontend's capability / content-type bits for the field;
+    //   surroundingProven: what resolveAppPolicy gets; shellMajor: GnomeAppMonitor's;
+    //   host: the inputs of the ClientHost (frontend name, raw program).
+    bool unchanged(const std::string &appId, uint64_t settingsGeneration, uint64_t caps, bool surroundingProven,
+                   int shellMajor, const std::string &hostFrontend, const std::string &hostProgram);
+    void invalidate() { valid_ = false; }
+
+private:
+    bool valid_ = false;
+    std::string appId_, frontend_, program_;
+    uint64_t generation_ = 0, caps_ = 0;
+    bool surrounding_ = false;
+    int shellMajor_ = 0;
+};
+
+// Vi/En memory per app ("app\tvi|en" lines, least recently set first). Saves atomically on
+// change. Ids that name no app (isUnknownAppId: "window:57" → "57", "(1234)", "default",
+// "gnome-shell"…) are neither stored nor looked up: a reused window number / pid would hand
+// one app's state to another. At most kMaxEntries apps: the least recently set one goes.
 class AppStateStore {
 public:
+    static constexpr size_t kMaxEntries = 200;
     explicit AppStateStore(std::string path);
     void load();
     // Returns the remembered state, or `fallback` for an unknown app.
@@ -137,8 +168,10 @@ public:
 
 private:
     void save() const;
+    void put(const std::string &appId, bool vietnamese);  // insert / move to most recent
     std::string path_;
     std::map<std::string, bool> map_;
+    std::vector<std::string> order_;  // the ids in map_, least recently set first
 };
 
 }  // namespace viettelex

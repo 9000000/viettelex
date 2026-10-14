@@ -101,6 +101,10 @@ bool vt_previous_word_english(const vt_engine *h);
  * allowed) that is an unaccented Vietnamese syllable in a–z ("toi", "hoc,", not "the"). */
 bool vt_is_valid_syllable(const char *utf8_word, bool teencode);
 bool vt_is_unaccented_syllable(const char *utf8_chunk);
+/* vt_is_english_word: EnglishContextLookup.opensEnglishRun — the engine's English word list
+ * (lowercase a–z, exact). Part of the helper's TypoFixLogic.isKnown: such a word never gets
+ * a typo fix, so the frontend does not ask the helper. */
+bool vt_is_english_word(const char *utf8_lower_word);
 
 /* Opt-in "Gạch đỏ âm tiết sai chính tả khi gõ" (Settings::underlineMisspelled):
  * vt_has_spelling_error: TelexEngine.hasSpellingError(autoRestore:) — the word being

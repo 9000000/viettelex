@@ -286,6 +286,7 @@ AppStateStore::AppStateStore(std::string path) : path_(std::move(path)) {}
 
 void AppStateStore::load() {
     map_.clear();
+    order_.clear();
     std::string text;
     if (!readFile(path_, text)) return;
     std::istringstream in(text);
@@ -294,28 +295,66 @@ void AppStateStore::load() {
         size_t tab = line.find('\t');
         if (tab == std::string::npos || tab == 0) continue;
         std::string v = line.substr(tab + 1);
-        if (v == "vi") map_[line.substr(0, tab)] = true;
-        else if (v == "en") map_[line.substr(0, tab)] = false;
+        // Files are written least recently set first; older versions wrote them sorted and
+        // with meaningless ids ("57", "(1234)"), which put() drops.
+        if (v == "vi" || v == "en") put(line.substr(0, tab), v == "vi");
+    }
+}
+
+void AppStateStore::put(const std::string &appId, bool vietnamese) {
+    if (isUnknownAppId(appId)) return;
+    if (map_.count(appId)) {
+        for (auto it = order_.begin(); it != order_.end(); ++it)
+            if (*it == appId) {
+                order_.erase(it);
+                break;
+            }
+    }
+    map_[appId] = vietnamese;
+    order_.push_back(appId);
+    while (order_.size() > kMaxEntries) {
+        map_.erase(order_.front());
+        order_.erase(order_.begin());
     }
 }
 
 bool AppStateStore::vietnamese(const std::string &appId, bool fallback) const {
+    if (isUnknownAppId(appId)) return fallback;
     auto it = map_.find(appId);
     return it == map_.end() ? fallback : it->second;
 }
 
 void AppStateStore::set(const std::string &appId, bool vietnamese) {
-    if (appId.empty()) return;
+    if (isUnknownAppId(appId)) return;
     auto it = map_.find(appId);
     if (it != map_.end() && it->second == vietnamese) return;
-    map_[appId] = vietnamese;
+    put(appId, vietnamese);
     save();
 }
 
 void AppStateStore::save() const {
     std::string out;
-    for (auto &kv : map_) out += kv.first + "\t" + (kv.second ? "vi" : "en") + "\n";
+    for (const auto &id : order_) out += id + "\t" + (map_.at(id) ? "vi" : "en") + "\n";
     writeFileAtomic(path_, out);
+}
+
+// MARK: - PolicyCache
+
+bool PolicyCache::unchanged(const std::string &appId, uint64_t settingsGeneration, uint64_t caps,
+                            bool surroundingProven, int shellMajor, const std::string &hostFrontend,
+                            const std::string &hostProgram) {
+    if (valid_ && generation_ == settingsGeneration && caps_ == caps && surrounding_ == surroundingProven &&
+        shellMajor_ == shellMajor && appId_ == appId && frontend_ == hostFrontend && program_ == hostProgram)
+        return true;
+    valid_ = true;
+    generation_ = settingsGeneration;
+    caps_ = caps;
+    surrounding_ = surroundingProven;
+    shellMajor_ = shellMajor;
+    appId_ = appId;
+    frontend_ = hostFrontend;
+    program_ = hostProgram;
+    return false;
 }
 
 }  // namespace viettelex

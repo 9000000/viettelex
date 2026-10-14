@@ -446,7 +446,10 @@ void Session::seedTail(InputContext &ic) {
     tailHead_ = TailHead::Unknown;
     std::string before;
     // Mid-word (hints just turned on): the word is not on screen as such — start blind.
-    if (!vt_is_empty(e_) || mode_ == DisplayMode::Direct || !surroundingEdits_ || !ic.textBeforeCursor(before))
+    // One character more than kept: getting it back means there is text before the tail.
+    // (The tail only: a long paragraph is never copied whole.)
+    if (!vt_is_empty(e_) || mode_ == DisplayMode::Direct || !surroundingEdits_ ||
+        !ic.textBeforeCursorTail(kTailKeep + 1, before))
         return;
     if (utf8Chars(before) <= kTailKeep) {
         tail_ = before;
@@ -521,7 +524,10 @@ void Session::afterBoundary(uint32_t ch, uint32_t keysym) {
         // An unaccented syllable ("hoc" = học/hóc) is never a typo for TypoFixLogic (the
         // lexicon has a toned completion); skipping it here keeps it from masking Thêm dấu.
         !vt_is_unaccented_syllable(run.c_str())) {
-        requestHint({"typo", typedBefore(), run, boundary, lastEnded_.raw, engineBits_});
+        // An English word of the engine's list: the helper would answer "no fix" (isKnown) —
+        // same outcome without waking it (it stays asleep while typing English).
+        if (!hints::typoKnownEnglish(lastEnded_.raw))
+            requestHint({"typo", typedBefore(), run, boundary, lastEnded_.raw, engineBits_});
         return;
     }
     if (tt != hints::ToneTrigger::None)
@@ -564,9 +570,10 @@ bool Session::applyHint(InputContext &ic) {
     CaretSuggestion s = *hint_;
     dismissHint(ic);
     if (!s.replace.empty() && mode_ != DisplayMode::Direct) {
-        // Read the screen back before replacing (macOS: like shortcuts / number chips).
+        // Read the screen back before replacing (macOS: like shortcuts / number chips) —
+        // just the characters it would replace, not the whole paragraph.
         std::string before;
-        if (ic.textBeforeCursor(before) && !endsWith(before, s.replace)) return false;
+        if (ic.textBeforeCursorTail(utf8Chars(s.replace), before) && !endsWith(before, s.replace)) return false;
         if (ic.hasSelection()) return false;
     }
     size_t n = utf8Chars(s.replace);

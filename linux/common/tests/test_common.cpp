@@ -615,9 +615,18 @@ void testTextToolNamesAndSelection() {
     CHECK(!textToolFromId("bogus", none));
     CHECK_EQ(textToolLabel(TextTool::AddTones, false), std::string("Thêm dấu cho vùng chọn"));
     CHECK_EQ(textToolLabel(TextTool::AddTones, true), std::string("Add tones to selection"));
+    // The Vi/En tooltip names the configured hotkey (it was always "Ctrl+Space").
+    CHECK_EQ(hotkeyLabel("Ctrl+space"), std::string("Ctrl+Space"));
+    CHECK_EQ(hotkeyLabel("Alt+Shift+z"), std::string("Alt+Shift+Z"));
+    CHECK_EQ(hotkeyLabel(""), std::string());
+    CHECK_EQ(hotkeyLabel("z"), std::string());  // invalid: a bare letter never toggles
+    CHECK_EQ(toggleTooltip("Ctrl+space", false), std::string("Chuyển Việt/Anh (Ctrl+Space)"));
+    CHECK_EQ(toggleTooltip("Ctrl+Shift+space", true), std::string("Switch Vietnamese/English (Ctrl+Shift+Space)"));
+    CHECK_EQ(toggleTooltip("Super+space", false), std::string("Chuyển Việt/Anh"));  // GNOME's, rejected
+    CHECK_EQ(toggleTooltip("", false), std::string("Chuyển Việt/Anh"));
     // Every IM menu string the frontends use has an English entry.
     const char *ui[] = {"Tiếng Việt", "English", "Đang gõ tiếng Việt — bấm để chuyển sang English",
-                        "Đang gõ English — bấm để chuyển sang tiếng Việt", "Chuyển Việt/Anh (Ctrl+Space)",
+                        "Đang gõ English — bấm để chuyển sang tiếng Việt", "Chuyển Việt/Anh",
                         "Cài đặt…", "Mở VietTelex Settings", "Công cụ…", "Công cụ văn bản cho chữ đang bôi đen"};
     for (const char *k : ui) {
         CHECK_EQ(uiText(k, false), std::string(k));
@@ -1440,9 +1449,14 @@ void testGnomeFocusTracker() {
     CHECK(!t.onAppsChanged());
     t.onCall(":1.40", 7);
     CHECK_EQ(t.resolve("default"), std::string("default"));  // pending
+    // The monitor parses a gnome-shell reply only when it answers a call seen.
+    CHECK(t.expectsReply(":1.40", 7));
+    CHECK(!t.expectsReply(":1.41", 7));
+    CHECK(!t.expectsReply(":1.40", 8));
     CHECK(!t.onReply(":1.41", 7, gedit));                     // not the caller
     CHECK(!t.onReply(":1.40", 8, gedit));                     // not that call
     CHECK(t.onReply(":1.40", 7, gedit));
+    CHECK(!t.expectsReply(":1.40", 7));  // answered
     CHECK_EQ(t.resolve("gnome-shell"), std::string("org.gnome.gedit"));
     CHECK_EQ(t.resolve("default"), std::string("org.gnome.gedit"));  // IBus 1.5.26
     CHECK_EQ(t.resolve("wayland"), std::string("org.gnome.gedit"));
@@ -1560,6 +1574,129 @@ void testAppStateStoreAndWatcher() {
     CHECK(writeFileAtomic(cdir + "/shortcuts.yml", "ko: không\n"));
     CHECK(w.drain());
     CHECK_EQ(w.reload().shortcuts->at("ko"), std::string("không"));
+    std::string cmd = "rm -rf '" + dir + "'";
+    CHECK_EQ(std::system(cmd.c_str()), 0);
+}
+
+// Ids that name no app were stored and applied: GNOME "window:57" (→ "57"), a bare pid, the
+// generic "default" / "gnome-shell" — a later app reusing that window number got the state.
+void testAppStateStoreSkipsUnknownIds() {
+    char tmpl[] = "/tmp/vt-test-XXXXXX";
+    std::string dir = mkdtemp(tmpl);
+    std::string path = dir + "/app-state";
+    // A file written by an older version: the junk lines are dropped on load.
+    CHECK(writeFileAtomic(path, "57\ten\n(1234)\ten\ndefault\ten\ngedit\ten\n"));
+    AppStateStore st(path);
+    st.load();
+    CHECK_EQ(st.entries().size(), size_t(1));
+    CHECK(!st.vietnamese("gedit", true));
+    for (const char *id : {"window:57", "57", "(1234)", "default", "gnome-shell", "", "xim"}) {
+        st.set(id, false);
+        CHECK(st.vietnamese(id, true));  // never remembered, never looked up
+        CHECK(!st.vietnamese(id, false));
+    }
+    CHECK_EQ(st.entries().size(), size_t(1));
+    st.set("kitty", false);
+    std::string text;
+    CHECK(readFile(path, text));
+    CHECK_EQ(text, std::string("gedit\ten\nkitty\ten\n"));
+    std::string cmd = "rm -rf '" + dir + "'";
+    CHECK_EQ(std::system(cmd.c_str()), 0);
+}
+
+// At most kMaxEntries apps; the least recently set one goes first, across restarts.
+void testAppStateStoreCap() {
+    char tmpl[] = "/tmp/vt-test-XXXXXX";
+    std::string dir = mkdtemp(tmpl);
+    std::string path = dir + "/app-state";
+    const size_t cap = AppStateStore::kMaxEntries;
+    {
+        AppStateStore st(path);
+        st.load();
+        for (size_t i = 0; i < cap; ++i) st.set("app" + std::to_string(i), false);
+        CHECK_EQ(st.entries().size(), cap);
+        st.set("app0", true);  // changed → most recent
+        st.set("new1", false);  // evicts app1 (app0 was set again)
+        CHECK_EQ(st.entries().size(), cap);
+        CHECK(st.vietnamese("app0", false));
+        CHECK(st.vietnamese("app1", true) && !st.vietnamese("app1", false));  // gone: fallback
+        CHECK(!st.vietnamese("app2", true));
+    }
+    AppStateStore st2(path);
+    st2.load();
+    CHECK_EQ(st2.entries().size(), cap);
+    st2.set("new2", false);  // the order survived the restart: app2 is now the oldest
+    CHECK(!st2.vietnamese("app2", false) && st2.vietnamese("app2", true));
+    CHECK(!st2.vietnamese("app3", true));
+    CHECK(st2.vietnamese("app0", false));
+    CHECK(!st2.vietnamese("new1", true));
+    std::string cmd = "rm -rf '" + dir + "'";
+    CHECK_EQ(std::system(cmd.c_str()), 0);
+}
+
+// The Fcitx5 addon resolves the field policy before each key only when an input changed.
+void testPolicyCache() {
+    PolicyCache c;
+    CHECK(!c.unchanged("gedit", 1, 0x10, true, 0, "dbus", "gedit"));  // first: resolve
+    CHECK(c.unchanged("gedit", 1, 0x10, true, 0, "dbus", "gedit"));   // same key after key
+    CHECK(!c.unchanged("kitty", 1, 0x10, true, 0, "dbus", "gedit"));  // app
+    CHECK(c.unchanged("kitty", 1, 0x10, true, 0, "dbus", "gedit"));
+    CHECK(!c.unchanged("kitty", 2, 0x10, true, 0, "dbus", "gedit"));  // settings reloaded
+    CHECK(!c.unchanged("kitty", 2, 0x11, true, 0, "dbus", "gedit"));  // capability bits
+    CHECK(!c.unchanged("kitty", 2, 0x11, false, 0, "dbus", "gedit"));  // surrounding validity
+    CHECK(!c.unchanged("kitty", 2, 0x11, false, 50, "dbus", "gedit"));  // shell version known
+    CHECK(!c.unchanged("kitty", 2, 0x11, false, 50, "ibus", "gedit"));  // frontend
+    CHECK(!c.unchanged("kitty", 2, 0x11, false, 50, "ibus", "gnome-shell"));  // program
+    CHECK(c.unchanged("kitty", 2, 0x11, false, 50, "ibus", "gnome-shell"));
+    c.invalidate();  // new focus
+    CHECK(!c.unchanged("kitty", 2, 0x11, false, 50, "ibus", "gnome-shell"));
+    // Equal inputs give an equal policy (what makes skipping safe).
+    Settings s;
+    s.noUnderline = NoUnderline::ForwardKeys;
+    FieldHints f;
+    f.host = ClientHost::FcitxWayland;
+    for (const char *app : {"google-chrome", "gedit", "kitty", "window:3"}) {
+        AppPolicy a = resolveAppPolicy(app, s, true, f), b = resolveAppPolicy(app, s, true, f);
+        CHECK(a.mode == b.mode && a.off == b.off && a.passthrough == b.passthrough &&
+              a.allowSurroundingEdits == b.allowSurroundingEdits && a.deleteWithKeys == b.deleteWithKeys);
+    }
+}
+
+// Settings generation, shortcuts.yml parsed only when it changed, no stat per focus while
+// inotify watches the directory.
+void testWatcherReloadCosts() {
+    char tmpl[] = "/tmp/vt-test-XXXXXX";
+    std::string dir = mkdtemp(tmpl);
+    std::string cdir = dir + "/cfg";
+    CHECK(writeFileAtomic(cdir + "/shortcuts.yml", "ko: không\n"));
+    SettingsWatcher w(cdir);
+    CHECK(w.watching());
+    uint64_t g0 = w.generation();
+    CHECK_EQ(w.shortcutParses(), 1);
+    auto table = w.settings().shortcuts;
+    CHECK(writeFileAtomic(cdir + "/config.toml", "[typing]\ninput_method = \"vni\"\n"));
+    CHECK(!w.changedOnDiskUnwatched());  // inotify reports it: no stat at focus-in
+    CHECK(w.drain());
+    CHECK(w.reload().vni);
+    CHECK(w.generation() > g0);
+    CHECK_EQ(w.shortcutParses(), 1);  // config.toml alone: same table, not parsed again
+    CHECK(w.settings().shortcuts == table);
+    CHECK_EQ(w.settings().shortcuts->at("ko"), std::string("không"));
+    CHECK(writeFileAtomic(cdir + "/shortcuts.yml", "ko: không\nvn: Việt Nam\n"));
+    CHECK(w.drain());
+    w.reload();
+    CHECK_EQ(w.shortcutParses(), 2);
+    CHECK_EQ(w.settings().shortcuts->at("vn"), std::string("Việt Nam"));
+    // The directory goes away: the watch is gone → focus-in falls back to the mtime check.
+    std::string rm = "rm -rf '" + cdir + "'";
+    CHECK_EQ(std::system(rm.c_str()), 0);
+    w.drain();
+    CHECK(!w.watching());
+    CHECK(writeFileAtomic(cdir + "/config.toml", "[typing]\ninput_method = \"telex\"\n"));
+    CHECK(w.changedOnDiskUnwatched());
+    CHECK(!w.reload().vni);
+    CHECK(w.watching());  // re-added once the directory was back
+    CHECK(!w.changedOnDiskUnwatched());
     std::string cmd = "rm -rf '" + dir + "'";
     CHECK_EQ(std::system(cmd.c_str()), 0);
 }
@@ -2591,6 +2728,10 @@ int main() {
     testCommitBeforeHidingPreedit();
     testDeleteOnlyEditSendsEmptyCommit();
     testAppStateStoreAndWatcher();
+    testAppStateStoreSkipsUnknownIds();
+    testAppStateStoreCap();
+    testPolicyCache();
+    testWatcherReloadCosts();
     testGnomePayloads();
     testGnomeFocusTracker();
     testGnomeResolvedPolicy();

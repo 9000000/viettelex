@@ -527,6 +527,14 @@ def applicability(session, desktop, framework, gnome_major=None):
     return "unsupported_desktop"
 
 
+def session_status(enabled, appl):
+    """Dòng trạng thái đầu của công tắc thử nghiệm: "active" (đang có hiệu lực ở phiên
+    này) | "inactive" (bật nhưng phiên này không áp dụng được — lý do ở dòng sau) | "off"."""
+    if not enabled:
+        return "off"
+    return "active" if appl == "ok" else "inactive"
+
+
 # ---------------------------------------------------------------- đồng bộ
 
 def _write_atomic(path, text):

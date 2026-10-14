@@ -72,6 +72,11 @@ public:
     // A reply from gnome-shell; ignored unless it answers a call we saw. True if the
     // resolved state may have changed.
     bool onReply(const std::string &destination, uint32_t replySerial, const std::vector<RunningApp> &apps);
+    // Would onReply take this reply? The monitor sees every gnome-shell method return: it
+    // parses the body only for one that answers a GetRunningApplications call it saw.
+    bool expectsReply(const std::string &destination, uint32_t replySerial) const {
+        return calls_.count({destination, replySerial}) > 0;
+    }
     bool onOverview(bool active);                                   // OverviewActive
     // What the frontend should use for `clientId`: unchanged unless it is a shared shell
     // id; then "gnome-shell-overview", the focused app, or unchanged (unknown / pending).

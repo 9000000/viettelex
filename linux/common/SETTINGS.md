@@ -159,7 +159,10 @@ khi đang ở keyboard-us thì trigger của Fcitx5 chuyển sang VietTelex như
 ## 5. `app-state` (frontend sở hữu)
 
 
-Dòng `app<TAB>vi|en`. Chỉ frontend đọc/ghi; settings app có thể xoá file để "quên tất cả".
+Dòng `app<TAB>vi|en`, app đặt lâu nhất trước. Chỉ frontend đọc/ghi; settings app có thể xoá
+file để "quên tất cả". Tối đa 200 app (đầy thì bỏ app đặt lâu nhất). Id không chỉ một app cụ
+thể (`window:N` của GNOME, pid `(1234)`, `default`, `gnome-shell`…) không bao giờ được ghi
+hay tra — số cửa sổ / pid dùng lại sẽ mang trạng thái của app khác.
 
 ## 6. Ngôn ngữ giao diện (`ui_language`)
 

@@ -72,9 +72,13 @@ FCITX_CONFIGURATION(
     VietTelexConfig,
     fcitx::Option<bool> vni{this, "VNI", "Kiểu gõ VNI (thay cho Telex)", false};
     fcitx::Option<bool> preeditUnderline{this, "PreeditUnderline", "Gạch chân chữ đang gõ", false};
-    fcitx::Option<bool> noUnderline{this, "NoUnderline",
-                                    "Sửa trực tiếp quanh con trỏ (surrounding; tự về preedit ở app không hỗ trợ)",
-                                    false};
+    // [general] display_mode = "surrounding". The key stays "NoUnderline" (existing
+    // fcitx5 configs); it is NOT [experimental] no_underline ("Bỏ gạch chân trong
+    // Chrome/Electron", settings app only), so the label names the display mode.
+    fcitx::Option<bool> surroundingMode{this, "NoUnderline",
+                                        "Cách hiện từ đang gõ: sửa trực tiếp (surrounding), app không hỗ trợ "
+                                        "tự về chữ đang gõ (preedit)",
+                                        false};
     fcitx::Option<bool> spellCheck{this, "SpellCheck", "Kiểm tra chính tả khi gõ", true};
     fcitx::Option<bool> autoRestore{this, "AutoRestore", "Tự khôi phục từ không phải tiếng Việt", true};
     fcitx::Option<bool> freeMarking{this, "FreeMarking", "Bỏ dấu tự do", true};
@@ -241,6 +245,7 @@ public:
     std::string clientId;  // ic->program()
     bool stateLoaded = false;
     bool rememberState = true;  // AppPolicy.rememberState of the current field
+    vt::PolicyCache policy;     // inputs of the field policy last applied (refreshFieldFlags)
     // Text tool result that arrived while this context had no focus (the tray menu took
     // it): committed on the next activation if still fresh.
     std::string pendingResult;
@@ -401,7 +406,7 @@ public:
     void activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         try {
             auto *ic = event.inputContext();
-            if (watcher_.changedOnDisk()) applySettingsToAll();  // inotify fallback
+            if (watcher_.changedOnDiskUnwatched()) applySettingsToAll();  // inotify fallback
             auto *st = state(ic);
             st->stateLoaded = false;
             ensureAppState(st);
@@ -468,7 +473,7 @@ public:
         text = vt::setConfigValue(text, "typing", "modern_tone", b(*config_.modernTone));
         text = vt::setConfigValue(text, "typing", "quick_telex", b(*config_.quickTelex));
         text = vt::setConfigValue(text, "general", "display_mode",
-                                  *config_.noUnderline ? "\"surrounding\"" : "\"preedit\"");
+                                  *config_.surroundingMode ? "\"surrounding\"" : "\"preedit\"");
         text = vt::setConfigValue(text, "general", "per_app_state", b(*config_.perAppState));
         text = vt::setConfigValue(text, "general", "preedit_underline", b(*config_.preeditUnderline));
         vt::writeFileAtomic(vt::configPath(), text);
@@ -520,6 +525,7 @@ private:
         FcitxClient client(st->ic);
         bool vi = s.perAppState ? appState_.vietnamese(st->appId, s.defaultVietnamese) : s.defaultVietnamese;
         st->session.setVietnamese(vi, client);
+        st->policy.invalidate();  // new focus: resolve and apply the policy once more
         refreshFieldFlags(st, client);
     }
 
@@ -563,11 +569,16 @@ private:
         }
     }
 
-    // Password fields, [app_modes] and surrounding capability can change per focus.
+    // Password fields, [app_modes] and surrounding capability can change per focus. Called
+    // before every key: the policy is resolved again only when one of its inputs changed.
     void refreshFieldFlags(VietTelexState *st, FcitxClient &client) {
         auto caps = st->ic->capabilityFlags();
         // Proven = advertised AND the client actually sent a valid text for this field.
         bool surrounding = caps.test(fcitx::CapabilityFlag::SurroundingText) && st->ic->surroundingText().isValid();
+        const int shellMajor = gnome_ ? gnome_->shellMajor() : 0;
+        if (st->policy.unchanged(st->appId, watcher_.generation(), uint64_t(caps.toInteger()), surrounding,
+                                 shellMajor, st->ic->frontend() ? st->ic->frontend() : "", st->ic->program()))
+            return;
         vt::FieldHints field;
         field.terminal = caps.test(fcitx::CapabilityFlag::Terminal);
         field.urlOrEmail = caps.test(fcitx::CapabilityFlag::Url) || caps.test(fcitx::CapabilityFlag::Email);
@@ -731,7 +742,7 @@ private:
     void syncConfigFromSettings() {
         const auto &s = settings();
         config_.vni.setValue(s.vni);
-        config_.noUnderline.setValue(s.displayMode == vt::DisplayMode::Surrounding);
+        config_.surroundingMode.setValue(s.displayMode == vt::DisplayMode::Surrounding);
         config_.preeditUnderline.setValue(s.preeditUnderline);
         g_preeditUnderline = s.preeditUnderline;
         config_.spellCheck.setValue(s.spellCheck);
