@@ -320,6 +320,19 @@ final class AppSupportTests: XCTestCase {
                        "locking the screen can make 1Password SI worse")
         XCTAssertFalse(SecureInputMonitor.wantsLockScreen(.terminal))
         XCTAssertFalse(SecureInputMonitor.wantsLockScreen(.generic))
+        // Trình duyệt giữ SI sau ô mật khẩu (Chrome, 14/10/2026): mục "thử" khoá màn hình.
+        XCTAssertTrue(SecureInputMonitor.wantsTryLockScreen(.generic))
+        XCTAssertTrue(SecureInputMonitor.wantsTryLockScreen(.heldAfterPasswordField("Google Chrome")))
+        XCTAssertFalse(SecureInputMonitor.wantsTryLockScreen(.passwordFieldInFrontApp("Google Chrome")),
+                       "a focused password field blocks IMEs on purpose")
+        XCTAssertFalse(SecureInputMonitor.wantsTryLockScreen(.terminal))
+        XCTAssertFalse(SecureInputMonitor.wantsTryLockScreen(.passwordManager("1Password")))
+        XCTAssertFalse(SecureInputMonitor.wantsTryLockScreen(.loginwindowStuck),
+                       "already gets the plain Lock Screen item")
+        if let path = Bundle.main.path(forResource: "vi", ofType: "lproj"), let vi = Bundle(path: path) {
+            XCTAssertEqual(vi.localizedString(forKey: "Lock Screen to try clearing it", value: nil, table: nil),
+                           "Khóa màn hình để thử gỡ")
+        } else { XCTFail("vi.lproj missing") }
         // KHÔNG assert trạng thái khoá thật của máy: bản đầu của test này đỏ ngay
         // khi maintainer rời máy lúc suite đang chạy (18/09/2026). Test cái parser.
         XCTAssertFalse(SecureInputMonitor.screenIsLocked(session: nil))

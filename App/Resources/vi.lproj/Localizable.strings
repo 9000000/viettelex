@@ -223,6 +223,7 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 "Vietnamese typing is blocked by %@" = "Không gõ được tiếng Việt — %@";
 "an app" = "một app";
 "Lock Screen now" = "Khoá màn hình ngay";
+"Lock Screen to try clearing it" = "Khóa màn hình để thử gỡ";
 "If this is Terminal/iTerm2: turn off “Secure Keyboard Entry”" = "Nếu là Terminal/iTerm2: tắt “Secure Keyboard Entry” trong menu app đó";
 "Status: Blocked by Secure Input" = "Trạng thái: Bị chặn bởi Secure Input";
 "%@ left Secure Input on — click its window then click away, or quit it" = "%@ giữ Secure Input — bấm vào cửa sổ đó rồi bấm ra, hoặc thoát app";

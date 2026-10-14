@@ -440,6 +440,17 @@ final class SecureInputMonitor {
                 keyEquivalent: "")
             lock.target = MenuActions.shared
             menu.addItem(lock)
+        } else if Self.wantsTryLockScreen(kind) {
+            // Trình duyệt (Chrome/Edge…) giữ SI sau ô mật khẩu đã mất: chỉ app đó tắt
+            // được SI; khoá/mở màn hình là mẹo field-reported (14/10/2026) — CHƯA chắc
+            // gỡ được nên nhãn nói "thử" (maintainer).
+            menu.addItem(.separator())
+            let lock = NSMenuItem(
+                title: VTLocalized("Lock Screen to try clearing it"),
+                action: #selector(MenuActions.lockScreenNow(_:)),
+                keyEquivalent: "")
+            lock.target = MenuActions.shared
+            menu.addItem(lock)
         } else if let pm = Self.revealTarget(kind) {
             menu.addItem(.separator())
             let reveal = NSMenuItem(
@@ -505,6 +516,17 @@ final class SecureInputMonitor {
     static func wantsLockScreen(_ kind: HintKind) -> Bool {
         switch kind {
         case .loginwindowStuck, .orphan: return true
+        default: return false
+        }
+    }
+
+    /// App thường (trình duyệt…) giữ SI dù không còn ở ô mật khẩu — chỉ app đó nhả được;
+    /// lock/unlock là mẹo user báo hiệu quả với Chrome (14/10/2026), chưa kiểm chứng
+    /// ⇒ mục "thử". Không cho Terminal (Secure Keyboard Entry là cài đặt có chủ đích),
+    /// không cho ô mật khẩu đang focus thật (macOS chặn IME là đúng).
+    static func wantsTryLockScreen(_ kind: HintKind) -> Bool {
+        switch kind {
+        case .generic, .heldAfterPasswordField: return true
         default: return false
         }
     }
