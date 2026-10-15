@@ -238,7 +238,6 @@
 		B449EAEFEA69CB861489859C /* TextTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = A49B2C3D02FA8B71A8BFA201 /* TextTools.swift */; };
 		B4F749EDE42751B7565B39F6 /* SyncMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E2E27B46842AE6F5EB0A74 /* SyncMerge.swift */; };
 		B5C9CB675A5310946844B520 /* PerfSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0129B5AA6C2F6547A9634969 /* PerfSwitchTests.swift */; };
-		BA4825C2AAE03F00404D6B4D /* PlusFeedback1015Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150EAA710911C53C0656FEBD /* PlusFeedback1015Tests.swift */; };
 		B5DA1E90A8B99B4F53BCFF96 /* PlusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8197742D5A3A7B8F8BE4C8DC /* PlusTests.swift */; };
 		B73BB0C8504D9159A129AB5F /* Translation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 575059AED927C97A7E6E33CD /* Translation.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		B77B19F8C2DD1B47583F091D /* SwipeLexicon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3994C0C17115101811283049 /* SwipeLexicon.swift */; };
@@ -246,6 +245,7 @@
 		B7B107E0D177438E5EACCFAC /* SlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB94721D99CEB3A5D2CA8A8B /* SlowTests.swift */; };
 		B87943E26F538BEF419FBEC4 /* BackupFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02937CC02BE49C39A5A7933D /* BackupFormat.swift */; };
 		B92E282E8D0ABE8BEBD693E7 /* suggest-trigram-parity.txt in Resources */ = {isa = PBXBuildFile; fileRef = C39CAE56C7A6C95E09637270 /* suggest-trigram-parity.txt */; };
+		BA4825C2AAE03F00404D6B4D /* PlusFeedback1015Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150EAA710911C53C0656FEBD /* PlusFeedback1015Tests.swift */; };
 		BC7C55450CA36CBF6D0F8297 /* vnlexicon.bin in Resources */ = {isa = PBXBuildFile; fileRef = 915FC9A836F82E797FA0AEA1 /* vnlexicon.bin */; };
 		C0F883065272FE06DAE56D0E /* WordDeleteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0599154D3A43772DC7456968 /* WordDeleteTests.swift */; };
 		C1206085EB6077DC29ECB44C /* FutoSwipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76444B4521814651DA2C026A /* FutoSwipe.swift */; };
@@ -416,6 +416,7 @@
 		11DFA0E70EB963455C306748 /* SpaceFlickTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceFlickTests.swift; sourceTree = "<group>"; };
 		121671DAC21692CEBCF9B296 /* ShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutTests.swift; sourceTree = "<group>"; };
 		142CFBEA43046FC96EBF437F /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		150EAA710911C53C0656FEBD /* PlusFeedback1015Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusFeedback1015Tests.swift; sourceTree = "<group>"; };
 		161158B158034E15B97338F4 /* VietTelex.storekit */ = {isa = PBXFileReference; path = VietTelex.storekit; sourceTree = "<group>"; };
 		17665D2E58942674B15504AB /* OneHand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneHand.swift; sourceTree = "<group>"; };
 		1AFEC1150BE618B085350A60 /* backup-android-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "backup-android-v1.json"; sourceTree = "<group>"; };
@@ -502,7 +503,6 @@
 		80AB0C87154897C583AEB2AE /* AutoCorrect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoCorrect.swift; sourceTree = "<group>"; };
 		80CE2088FB873FD0D894A6C0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		818AAEF3703366E38E67813C /* EmojiAtlasBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiAtlasBuilder.swift; sourceTree = "<group>"; };
-		150EAA710911C53C0656FEBD /* PlusFeedback1015Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusFeedback1015Tests.swift; sourceTree = "<group>"; };
 		8197742D5A3A7B8F8BE4C8DC /* PlusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusTests.swift; sourceTree = "<group>"; };
 		81B2DDC0E24D11BD96525161 /* KeyboardTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardTheme.swift; sourceTree = "<group>"; };
 		821BD7CBEE8349CC782C3E41 /* SwipeTypingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeTypingTests.swift; sourceTree = "<group>"; };
@@ -1441,9 +1441,9 @@
 				5C1E68D1CE795950C634F366 /* PlanePolicy.swift in Sources */,
 				0E4E1EDF98B16B37559DDCDD /* PlanePolicyTests.swift in Sources */,
 				7D80FCC5647175620DC1D42E /* PlusConfig.swift in Sources */,
+				BA4825C2AAE03F00404D6B4D /* PlusFeedback1015Tests.swift in Sources */,
 				AB0F2E167DA8AA1EBD8F37E5 /* PlusGate.swift in Sources */,
 				16FCA2CDAD7489F48F628D81 /* PlusStoreModel.swift in Sources */,
-				BA4825C2AAE03F00404D6B4D /* PlusFeedback1015Tests.swift in Sources */,
 				B5DA1E90A8B99B4F53BCFF96 /* PlusTests.swift in Sources */,
 				B1C18381FB8CEDB3ABB54AAF /* PromoFramesTests.swift in Sources */,
 				98FFB5EF984F57F300DD554A /* RamBreakdownTests.swift in Sources */,
