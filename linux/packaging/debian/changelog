@@ -1,3 +1,23 @@
+viettelex (1.0.14) UNRELEASED; urgency=medium
+
+  * Có gói cho Fedora 43/44, RHEL/Rocky/Alma 9/10, Fedora Atomic
+    (Silverblue, Kinoite, Bazzite…) và Arch Linux; lệnh cài một dòng
+    install.sh chạy trên cả các bản này.
+  * Nhẹ hơn: Fcitx5 không tính lại chính sách app mỗi phím; từ tiếng Anh
+    không gọi tiến trình phụ; trạng thái Việt/Anh theo app không lưu mã cửa
+    sổ vô nghĩa (sửa lỗi áp nhầm sang cửa sổ khác).
+  * Chú thích IBus hiện đúng phím chuyển đã cài.
+  * ---
+  * Packages for Fedora 43/44, RHEL/Rocky/Alma 9/10, Fedora Atomic
+    (Silverblue, Kinoite, Bazzite…) and Arch Linux; the one-line install.sh
+    now works on them too.
+  * Lighter: Fcitx5 no longer re-resolves the app policy on every key; English
+    words skip the helper process; per-app Vietnamese/English state no longer
+    stores meaningless window ids (fixes state applied to the wrong window).
+  * The IBus tooltip shows the configured toggle hotkey.
+
+ -- VietTelex Maintainers <maintainers@viettelex.invalid>  Fri, 16 Oct 2026 09:00:00 +0700
+
 viettelex (1.0.13) UNRELEASED; urgency=medium
 
   * Kiểu gõ VNI: phím số bên phải (numpad) luôn ra số, không bỏ dấu; hàng số
