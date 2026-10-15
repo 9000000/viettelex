@@ -1,16 +1,18 @@
 name: Linux release build
 
-# Builds every series × arch .deb for a Linux release in CI, with build provenance
-# attestations. It does NOT publish: no APT push, no public release. The APT repository is
+# Builds every series × arch .deb, every Fedora/EL target × arch .rpm and the Arch Linux
+# .pkg.tar.zst (repackaged from the noble .debs) for a Linux release in CI, with build
+# provenance attestations. It does NOT publish: no APT push, no public release. The APT repository is
 # signed on the maintainer's machine (the key never leaves it) — see linux/packaging/APT.md
-# "Phát hành qua CI": gh run download → gh attestation verify → apt-repo.sh (sign) locally.
+# "Phát hành qua CI": gh run download → gh attestation verify → apt-repo.sh / dnf-repo.sh /
+# pacman-repo.sh (sign) locally.
 #
 # Run: Actions → "Linux release build" → Run workflow (version = VERSION in
 # linux/settings/viettelex_settings/__init__.py), or
 #   gh workflow run linux-release.yml -f version=X.Y.Z
 # Manual only — no tag trigger: publishing the release creates the linux-vX.Y.Z tag, and a
 # tag-triggered rebuild would attest different bytes than the ones being published.
-# Optional: draft_release=true attaches the .debs + SHA256SUMS to a DRAFT GitHub release
+# Optional: draft_release=true attaches the .debs/.rpms/.pkg.tar.zst + SHA256SUMS to a DRAFT GitHub release
 # (not visible to users until the maintainer publishes it).
 permissions:
   contents: read
@@ -79,9 +81,99 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
+  # ---- RPM (Fedora / Enterprise Linux) -------------------------------------------------------
+  # Swift engine once per arch in the official swift:rhel-ubi9 image (glibc 2.34 = the oldest
+  # target, so one engine serves EL9, EL10 and Fedora), then a native rpmbuild per distro.
+  rpm-engine:
+    name: rpm engine ${{ matrix.arch }}
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: build-rpm.sh --swift-only (libtelexcore.so + viettelex-text-tool)
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          linux/packaging/build-rpm.sh --arch "$ARCH" --swift-only
+          mkdir -p "linux/dist/rpm-engine/$ARCH"
+          cp "linux/dist/rpm/.swift/$ARCH"/* "linux/dist/rpm-engine/$ARCH/"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rpm-engine-${{ matrix.arch }}
+          path: linux/dist/rpm-engine/${{ matrix.arch }}/*
+          retention-days: 3
+          if-no-files-found: error
+
+  rpm:
+    name: rpm ${{ matrix.target }} ${{ matrix.arch }}
+    needs: [version, rpm-engine]
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep in sync with image_of in linux/packaging/build-rpm.sh (fc = Fedora, el = RHEL/Rocky/Alma).
+        target: [fc43, fc44, el9, el10]
+        arch: [x86_64, aarch64]
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: rpm-engine-${{ matrix.arch }}
+          path: linux/dist/rpm-engine/${{ matrix.arch }}
+      - name: build-rpm.sh (rpmbuild + %check ctest/settings tests + dnf install smoke)
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          chmod +x linux/dist/rpm-engine/*/*   # artifacts drop the exec bit
+          linux/packaging/build-rpm.sh --target "$TARGET" --arch "$ARCH" --swift-dir linux/dist/rpm-engine
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rpms-${{ matrix.target }}-${{ matrix.arch }}
+          path: linux/dist/rpm/${{ matrix.target }}/*.rpm
+          retention-days: 3
+          if-no-files-found: error
+
+  # ---- Arch Linux: the noble .debs repackaged (same PKGBUILD as AUR viettelex-bin) ------------
+  # archlinux:latest only exists for amd64 and the PKGBUILD only unpacks .debs (no compiler, no
+  # strip), so the aarch64 package is made on x86_64 with CARCH=aarch64 (build-arch.sh).
+  arch:
+    name: Arch Linux packages
+    needs: [version, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: debs-noble-*
+          path: linux/dist/noble
+          merge-multiple: true
+      - name: build-arch.sh (makepkg x86_64 + aarch64, pacman -U smoke on x86_64)
+        run: linux/packaging/build-arch.sh --debs linux/dist/noble
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: arch-pkgs
+          path: linux/dist/arch/*.pkg.tar.zst
+          retention-days: 3
+          if-no-files-found: error
+
+
   assemble:
     name: SHA256SUMS + attestations
-    needs: [version, build]
+    needs: [version, build, rpm, arch]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -111,23 +203,46 @@ jobs:
           done
           ls -l "$dist"/*/
           echo "$(find "$dist" -name '*.deb' | wc -l) .deb"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: rpms-*
+          path: ${{ runner.temp }}/rpms
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: arch-pkgs
+          path: linux/dist/arch
+      - name: Lay out linux/dist/rpm/<target>/ (noarch packages from the x86_64 build)
+        run: |
+          for d in "$RUNNER_TEMP"/rpms/rpms-*; do
+            n=${d##*/rpms-}; t=${n%-*}; a=${n##*-}
+            mkdir -p "linux/dist/rpm/$t"
+            for f in "$d"/*.rpm; do
+              case "$f" in *.noarch.rpm) [ "$a" = x86_64 ] || continue ;; esac
+              cp "$f" "linux/dist/rpm/$t/"
+            done
+          done
+          ls -l linux/dist/rpm/*/ linux/dist/arch/
+          echo "$(find linux/dist/rpm -name '*.rpm' | wc -l) .rpm, $(find linux/dist/arch -name '*.pkg.tar.zst' | wc -l) .pkg.tar.zst"
       - name: stable.json "linux" entry + SHA256SUMS (same script as a local release)
         run: |
           cp docs/stable.json "$RUNNER_TEMP/stable.json"
           python3 linux/packaging/stable-linux.py --stable "$RUNNER_TEMP/stable.json" --sums linux/dist/SHA256SUMS
           cp "$RUNNER_TEMP/stable.json" linux/dist/stable.json
           cat linux/dist/SHA256SUMS
-      - name: Build provenance attestation (every .deb, by digest)
+      - name: Build provenance attestation (every .deb / .rpm / .pkg.tar.zst, by digest)
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-checksums: linux/dist/SHA256SUMS
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: viettelex-linux-${{ env.VERSION }}
-          # dist/<series>/*.deb (names with "~", as apt-repo.sh expects) + SHA256SUMS
-          # (GitHub asset names, "~" → ".") + stable.json with the new "linux" entry.
+          # dist/<series>/*.deb (names with "~", as apt-repo.sh expects), dist/rpm/<target>/*.rpm
+          # (dnf-repo.sh), dist/arch/*.pkg.tar.zst (pacman-repo.sh) + SHA256SUMS (GitHub asset
+          # names, "~" → ".") + stable.json with the new "linux" entry.
           path: |
             linux/dist/*/*.deb
+            linux/dist/rpm/*/*.rpm
+            linux/dist/arch/*.pkg.tar.zst
             linux/dist/SHA256SUMS
             linux/dist/stable.json
           retention-days: 30
@@ -162,4 +277,4 @@ jobs:
               --notes "Draft from CI run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID — edit the notes (template in linux/packaging/APT.md) before publishing."
           fi
           # GitHub renames "~" to "." in asset names, matching SHA256SUMS / stable.json.
-          gh release upload "$tag" ./*/*.deb SHA256SUMS --clobber
+          gh release upload "$tag" ./*/*.deb ./rpm/*/*.rpm ./arch/*.pkg.tar.zst SHA256SUMS --clobber

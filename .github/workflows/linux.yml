@@ -58,7 +58,7 @@ jobs:
       - name: shellcheck
         run: |
           shellcheck --severity=warning docs/install.sh linux/packaging/*.sh \
-            linux/packaging/docker/*.sh linux/packaging/aur/*.sh
+            linux/packaging/docker/*.sh linux/packaging/aur/*.sh linux/packaging/rpm/*.sh
       - name: actionlint
         # Docker image pinned by digest (rhysd/actionlint 1.7.12); runs shellcheck on run: blocks too.
         run: |
@@ -91,3 +91,15 @@ jobs:
           path: linux/dist/noble/*.deb
           retention-days: 7
           if-no-files-found: error
+
+  rpm:
+    name: RPM build + test + smoke (fc44, el9 x86_64)
+    needs: quick
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: build-rpm.sh --target "fc44 el9" (swift engine, rpmbuild %check, dnf install smoke)
+        run: linux/packaging/build-rpm.sh --target "fc44 el9" --arch x86_64
