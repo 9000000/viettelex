@@ -1,6 +1,8 @@
 #!/bin/bash
-# Kiểm docs/install.sh nhận đúng series kho APT từ /etc/os-release của các distro
-# (Ubuntu, Debian và bản phái sinh). Không cần mạng/root; chạy được trên macOS lẫn Linux, CI.
+# Kiểm docs/install.sh nhận đúng kho từ /etc/os-release của các distro: series APT (Ubuntu,
+# Debian và bản phái sinh), thư mục kho DNF (fedora/NN, el/N), Fedora Atomic (ostree:…, nhận
+# qua /run/ostree-booted — ở đây là file giả VT_OSTREE_MARKER) và Arch (arch).
+# Không cần mạng/root; chạy được trên macOS lẫn Linux, CI.
 #
 #   linux/packaging/test-install-detect.sh
 set -u
@@ -14,7 +16,8 @@ check() {
   local name=$1 want=$2 body=$3; shift 3
   printf '%s\n' "$body" > "$TMP/os-release"
   local got rc
-  got=$(VT_OS_RELEASE="$TMP/os-release" bash "$INSTALL" --print-series "$@" 2>/dev/null); rc=$?
+  got=$(VT_OS_RELEASE="$TMP/os-release" VT_OSTREE_MARKER="${MARKER:-$TMP/no-ostree}" \
+        bash "$INSTALL" --print-series "$@" 2>/dev/null); rc=$?
   if [ "$want" = REJECT ]; then
     if [ $rc != 0 ]; then echo "ok   $name → từ chối"; else echo "FAIL $name: nhận '$got', mong từ chối"; FAILS=$((FAILS+1)); fi
   elif [ $rc = 0 ] && [ "$got" = "$want" ]; then
@@ -82,9 +85,75 @@ VERSION_CODENAME=bookworm'
 check "Kali rolling" trixie 'ID=kali
 ID_LIKE=debian
 VERSION_CODENAME=kali-rolling'
-check "Fedora" REJECT 'ID=fedora
+check "Fedora (thiếu VERSION_ID)" REJECT 'ID=fedora
 VERSION_CODENAME=""'
-check "Arch" REJECT 'ID=arch'
+check "Fedora 44" fedora/44 'NAME="Fedora Linux"
+VERSION_ID=44
+ID=fedora
+VARIANT_ID=workstation'
+check "Fedora 43 KDE" fedora/43 'ID=fedora
+VERSION_ID=43
+VARIANT_ID=kde'
+check "Fedora 42 (hết hỗ trợ)" REJECT 'ID=fedora
+VERSION_ID=42'
+check "Fedora 46 (chưa có)" REJECT 'ID=fedora
+VERSION_ID=46'
+check "Nobara 43" fedora/43 'ID=nobara
+ID_LIKE="rhel centos fedora"
+VERSION_ID=43'
+check "RHEL 9.6" el/9 'ID="rhel"
+ID_LIKE="fedora"
+VERSION_ID="9.6"'
+check "RHEL 8" REJECT 'ID="rhel"
+ID_LIKE="fedora"
+VERSION_ID="8.10"'
+check "Rocky Linux 9.8" el/9 'ID="rocky"
+ID_LIKE="rhel centos fedora"
+VERSION_ID="9.8"'
+check "AlmaLinux 10.2" el/10 'ID="almalinux"
+ID_LIKE="rhel centos fedora"
+VERSION_ID="10.2"'
+check "CentOS Stream 10" el/10 'ID="centos"
+ID_LIKE="rhel fedora"
+VERSION_ID="10"'
+check "Oracle Linux 9" el/9 'ID="ol"
+ID_LIKE="fedora"
+VERSION_ID="9.5"'
+check "Rocky 9 + --series el/10 (ép)" el/10 'ID="rocky"
+ID_LIKE="rhel centos fedora"
+VERSION_ID="9.8"' --series el/10
+MARKER="$TMP/ostree-booted"; : > "$MARKER"
+check "Fedora Silverblue 44" ostree:fedora/44 'ID=fedora
+VERSION_ID=44
+VARIANT_ID=silverblue'
+check "Fedora Kinoite 43" ostree:fedora/43 'ID=fedora
+VERSION_ID=43
+VARIANT_ID=kinoite'
+check "Bazzite 44" ostree:fedora/44 'ID=bazzite
+ID_LIKE="fedora"
+VERSION_ID=44
+VARIANT_ID=bazzite'
+check "Bluefin 44" ostree:fedora/44 'ID=bluefin
+ID_LIKE="fedora"
+VERSION_ID=44
+VARIANT_ID=bluefin'
+check "Silverblue 42 (hết hỗ trợ)" REJECT 'ID=fedora
+VERSION_ID=42
+VARIANT_ID=silverblue'
+MARKER=""
+check "Arch" arch 'ID=arch'
+check "Arch Linux ARM" arch 'ID=archarm
+ID_LIKE=arch'
+check "Manjaro" arch 'ID=manjaro
+ID_LIKE=arch'
+check "EndeavourOS" arch 'ID=endeavouros
+ID_LIKE=arch'
+check "CachyOS" arch 'ID=cachyos
+ID_LIKE=arch'
+check "Garuda" arch 'ID=garuda
+ID_LIKE=arch'
+check "openSUSE (chưa hỗ trợ)" REJECT 'ID="opensuse-tumbleweed"
+ID_LIKE="opensuse suse"'
 check "Fedora + --series noble (ép)" noble 'ID=fedora' --series noble
 check "Debian + --series lạ" REJECT 'ID=debian
 VERSION_CODENAME=bookworm' --series bogus

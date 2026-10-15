@@ -27,8 +27,9 @@ if rpm -q viettelex-fcitx5 >/dev/null; then
   test -f /usr/share/fcitx5/addon/viettelex.conf || bad "fcitx5 addon conf"
   test -f /usr/share/fcitx5/inputmethod/viettelex.conf || bad "fcitx5 im conf"
 fi
-ldd "$L/viettelex/viettelex-text-tool" /usr/libexec/ibus-engine-viettelex $(ls "$L"/fcitx5/viettelex.so 2>/dev/null) \
-  | grep "not found" && bad "missing libraries"
+bins=("$L/viettelex/viettelex-text-tool" /usr/libexec/ibus-engine-viettelex)
+[ -e "$L/fcitx5/viettelex.so" ] && bins+=("$L/fcitx5/viettelex.so")
+ldd "${bins[@]}" | grep "not found" && bad "missing libraries"
 python3 -c "import sys; sys.path.insert(0, '/usr/share/viettelex-settings'); \
 import gi; gi.require_version('Gtk', '4.0'); gi.require_version('Adw', '1'); \
 from gi.repository import Gtk, Adw; import viettelex_settings.app, viettelex_settings.updater as u; \
