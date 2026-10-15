@@ -1,4 +1,4 @@
-# VietTelex Linux — đóng gói (.deb, PPA)
+# VietTelex Linux — đóng gói (.deb, .rpm, Arch, PPA)
 
 ## Gói
 
@@ -10,6 +10,10 @@
 | `viettelex-ibus` | any | `usr/libexec/ibus-engine-viettelex`, `usr/share/ibus/component/viettelex.xml` |
 | `viettelex-text-tools` | any | `usr/lib/<multiarch>/viettelex/viettelex-text-tool` (công cụ văn bản, Swift + FoundationEssentials static, ~13 MB — process con của frontend) + `usr/share/viettelex/{vnlexicon,vnlm,enlexicon}.bin`; Recommends của hai frontend |
 
+
+Gói RPM (Fedora / EL) cùng tên, đường dẫn theo distro (`/usr/lib64/viettelex`,
+`/usr/lib64/fcitx5`) — `rpm/viettelex.spec`, xem [RPM.md](RPM.md). Arch: một gói `viettelex` đóng
+lại từ .deb noble — [ARCH.md](ARCH.md).
 
 Đường dẫn cài của engine/frontend là **hợp đồng với CMake ở `linux/CMakeLists.txt`**
 (`debian/*.install`). Đổi bên nào thì sửa bên kia.
@@ -43,7 +47,7 @@ Kiểm tra: `lintian out/*.changes`, `appstreamcli validate data/*.metainfo.xml`
   `App/Resources/MenuIcon1.pdf` (khung bo góc + V + ᴛ; E vẽ cùng độ đậm). Tên này được Fcitx5
   (`Icon=viettelex`, action Việt/Anh) và IBus (`<icon>viettelex</icon>`) dùng; gói `libviettelex-core` cài.
 
-## Phát hành (GitHub Releases + kho APT + AUR)
+## Phát hành (GitHub Releases + kho APT / DNF / pacman)
 
 | Series | Distro | Ảnh build | Ảnh smoke |
 |---|---|---|---|
@@ -72,5 +76,7 @@ build hỏng. Sau đó script cài thử trong distro sạch: fcitx5 phải li�
 CI: `.github/workflows/linux.yml` chạy `build-all.sh --series noble` (amd64 + arm64) cho mọi PR/push
 đụng tới Linux; `linux-release.yml` (chạy tay) build đủ series × arch + attestation — quy trình
 phát hành qua CI và ký kho trên máy local: [APT.md](APT.md#phát-hành-qua-ci-khuyên-dùng).
-Kho APT: [APT.md](APT.md). AUR: [aur/README.md](aur/README.md). PPA: [PPA.md](PPA.md).
+Kho APT: [APT.md](APT.md). RPM + kho DNF: [RPM.md](RPM.md) (`build-rpm.sh`, `dnf-repo.sh`,
+`test-rpm.sh`). Arch + kho pacman: [ARCH.md](ARCH.md) (`build-arch.sh`, `pacman-repo.sh`,
+`test-pacman-repo.sh`). AUR (sau): [aur/README.md](aur/README.md). PPA: [PPA.md](PPA.md).
 Bảng distro → series của `install.sh`: `linux/packaging/test-install-detect.sh`.

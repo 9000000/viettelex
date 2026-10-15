@@ -1,4 +1,4 @@
-# VietTelex cho Linux (Ubuntu 22.04 / 24.04 / 26.04, Debian 12 / 13, Arch)
+# VietTelex cho Linux (Ubuntu, Debian, Fedora, RHEL/Rocky/Alma, Fedora Atomic, Arch)
 
 Bộ gõ tiếng Việt VietTelex dạng input method chuẩn: **Fcitx5** (khuyên dùng) hoặc **IBus**
 (mặc định Ubuntu/GNOME). Cùng engine với bản macOS (`TelexCore`), gõ y hệt. Spec:
@@ -8,9 +8,15 @@ Bộ gõ tiếng Việt VietTelex dạng input method chuẩn: **Fcitx5** (khuy�
 
 Ubuntu 22.04 (jammy) / 24.04 (noble) / 26.04 (resolute), Debian 12 (bookworm) / 13 (trixie)
 và bản dựa trên chúng (Mint, Pop!_OS, Zorin, elementary, LMDE, MX…), amd64 + arm64.
-Arch Linux: gói AUR `viettelex-bin` (xem [packaging/aur/README.md](packaging/aur/README.md)).
+**Fedora 43 / 44**, **RHEL / Rocky / Alma / CentOS Stream 9 và 10** (chỉ IBus — EPEL chưa có
+Fcitx5) và **Fedora Atomic** (Silverblue, Kinoite, Bazzite, Bluefin, Aurora — qua rpm-ostree), x86_64
++ aarch64: kho DNF đã ký, xem [packaging/RPM.md](packaging/RPM.md).
+**Arch Linux** và bản dựa trên Arch (Manjaro, EndeavourOS, CachyOS, Garuda): kho pacman `[viettelex]`
+đã ký, xem [packaging/ARCH.md](packaging/ARCH.md). Gói AUR `viettelex-bin` sẽ có sau (AUR đang tạm
+đóng đăng ký).
 
-**Nhanh nhất — một lệnh** (thêm kho APT đã ký, cài, bật Fcitx5; chạy lại = cập nhật; `--ibus`
+**Nhanh nhất — một lệnh** (tự nhận distro: thêm kho đã ký APT / DNF / pacman — Fedora Atomic thì
+xếp lớp bằng rpm-ostree, cần khởi động lại —, cài, bật Fcitx5; chạy lại = cập nhật; `--ibus`
 để giữ IBus, `--uninstall` để gỡ):
 
 ```sh
@@ -58,13 +64,49 @@ và làm theo hướng dẫn:
 - **IBus (GNOME)**: `ibus restart`, rồi Cài đặt → Bàn phím → Nguồn nhập → + → Tiếng Việt →
   VietTelex (hoặc bấm *Thêm* trong hướng dẫn).
 
+**Fedora / RHEL / Rocky / Alma — kho DNF thủ công** (EL: thay `viettelex-fedora.repo` bằng
+`viettelex-el9.repo` hoặc `viettelex-el10.repo`, gói `viettelex` tự kèm IBus):
+
+```sh
+sudo curl -fsSLo /etc/pki/rpm-gpg/RPM-GPG-KEY-viettelex \
+  https://ptrinh.github.io/viettelex-apt/rpm/RPM-GPG-KEY-viettelex
+sudo curl -fsSLo /etc/yum.repos.d/viettelex.repo \
+  https://ptrinh.github.io/viettelex-apt/rpm/viettelex-fedora.repo
+sudo dnf install viettelex viettelex-fcitx5      # hoặc giữ IBus: viettelex viettelex-ibus
+```
+
+Fedora Atomic: cùng khoá + file `.repo` (đặt `repo_gpgcheck=0`), rồi
+`sudo rpm-ostree install viettelex viettelex-ibus` (KDE: `viettelex-fcitx5`) và `systemctl reboot`;
+cập nhật cùng hệ thống bằng `rpm-ostree upgrade`. Chi tiết: [packaging/RPM.md](packaging/RPM.md).
+
+**Arch — kho pacman thủ công:**
+
+```sh
+curl -fsSLO https://ptrinh.github.io/viettelex-apt/viettelex-archive-keyring.gpg
+sudo pacman-key --add viettelex-archive-keyring.gpg
+sudo pacman-key --lsign-key 43ADE236BCC43900B8F146B4F57C885055149990
+# thêm vào cuối /etc/pacman.conf:
+#   [viettelex]
+#   SigLevel = Required DatabaseRequired
+#   Server = https://ptrinh.github.io/viettelex-apt/arch/$arch
+sudo pacman -Sy viettelex
+```
+
 Chuyển Việt/Anh: `Ctrl+Space` (đổi trong Cài đặt → Tuỳ chỉnh). Chi tiết kho APT và cách gỡ:
-[packaging/APT.md](packaging/APT.md).
+[packaging/APT.md](packaging/APT.md); DNF: [packaging/RPM.md](packaging/RPM.md); pacman:
+[packaging/ARCH.md](packaging/ARCH.md). Trên Fedora/EL/Arch app cài đặt không có nút cập nhật một
+chạm — nó báo lệnh `dnf upgrade` / `rpm-ostree upgrade` / `pacman -Syu`.
 
 ## Install (English)
 
 Ubuntu 22.04 / 24.04 / 26.04, Debian 12 / 13 and distributions based on them, amd64 and
-arm64. Arch Linux: AUR package `viettelex-bin`.
+arm64; Fedora 43 / 44, RHEL / Rocky / Alma / CentOS Stream 9 and 10 (IBus only: EPEL has no
+Fcitx5) and Fedora Atomic desktops (Silverblue, Kinoite, Bazzite, Bluefin, Aurora), x86_64 and
+aarch64, from a signed DNF repository ([packaging/RPM.md](packaging/RPM.md)); Arch Linux and
+Arch-based distros from a signed pacman repository ([packaging/ARCH.md](packaging/ARCH.md)). The
+AUR package `viettelex-bin` comes later (AUR registration is closed for now). The one-line
+installer `curl -fsSL https://viettelex.com/install.sh | bash` detects the distro and handles all
+of them.
 
 1. **APT repository** (recommended; updates arrive through `apt upgrade`). Run the commands
    above: they save the signing key to `/etc/apt/keyrings/viettelex.gpg` and add a deb822
@@ -172,7 +214,7 @@ to your machine, each with a copy button.
 | `common/` | logic dùng chung của frontend + [hợp đồng cài đặt](common/SETTINGS.md) |
 | `fcitx5/`, `ibus/` | frontend |
 | `settings/` | `viettelex-settings` (Python + PyGObject, GTK4 + libadwaita ≥ 1.1) |
-| `packaging/` | `debian/`, desktop file, AppStream, icon, `build-all.sh` (mọi series × arch), [kho APT](packaging/APT.md), [PPA](packaging/PPA.md) |
+| `packaging/` | `debian/`, `rpm/viettelex.spec`, desktop file, AppStream, icon, `build-all.sh` (mọi series × arch), `build-rpm.sh`, `build-arch.sh`, [kho APT](packaging/APT.md), [kho DNF](packaging/RPM.md), [kho pacman](packaging/ARCH.md), [PPA](packaging/PPA.md) |
 
 ## App cài đặt (`settings/`)
 
@@ -195,4 +237,5 @@ make check                      # unit test (không cần GTK)
 ./viettelex-settings            # chạy thẳng từ cây nguồn
 ```
 
-Phụ thuộc lúc chạy: `python3-gi gir1.2-gtk-4.0 gir1.2-adw-1` (có sẵn từ Ubuntu 22.04).
+Phụ thuộc lúc chạy: `python3-gi gir1.2-gtk-4.0 gir1.2-adw-1` (có sẵn từ Ubuntu 22.04);
+Fedora/EL: `python3-gobject gtk4 libadwaita`; Arch: `python-gobject gtk4 libadwaita`.

@@ -1,5 +1,8 @@
 # AUR: `viettelex-bin`
 
+> **Chưa đăng:** AUR đang tạm đóng đăng ký tài khoản mới. Người dùng Arch cài từ kho pacman
+> `[viettelex]` (cùng PKGBUILD, gói tên `viettelex`) — xem [../ARCH.md](../ARCH.md).
+
 Gói Arch Linux đóng lại từ các `.deb` **noble** (Ubuntu 24.04) chính thức trên GitHub Releases —
 cùng file nhị phân, đã kiểm SHA256 (`sha256sums_*` lấy từ `docs/stable.json` = `SHA256SUMS`).
 x86_64 + aarch64. Một gói gồm engine, addon Fcitx5, engine IBus, công cụ văn bản và app cài đặt.

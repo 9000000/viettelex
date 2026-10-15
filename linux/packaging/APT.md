@@ -4,7 +4,7 @@ Kho: `https://ptrinh.github.io/viettelex-apt/` — Ubuntu 22.04 (jammy), 24.04 (
 26.04 (resolute), Debian 12 (bookworm), 13 (trixie); amd64 + arm64. Được ký bằng GPG; `apt` tự
 kiểm chữ ký. Bản phái sinh dùng series gốc: Mint/Pop!_OS/Zorin/elementary → `UBUNTU_CODENAME`,
 LMDE → `DEBIAN_CODENAME`, MX/Raspberry Pi OS 64-bit → `VERSION_CODENAME`, Kali rolling → trixie
-(thử nghiệm). Arch Linux: AUR `viettelex-bin` ([aur/README.md](aur/README.md)).
+(thử nghiệm). Fedora / RHEL / Fedora Atomic: [RPM.md](RPM.md). Arch Linux: [ARCH.md](ARCH.md).
 
 ## Cài bằng một lệnh / One-line install
 
@@ -142,10 +142,15 @@ cmp linux/dist/SHA256SUMS.ci linux/dist/SHA256SUMS && rm linux/dist/SHA256SUMS.c
 
 # 4. GitHub Release: nếu đã chạy draft_release=true thì sửa ghi chú rồi publish bản nháp
 #    (gh release edit linux-v$V --notes-file … --draft=false); không thì:
-gh release create "linux-v$V" linux/dist/*/*.deb linux/dist/SHA256SUMS --notes-file …
+gh release create "linux-v$V" linux/dist/*/*.deb linux/dist/rpm/*/*.rpm linux/dist/arch/*.pkg.tar.zst \
+  linux/dist/SHA256SUMS --notes-file …
 
-# 5. Ký + dựng kho APT trên máy này, rồi push repo viettelex-apt
+# 5. Ký + dựng kho APT, DNF, pacman trên máy này, rồi push repo viettelex-apt
+#    (CI đã build + attest .rpm / .pkg.tar.zst cùng artifact; kiểm attestation như bước 2:
+#     linux/dist/rpm/*/*.rpm và linux/dist/arch/*.pkg.tar.zst)
 VT_APT_KEY=<fingerprint> linux/packaging/apt-repo.sh --out ../viettelex-apt
+VT_RPM_KEY=<fingerprint> linux/packaging/dnf-repo.sh --out ../viettelex-apt          # → rpm/  (RPM.md)
+VT_PACMAN_KEY=<fingerprint> linux/packaging/pacman-repo.sh --out ../viettelex-apt    # → arch/ (ARCH.md)
 
 # 6. Sau cùng: commit + push docs/stable.json; AUR: linux/packaging/aur/README.md
 ```
@@ -186,7 +191,7 @@ Người dùng tự kiểm được một .deb tải về: `gh attestation verif
 ### Mẫu ghi chú phát hành / Release notes template
 
 ```markdown
-**Cài / cập nhật bằng một lệnh (Ubuntu 22.04/24.04/26.04, Debian 12/13):**
+**Cài / cập nhật bằng một lệnh (Ubuntu 22.04/24.04/26.04, Debian 12/13, Fedora 43/44, RHEL/Rocky/Alma 9/10, Fedora Atomic, Arch):**
 
     curl -fsSL https://viettelex.com/install.sh | bash
 
