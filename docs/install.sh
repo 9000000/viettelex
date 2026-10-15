@@ -338,7 +338,11 @@ fetch_pinned_key() {  # fetch_pinned_key URL FILE
     fi
   fi
   local fpr
-  fpr=$(gpg --batch --show-keys --with-colons "$2" 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')
+  # GNUPGHOME tạm: không đụng keyring của người dùng (và chạy được khi HOME không ghi được).
+  local gh
+  gh=$(mktemp -d)
+  fpr=$(GNUPGHOME=$gh gpg --batch --show-keys --with-colons "$2" 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}') || true
+  rm -rf "$gh"
   [ "$fpr" = "$KEY_FPR" ] || die "khoá ký tải về ($fpr) không phải khoá VietTelex ($KEY_FPR) — dừng lại."
   info "khoá ký hợp lệ ($KEY_FPR)"
 }
@@ -349,13 +353,15 @@ rpm_arch_ok() {
 }
 
 # File .repo: Fedora theo $releasever (nâng bản Fedora là kho đổi theo), EL cố định bản chính.
-write_yum_repo() {  # write_yum_repo FILE
-  local dir=$RPM_DIR
+# rpm-ostree không kiểm được chữ ký repomd.xml ("Signing key not found" dù có gpgkey=) ⇒ trên
+# Fedora Atomic repo_gpgcheck=0; từng gói vẫn phải mang chữ ký đúng khoá (gpgcheck=1).
+write_yum_repo() {  # write_yum_repo FILE [repo_gpgcheck=1]
+  local dir=$RPM_DIR rg=${2:-1}
   # shellcheck disable=SC2016
   case "$dir" in fedora/*) dir='fedora/$releasever' ;; esac
   # shellcheck disable=SC2016
-  printf '[viettelex]\nname=VietTelex\nbaseurl=%s/rpm/%s/$basearch/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=file://%s\nmetadata_expire=6h\n' \
-    "$REPO_BASE" "$dir" "$RPM_KEY_FILE" > "$1"
+  printf '[viettelex]\nname=VietTelex\nbaseurl=%s/rpm/%s/$basearch/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=%s\ngpgkey=file://%s\nmetadata_expire=6h\n' \
+    "$REPO_BASE" "$dir" "$rg" "$RPM_KEY_FILE" > "$1"
 }
 
 rpm_key_name() { printf 'gpg-pubkey-%s' "$(printf '%s' "$KEY_FPR" | tail -c 8 | tr 'A-F' 'a-f')"; }
@@ -467,7 +473,7 @@ ostree_install() {
 
   need_sudo
   say "Thêm kho VietTelex vào /etc/yum.repos.d (cần quyền quản trị)"
-  write_yum_repo "$TMPD/viettelex.repo"
+  write_yum_repo "$TMPD/viettelex.repo" 0
   srun install -d -m 0755 /etc/pki/rpm-gpg
   srun install -m 0644 "$TMPD/RPM-GPG-KEY-viettelex" "$RPM_KEY_FILE"
   srun install -m 0644 "$TMPD/viettelex.repo" "$YUM_REPO"

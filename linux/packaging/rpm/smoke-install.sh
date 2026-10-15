@@ -55,7 +55,7 @@ PY
   fi
   ibus-daemon -x -r --panel=disable >/tmp/i.log 2>&1 & sleep 5
   if ibus list-engine 2>/dev/null | grep -q "viettelex -"; then echo "ibus: viettelex OK"; else echo "ibus: viettelex MISSING"; fail=1; fi
-  exit $fail' || fail=1
+  exit $fail' 2>/dev/null || fail=1
 dnf -y -q remove 'viettelex*' 'libviettelex*' >/dev/null 2>&1 || bad "dnf remove"
 test ! -e "$L/viettelex/libtelexcore.so" || bad "leftover after remove"
 [ $fail = 0 ] && echo "SMOKE OK" || echo "SMOKE FAIL"
