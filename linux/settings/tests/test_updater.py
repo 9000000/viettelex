@@ -194,6 +194,41 @@ class ChecksumAndResultTests(unittest.TestCase):
         self.assertEqual(updater.restart_im_argv("ibus"), ["ibus", "restart"])
         self.assertIsNone(updater.restart_im_argv(None))
 
+    def test_install_method(self):
+        def rd(text):
+            return lambda path: text if path == updater.INSTALL_METHOD_FILE else ""
+        no = lambda _p: False  # noqa: E731
+        ostree = lambda p: p == updater.OSTREE_BOOTED  # noqa: E731
+        self.assertEqual(updater.install_method(rd(""), no), "deb")       # .deb: không có file
+        self.assertEqual(updater.install_method(rd("rpm\n"), no), "rpm")
+        self.assertEqual(updater.install_method(rd("rpm\n"), ostree), "rpm-ostree")
+        self.assertEqual(updater.install_method(rd("pacman\n"), ostree), "pacman")
+        self.assertEqual(updater.install_method(rd("lạ"), no), "deb")
+
+    def test_manual_update_hint_and_install_cmd(self):
+        self.assertIsNone(updater.manual_update_hint("deb"))
+        self.assertIn("dnf upgrade", updater.manual_update_hint("rpm"))
+        self.assertIn("rpm-ostree upgrade", updater.manual_update_hint("rpm-ostree"))
+        self.assertIn("pacman -Syu", updater.manual_update_hint("pacman"))
+        self.assertEqual(updater.install_cmd("viettelex-ibus", "deb"), "sudo apt install viettelex-ibus")
+        self.assertEqual(updater.install_cmd("viettelex-ibus", "rpm"), "sudo dnf install viettelex-ibus")
+        self.assertEqual(updater.install_cmd("viettelex-ibus", "rpm-ostree"),
+                         "sudo rpm-ostree install viettelex-ibus")
+        self.assertEqual(updater.install_cmd("viettelex-ibus", "pacman"), "sudo pacman -S viettelex")
+
+    def test_run_update_rpm_never_touches_apt(self):
+        # Gói RPM / pacman: không gọi dpkg/pkexec, chỉ báo lệnh của trình quản lý gói.
+        orig = updater.install_method
+        try:
+            for method, word in (("rpm", "dnf"), ("rpm-ostree", "rpm-ostree"), ("pacman", "pacman")):
+                updater.install_method = lambda m=method: m
+                ok, msg, fallback = updater.run_update(lin(), helper="/nonexistent")
+                self.assertFalse(ok)
+                self.assertTrue(fallback)
+                self.assertIn(word, msg)
+        finally:
+            updater.install_method = orig
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1061,7 +1061,12 @@ class SettingsWindow(Adw.PreferencesWindow):
     def _update_done(self, st, lin, msg, url):
         self.update_btn.set_sensitive(True)
         self.update_row.set_subtitle(esc(msg))
-        if st == "available":
+        hint = updater.manual_update_hint(updater.install_method())
+        if st == "available" and hint:
+            # RPM / rpm-ostree / pacman: không cập nhật một chạm — chỉ báo lệnh của trình quản lý gói.
+            self.update_row.set_subtitle(esc(msg + "\n" + hint))
+            self._set_update_action(_("Mở trang tải"), lambda: open_uri(url or RELEASES_URL))
+        elif st == "available":
             self._set_update_action(_("Cập nhật lên %s") % lin["version"],
                                     lambda: self.run_update(lin))
         elif url:
@@ -1233,8 +1238,8 @@ class OnboardingWindow(Adw.Window):
                         "hợp KDE) hoặc IBus (mặc định của Ubuntu/GNOME)."))
         if not fw:
             self.step(choose, False, _("Chưa thấy Fcitx5 hay IBus"),
-                      _("Cài một trong hai gói: sudo apt install viettelex-fcitx5 (hoặc "
-                      "viettelex-ibus), rồi mở lại hướng dẫn này."))
+                      _("Cài một trong hai gói: %s (hoặc viettelex-ibus), rồi mở lại hướng dẫn "
+                        "này.") % updater.install_cmd("viettelex-fcitx5"))
             page.add(choose)
             self._finish(page, a)
             return
@@ -1249,7 +1254,7 @@ class OnboardingWindow(Adw.Window):
         pkg = "viettelex-fcitx5" if fw == "fcitx5" else "viettelex-ibus"
         self.step(g, a["installed"][fw], _("1. Cài gói %s") % pkg,
                   _("Đã cài.") if a["installed"][fw] else
-                  _("sudo apt install %s (hoặc cài file .deb tải từ trang phát hành).") % pkg)
+                  _("%s (hoặc cài gói tải từ trang phát hành).") % updater.install_cmd(pkg))
         if fw == "fcitx5":
             self.step(g, a["running"]["fcitx5"], _("2. Fcitx5 đang chạy"),
                       _("Đang chạy.") if a["running"]["fcitx5"] else
@@ -1309,7 +1314,7 @@ class OnboardingWindow(Adw.Window):
             b.connect("clicked", lambda _b: self.use_ibus())
         elif not a["installed"]["fcitx5"]:
             r = row(_("Dùng Fcitx5 thay IBus"),
-                    _("Cài gói trước: sudo apt install viettelex-fcitx5"))
+                    _("Cài gói trước: %s") % updater.install_cmd("viettelex-fcitx5"))
             b = None
         else:
             r = row(_("Dùng Fcitx5 thay IBus"),

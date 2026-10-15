@@ -453,6 +453,16 @@ EN = {
         "pkexec or the update helper is missing — install the pkexec package (22.04: "
         "policykit-1) or update with apt.",
     "Địa chỉ tải không hợp lệ: %s": "Invalid download address: %s",
+    "VietTelex được cài bằng dnf — cập nhật: sudo dnf upgrade --refresh 'viettelex*' (hoặc Phần "
+    "mềm / Discover).":
+        "VietTelex was installed with dnf — update with: sudo dnf upgrade --refresh 'viettelex*' "
+        "(or GNOME Software / Discover).",
+    "Fedora Atomic: VietTelex cập nhật cùng hệ thống — rpm-ostree upgrade rồi khởi động lại "
+    "(Bazzite/Bluefin/Aurora tự cập nhật).":
+        "Fedora Atomic: VietTelex updates with the system — run rpm-ostree upgrade, then reboot "
+        "(Bazzite/Bluefin/Aurora update automatically).",
+    "VietTelex được cài bằng pacman — cập nhật: sudo pacman -Syu.":
+        "VietTelex was installed with pacman — update with: sudo pacman -Syu.",
     "Đang tải %d/%d: %s": "Downloading %d/%d: %s",
     "Không tải được %s — kiểm tra mạng rồi thử lại.":
         "Couldn’t download %s — check your connection and try again.",
@@ -469,10 +479,8 @@ EN = {
         "VietTelex is an input method for Fcitx5 (recommended — lowest latency, suits KDE) or "
         "IBus (the Ubuntu/GNOME default).",
     "Chưa thấy Fcitx5 hay IBus": "Neither Fcitx5 nor IBus found",
-    "Cài một trong hai gói: sudo apt install viettelex-fcitx5 (hoặc viettelex-ibus), rồi mở lại "
-    "hướng dẫn này.":
-        "Install one of the packages: sudo apt install viettelex-fcitx5 (or viettelex-ibus), then "
-        "open this guide again.",
+    "Cài một trong hai gói: %s (hoặc viettelex-ibus), rồi mở lại hướng dẫn này.":
+        "Install one of the packages: %s (or viettelex-ibus), then open this guide again.",
     "Đang dùng %s": "Using %s",
     "Theo tiến trình đang chạy và biến môi trường của phiên đăng nhập này.":
         "Based on the running processes and the environment of this login session.",
@@ -489,7 +497,7 @@ EN = {
     "Chưa có hiệu lực — đăng xuất rồi đăng nhập lại.": "Not in effect yet — log out and back in.",
     "Quay về IBus": "Back to IBus",
     "Dùng Fcitx5 thay IBus": "Use Fcitx5 instead of IBus",
-    "Cài gói trước: sudo apt install viettelex-fcitx5": "Install the package first: sudo apt install viettelex-fcitx5",
+    "Cài gói trước: %s": "Install the package first: %s",
     "Fcitx5 tự chạy khi đăng nhập, app GTK nhận chữ thẳng từ Fcitx5. Đăng xuất/đăng nhập lại một lần.":
         "Fcitx5 starts at login and GTK apps get text straight from Fcitx5. Log out and back in once.",
     "Dùng Fcitx5": "Use Fcitx5",
@@ -499,8 +507,7 @@ EN = {
     "Các bước": "Steps",
     "1. Cài gói %s": "1. Install the %s package",
     "Đã cài.": "Installed.",
-    "sudo apt install %s (hoặc cài file .deb tải từ trang phát hành).":
-        "sudo apt install %s (or install the .deb from the releases page).",
+    "%s (hoặc cài gói tải từ trang phát hành).": "%s (or install the package from the releases page).",
     "2. Fcitx5 đang chạy": "2. Fcitx5 is running",
     "Đang chạy.": "Running.",
     "Khởi động Fcitx5. Nếu mỗi lần đăng nhập đều phải bật tay: chạy im-config -n fcitx5 rồi "

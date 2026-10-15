@@ -1,6 +1,6 @@
 # IBus engine: ibus-engine-viettelex + component XML.
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(IBUS REQUIRED IMPORTED_TARGET ibus-1.0>=1.5.26)
+pkg_check_modules(IBUS REQUIRED IMPORTED_TARGET ibus-1.0>=1.5.25)
 
 add_executable(ibus-engine-viettelex src/main.cpp src/engine.cpp)
 target_link_libraries(ibus-engine-viettelex PRIVATE PkgConfig::IBUS viettelex-common)

@@ -3,7 +3,7 @@
 // Thin GObject adapter over viettelex::Session (linux/common). One IBusEngine object per
 // input context. Preedit is sent in IBUS_ENGINE_PREEDIT_COMMIT mode, so ibus-daemon
 // commits the visible word itself on focus-out / reset — nothing typed is swallowed.
-// Builds against IBus 1.5.26 (Ubuntu 22.04) and newer; app identity (per-app Vi/En
+// Builds against IBus 1.5.25 (EL9; Ubuntu 22.04 has 1.5.26) and newer; app identity (per-app Vi/En
 // memory, [app_modes]) comes from focus_in_id (IBus 1.5.28+), otherwise "default". On
 // GNOME Wayland both are generic ("gnome-shell"/"default": one shared context for every
 // app), so the focused app is read from gnome-shell over the session bus instead
@@ -35,6 +35,11 @@
 #include <memory>
 #include <set>
 #include <string>
+
+// IBus 1.5.25 (EL9) predates IBUS_INPUT_HINT_PRIVATE (1.5.26); same bit as GTK_INPUT_HINT_PRIVATE.
+#if !IBUS_CHECK_VERSION(1, 5, 26)
+#define IBUS_INPUT_HINT_PRIVATE (1 << 11)
+#endif
 
 namespace vt = viettelex;
 

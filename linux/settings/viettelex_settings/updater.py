@@ -21,6 +21,10 @@ Hai đường cập nhật (quyết định bởi plan()):
   - "deb": cài từ .deb tải tay → app tải đúng bộ .deb (series + arch), kiểm SHA256,
     rồi helper root cài bằng apt-get install ./….deb.
 Helper chạy qua pkexec (polkit action org.viettelex.update).
+
+Gói RPM (Fedora/EL), Fedora Atomic (rpm-ostree) và Arch (pacman) không có helper: gói ghi
+/usr/share/viettelex-settings/install-method ("rpm" / "pacman") và app chỉ báo lệnh cập nhật
+của trình quản lý gói đó (install_method() / manual_update_hint()).
 """
 
 import hashlib
@@ -55,6 +59,9 @@ APT_SOURCE_FILES = ("/etc/apt/sources.list.d/viettelex.sources",
                     "/etc/apt/sources.list.d/viettelex.list")
 APT_REPO_HOST = "ptrinh.github.io/viettelex-apt"
 ALLOWED_DOWNLOAD_PREFIX = "https://github.com/ptrinh/viettelex/releases/download/"
+# Do gói RPM / Arch ghi (linux/packaging/rpm/viettelex.spec, aur/…/PKGBUILD); .deb không có.
+INSTALL_METHOD_FILE = "/usr/share/viettelex-settings/install-method"
+OSTREE_BOOTED = "/run/ostree-booted"
 
 # Mã thoát của helper (khớp linux/settings/viettelex-update).
 EXIT_OK = 0
@@ -167,6 +174,44 @@ def parse_dpkg_query(text):
         if len(parts) >= 3 and parts[2][1:2] == "i" and parts[0] in PACKAGES:
             out[parts[0]] = parts[1]
     return out
+
+
+# --- cài bằng gì ----------------------------------------------------------------------
+
+def install_method(read=None, exists=os.path.exists):
+    """'deb' (mặc định, cập nhật một chạm) | 'rpm' (dnf) | 'rpm-ostree' (Fedora Atomic:
+    Silverblue, Kinoite, Bazzite, Bluefin…) | 'pacman' (Arch)."""
+    m = ((read or _read)(INSTALL_METHOD_FILE) or "").strip()
+    if m == "rpm":
+        return "rpm-ostree" if exists(OSTREE_BOOTED) else "rpm"
+    if m == "pacman":
+        return "pacman"
+    return "deb"
+
+
+def manual_update_hint(method):
+    """Chữ báo cách cập nhật khi không cập nhật một chạm được; None với 'deb'."""
+    if method == "rpm":
+        return _("VietTelex được cài bằng dnf — cập nhật: sudo dnf upgrade --refresh 'viettelex*' "
+                 "(hoặc Phần mềm / Discover).")
+    if method == "rpm-ostree":
+        return _("Fedora Atomic: VietTelex cập nhật cùng hệ thống — rpm-ostree upgrade rồi khởi động "
+                 "lại (Bazzite/Bluefin/Aurora tự cập nhật).")
+    if method == "pacman":
+        return _("VietTelex được cài bằng pacman — cập nhật: sudo pacman -Syu.")
+    return None
+
+
+def install_cmd(pkg, method=None):
+    """Lệnh cài gói `pkg` theo trình quản lý gói của máy (hiện trong hướng dẫn bật bộ gõ)."""
+    method = method or install_method()
+    if method == "rpm":
+        return "sudo dnf install %s" % pkg
+    if method == "rpm-ostree":
+        return "sudo rpm-ostree install %s" % pkg
+    if method == "pacman":
+        return "sudo pacman -S viettelex"   # một gói Arch chứa cả Fcitx5 lẫn IBus
+    return "sudo apt install %s" % pkg
 
 
 # --- kế hoạch ---------------------------------------------------------------------------
@@ -282,6 +327,9 @@ def machine():
 def run_update(lin, progress=lambda _t: None, allowed_prefix=None, helper=None):
     """Cập nhật một chạm. Trả (ok, chữ hiển thị, nên mở trang tải thay thế?)."""
     helper = helper or HELPER
+    hint = manual_update_hint(install_method())
+    if hint:
+        return False, hint, True
     try:
         installed, arch, series = machine()
     except (OSError, subprocess.SubprocessError):

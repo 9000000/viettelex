@@ -153,7 +153,8 @@ class OtherAppTests(unittest.TestCase):
         self.assertEqual(compat.im_config_mode("run_im fcitx5\n"), "fcitx5")
 
     def test_imconfig_auto_both_frameworks(self):
-        fs = FakeFS({"/usr/share/fcitx5/addon/viettelex.conf": ""}, bins={"fcitx5", "ibus-daemon"})
+        fs = FakeFS({"/usr/share/fcitx5/addon/viettelex.conf": ""},
+                    bins={"fcitx5", "ibus-daemon", "im-config"})
         kde = {"XDG_SESSION_TYPE": "x11", "XDG_CURRENT_DESKTOP": "KDE"}
         it = next(i for i in compat.assess(fs.collect(kde)) if i["id"] == "imconfig_auto")
         self.assertEqual(it["fix"], "im-config -n fcitx5")
@@ -161,6 +162,12 @@ class OtherAppTests(unittest.TestCase):
         self.assertNotIn("imconfig_auto", ids(compat.assess(fs.collect(GNOME_X11))))
         # Đã chọn hẳn fcitx5.
         fs.files[HOME + "/.xinputrc"] = "run_im fcitx5\n"
+        self.assertNotIn("imconfig_auto", ids(compat.assess(fs.collect(kde))))
+
+    def test_imconfig_not_suggested_without_im_config(self):
+        # Fedora/EL/Arch: không có im-config ⇒ không gợi ý "im-config -n fcitx5".
+        fs = FakeFS({"/usr/share/fcitx5/addon/viettelex.conf": ""}, bins={"fcitx5", "ibus-daemon"})
+        kde = {"XDG_SESSION_TYPE": "x11", "XDG_CURRENT_DESKTOP": "KDE"}
         self.assertNotIn("imconfig_auto", ids(compat.assess(fs.collect(kde))))
 
     def test_imconfig_needs_both_and_addon(self):

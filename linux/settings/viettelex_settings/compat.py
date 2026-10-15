@@ -136,6 +136,8 @@ def collect(env=None, home=None, exists=os.path.exists, read=_read, which=shutil
         "ibus_installed": bool(which("ibus-daemon") or which("ibus")),
         "fcitx5_addon": exists("/usr/share/fcitx5/addon/viettelex.conf"),
         "xinputrc": read(os.path.join(home, ".xinputrc")),
+        # im-config chỉ có trên Debian/Ubuntu; Fedora/EL/Arch không có ⇒ không gợi ý lệnh đó.
+        "im_config": bool(which("im-config")),
         "qt5": qt5,
         "qt_im_module": env.get("QT_IM_MODULE", ""),
         "terminals": sorted(t for t in TERMINALS if which(t)) + (["code"] if "code" in apps else []),
@@ -243,7 +245,8 @@ def assess(snap):
                             "Fcitx5. Dùng IBus (viettelex-ibus), hoặc cài bản .deb/Flatpak của app."),
                     "fix": "sudo apt install viettelex-ibus && im-config -n ibus"})
 
-    if (not _is_gnome(desktop) and snap.get("fcitx5_installed") and snap.get("ibus_installed")
+    if (not _is_gnome(desktop) and snap.get("im_config") and snap.get("fcitx5_installed")
+            and snap.get("ibus_installed")
             and snap.get("fcitx5_addon") and im_config_mode(snap.get("xinputrc", "")) == "auto"):
         out.append({"id": "imconfig_auto", "level": "warn",
                     "title": _("im-config đang để tự động: IBus sẽ thắng Fcitx5"),
