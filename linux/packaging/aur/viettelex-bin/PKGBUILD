@@ -80,9 +80,10 @@ package() {
   sed -i 's#/usr/libexec/ibus-engine-viettelex#/usr/lib/ibus/ibus-engine-viettelex#' \
     usr/share/ibus/component/viettelex.xml
 
-  # One-click updater (apt/dpkg + polkit) does not apply to pacman: drop it. The settings
-  # app then says to update the way it was installed (pacman/AUR helper).
+  # One-click updater (apt/dpkg + polkit) does not apply to pacman: drop it; install-method
+  # tells the settings app to say "update with pacman -Syu" instead.
   rm -rf usr/libexec usr/share/polkit-1
+  echo pacman > usr/share/viettelex-settings/install-method
 
   # Debian-only metadata.
   rm -rf usr/share/lintian

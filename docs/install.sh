@@ -495,7 +495,8 @@ pacman_install() {
   need_sudo
   say "Thêm kho pacman [viettelex] + khoá ký (cần quyền quản trị)"
   srun pacman-key --add "$TMPD/viettelex.gpg"
-  srun pacman-key --lsign-key "$KEY_FPR"
+  # Máy chưa từng chạy pacman-key --init (vd. ảnh container) thì chưa có khoá chủ để lsign.
+  srun pacman-key --lsign-key "$KEY_FPR" || { srun pacman-key --init && srun pacman-key --lsign-key "$KEY_FPR"; }
   if grep -q '^\[viettelex\]' "$PACMAN_CONF" 2>/dev/null; then
     info "$PACMAN_CONF đã có [viettelex]"
   else
@@ -545,7 +546,10 @@ other_uninstall() {
         say "Không có gói VietTelex nào đang cài."
       fi ;;
     pacman)
-      for p in viettelex viettelex-bin; do pkg_installed "$p" && present="$present $p"; done
+      # pacman -Q khớp cả tên "provides" (viettelex provides viettelex-bin) ⇒ so đúng tên.
+      for p in viettelex viettelex-bin; do
+        [ "$(pacman -Qq "$p" 2>/dev/null)" = "$p" ] && present="$present $p"
+      done
       if [ -n "$present" ]; then
         say "Gỡ gói:$present"
         # shellcheck disable=SC2086

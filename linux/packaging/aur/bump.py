@@ -3,6 +3,12 @@
 
     linux/packaging/aur/bump.py [--stable docs/stable.json | --stable https://viettelex.com/stable.json]
                                 [--pkgrel N] [--check]
+    linux/packaging/aur/bump.py --local linux/dist/noble --out DIR [--pkgname viettelex]
+
+--local: biến thể cho kho pacman riêng / CI (linux/packaging/build-arch.sh): PKGBUILD trong DIR
+lấy .deb noble cục bộ (chép vào DIR, tên asset "~" hay "." đều được), sha256 tính từ chính
+file đó — không cần stable.json/GitHub Release (release chưa có lúc CI build). Mặc định đổi
+tên gói thành `viettelex` (provides/conflicts viettelex-bin) cho kho `[viettelex]`.
 
 - pkgver = linux.version; checksum lấy từ linux.sha256 (cùng số với SHA256SUMS của
   GitHub Release, tên asset "~" → "."), bộ .deb noble cho x86_64 (amd64) + aarch64 (arm64).
@@ -13,7 +19,10 @@
 `makepkg --printsrcinfo` trong container Arch.
 """
 import argparse
+import glob
+import hashlib
 import json
+import shutil
 import os
 import re
 import sys
@@ -115,12 +124,58 @@ def render_srcinfo(text):
     return "\n".join(lines) + "\n"
 
 
+def local_variant(debdir, out, pkgname):
+    """PKGBUILD + viettelex.install trong `out`, nguồn = .deb noble trong `debdir`."""
+    text = open(os.path.join(PKGDIR, "PKGBUILD"), encoding="utf-8").read()
+    ver = re.search(r'^VERSION = "([^"]+)"', open(os.path.join(
+        REPO, "linux", "settings", "viettelex_settings", "__init__.py"), encoding="utf-8").read(), re.M).group(1)
+    os.makedirs(out, exist_ok=True)
+
+    def take(pkg, darch):
+        hits = glob.glob(os.path.join(debdir, "%s_%s[~.]%s1_%s.deb" % (pkg, ver, SERIES, darch)))
+        if len(hits) != 1:
+            sys.exit("thiếu %s_%s~%s1_%s.deb trong %s" % (pkg, ver, SERIES, darch, debdir))
+        name = "%s_%s.%s1_%s.deb" % (pkg, ver, SERIES, darch)   # tên asset GitHub, như PKGBUILD AUR
+        shutil.copyfile(hits[0], os.path.join(out, name))
+        return name, hashlib.sha256(open(hits[0], "rb").read()).hexdigest()
+
+    common = [take("viettelex-settings", "all")]
+    per = {carch: [take(p, darch) for p in ARCH_PKGS] for carch, darch in ARCHES}
+    text = re.sub(r"(?m)^pkgver=.*$", "pkgver=%s" % ver, text)
+    text = re.sub(r"(?m)^pkgrel=.*$", "pkgrel=1", text)
+    text = re.sub(r"(?ms)^source=\(.*?\)$", "source=" + bash_array(n for n, _ in common), text)
+    text = re.sub(r"(?m)^sha256sums=\(.*\)$", "sha256sums=" + bash_array(h for _, h in common), text)
+    for carch, files in per.items():
+        text = re.sub(r"(?ms)^source_%s=\(.*?\)$" % carch,
+                      "source_%s=" % carch + bash_array(n for n, _ in files), text)
+        text = re.sub(r"(?m)^sha256sums_%s=\(.*\)$" % carch,
+                      "sha256sums_%s=" % carch + bash_array(h for _, h in files), text)
+    if pkgname != "viettelex-bin":
+        text = re.sub(r"(?m)^pkgname=.*$", "pkgname=%s" % pkgname, text)
+        text = re.sub(r"(?m)^provides=.*$", "provides=('viettelex-bin')", text)
+        text = re.sub(r"(?m)^conflicts=.*$", "conflicts=('viettelex-bin')", text)
+    text = text.replace("# Repackages the official Ubuntu 24.04 (noble) .deb files from GitHub Releases.",
+                        "# Repackages the official Ubuntu 24.04 (noble) .deb files (local copies, CI/pacman repo).")
+    with open(os.path.join(out, "PKGBUILD"), "w", encoding="utf-8") as f:
+        f.write(text)
+    shutil.copyfile(os.path.join(PKGDIR, "viettelex.install"), os.path.join(out, "viettelex.install"))
+    print("%s %s-1 (local .deb) → %s" % (pkgname, ver, out))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stable", default=os.path.join(REPO, "docs", "stable.json"))
     ap.add_argument("--pkgrel", type=int, default=None)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--local", default=None, help="thư mục .deb noble (linux/dist/noble)")
+    ap.add_argument("--out", default=None, help="với --local: nơi ghi PKGBUILD biến thể")
+    ap.add_argument("--pkgname", default="viettelex")
     a = ap.parse_args()
+    if a.local:
+        if not a.out:
+            sys.exit("--local cần --out")
+        local_variant(a.local, a.out, a.pkgname)
+        return
 
     lin = load_stable(a.stable).get("linux")
     if not isinstance(lin, dict) or SERIES not in (lin.get("series") or []):
