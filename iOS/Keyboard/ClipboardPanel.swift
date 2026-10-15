@@ -105,7 +105,8 @@ final class ClipboardPanel: UIView {
         body.titleLabel?.numberOfLines = 2
         body.titleLabel?.lineBreakMode = .byTruncatingTail
         body.titleLabel?.font = .systemFont(ofSize: 15)
-        let shown = item.text.replacingOccurrences(of: "\n", with: " ⏎ ")
+        // Hiện tối đa 2 dòng ⇒ chỉ cần phần đầu (mục dài tới ClipboardHistory.maxTextLength).
+        let shown = String(item.text.prefix(300)).replacingOccurrences(of: "\n", with: " ⏎ ")
         body.setTitle(item.sensitive ? String(repeating: "•", count: min(item.text.count, 12)) : shown, for: .normal)
         body.setTitleColor(ink, for: .normal)
         body.accessibilityLabel = item.sensitive ? L("Mục ẩn, chạm để dán") : L("Dán: %@", item.text.prefix(80))

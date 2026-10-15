@@ -189,7 +189,30 @@ final class KeyboardViewController: UIInputViewController {
     func debugHandle(_ key: KeyboardView.Key) { handle(key) }
     /// Test: chạm một ô thanh gợi ý với payload này.
     func debugAcceptSuggestion(_ item: String) { acceptSuggestion(item) }
+    /// Test: clipboard giả (thay UIPasteboard.general) + Toàn quyền giả.
+    var debugPasteboard: PasteboardSource?
+    var debugFullAccess: Bool?
+    override var hasFullAccess: Bool { debugFullAccess ?? super.hasFullAccess }
+    /// Test: nội dung lịch sử clipboard hiện có.
+    var debugClipTexts: [String] { clip.items(now: Date().timeIntervalSince1970).map(\.text) }
+    func debugToggleClipboardPanel() { toggleClipboardPanel() }
+    var debugClipboardPanelOpen: Bool { clipPanel != nil }
+    /// Test: tính lại thanh gợi ý (đường thật của mỗi phím).
+    func debugUpdateSuggestions() { updateSuggestions() }
+    func debugViewDidAppear() { viewDidAppear(false) }
+    var debugClipboardButtonVisible: Bool { keyboard.debugClipboardButtonVisible }
     #endif
+
+    /// Clipboard hệ thống (test thay bằng clipboard giả).
+    fileprivate var pasteboard: PasteboardSource {
+        #if DEBUG
+        if let p = debugPasteboard { return p }
+        #endif
+        return UIPasteboard.general
+    }
+    /// Toàn quyền đã áp ở viewWillAppear (nút 📋, rung) — viewDidAppear đối chiếu lại.
+    private var appliedFullAccess = false
+    private var hapticSetting = false
 
     #if DEBUG
     // Đo chi phí hiện bàn phím (Console filter "VTKB perf"): thân viewWillAppear,
@@ -234,7 +257,8 @@ final class KeyboardViewController: UIInputViewController {
         learnWordsSetting = settings.learnWords
         learnEnabled = settings.learnWords && !clip.incognito   // refreshFieldTraits tinh chỉnh theo ô
         suggestAnywaySetting = settings.suggestInNoSuggestFields
-        keyboard.setClipboardButton(visible: clip.historyEnabled && hasFullAccess)
+        appliedFullAccess = hasFullAccess
+        keyboard.setClipboardButton(visible: clip.historyEnabled && appliedFullAccess)
         filterSensitive = settings.filterSensitive
         showSuggestionsSetting = settings.showSuggestions
         autoCapitalizeSetting = settings.autoCapitalize
@@ -278,7 +302,8 @@ final class KeyboardViewController: UIInputViewController {
         logHostGeometry("willAppear")
         // Rung phím: cần cả toggle trong app LẪN Toàn quyền Truy cập (iOS
         // vô hiệu haptics trong extension không có Full Access).
-        KeyboardView.hapticsEnabled = settings.hapticFeedback && hasFullAccess
+        hapticSetting = settings.hapticFeedback
+        KeyboardView.hapticsEnabled = settings.hapticFeedback && appliedFullAccess
         KeyHaptics.log = { TouchLog.write($0) }
         KeyHaptics.shared.setStrength(settings.hapticStrength)
         TouchLog.write("haptics setting=\(settings.hapticFeedback ? 1 : 0) strength=\(settings.hapticStrength) fullAccess=\(hasFullAccess ? 1 : 0)")
@@ -1156,6 +1181,7 @@ final class KeyboardViewController: UIInputViewController {
             appearance: vtSafe(.default) { self.textDocumentProxy.keyboardAppearance ?? .default },
             style: traitCollection.userInterfaceStyle))
         keyboard?.setNeedsGlobe(needsInputModeSwitchKey)
+        refreshFullAccessIfChanged()
         pushSwipeLayout(prepare: true)       // frame phím đã thật → dựng template ở nền
         // Clipboard có thể vừa đổi trong lúc bàn phím ẩn: tính lại bar khi đã hiện
         // hẳn (cache 2s của pasteOffer bỏ qua để đọc trạng thái mới).
@@ -1701,15 +1727,26 @@ final class KeyboardViewController: UIInputViewController {
     private func pasteOffer() -> Bool {
         guard pasteButtonSetting || clip.historyEnabled else { return false }
         guard hasFullAccess else { TouchLog.write("paste: no Full Access"); return false }
-        // Chỉ ở "đầu chỗ gõ": ô trống, hoặc ngay trước con trỏ là khoảng trắng/xuống dòng.
-        // Bàn phím vừa hiện lại sau "Đang viết" thì engine rỗng nhưng vẫn là gõ dở chữ
+        let now = Date()
+        // Đọc changeCount (≤ 1 lần / 2 s) TRƯỚC điều kiện "đầu chỗ gõ": trước đây chỉ đọc khi
+        // con trỏ đứng sau khoảng trắng ⇒ copy xong mà con trỏ ở sau chữ (thường gặp: chọn
+        // chữ trong chính ô rồi Sao chép) thì lịch sử clipboard không bao giờ ghi (15/10/2026).
+        if now.timeIntervalSince(pasteCheckedAt) >= 2 {
+            pasteCheckedAt = now
+            refreshPasteState(now: now)
+        }
+        // Chỉ MỜI dán ở "đầu chỗ gõ": ô trống, hoặc ngay trước con trỏ là khoảng trắng/xuống
+        // dòng. Bàn phím vừa hiện lại sau "Đang viết" thì engine rỗng nhưng vẫn là gõ dở chữ
         // (user 25/09/2026). documentContextBeforeInput là bản host đẩy sẵn — đọc rẻ.
         if let last = textDocumentProxy.documentContextBeforeInput?.last,
            !last.isWhitespace { return false }
-        let now = Date()
-        if now.timeIntervalSince(pasteCheckedAt) < 2 { return pasteCached && pasteOnce.canOffer(pasteSeenChange) }
-        pasteCheckedAt = now
-        let pb = UIPasteboard.general
+        return pasteCached && pasteOnce.canOffer(pasteSeenChange)
+    }
+
+    /// Đọc changeCount/hasStrings (không bật hỏi quyền dán), tự ghi lịch sử khi có mục mới,
+    /// tính lại `pasteCached`.
+    private func refreshPasteState(now: Date) {
+        let pb = pasteboard
         let cc = pb.changeCount
         let has = pb.hasStrings
         if cc != pasteSeenChange {
@@ -1727,14 +1764,26 @@ final class KeyboardViewController: UIInputViewController {
                                   cc, pasteUsedChange, has ? 1 : 0,
                                   now.timeIntervalSince(pasteSeenAt), pasteCached ? 1 : 0))
         }
-        return pasteCached
+    }
+
+    /// `hasFullAccess` có thể chưa đúng ở viewWillAppear (extension chưa nối host xong) ⇒
+    /// nút 📋 / rung bị tắt cả lần hiện đó (tester: "lắm lúc không hiện…"). Đối chiếu lại
+    /// khi đã hiện hẳn; chỉ làm gì khi khác.
+    private func refreshFullAccessIfChanged() {
+        let fa = hasFullAccess
+        guard fa != appliedFullAccess else { return }
+        TouchLog.write("fullAccess willAppear=\(appliedFullAccess ? 1 : 0) didAppear=\(fa ? 1 : 0)")
+        appliedFullAccess = fa
+        keyboard?.setClipboardButton(visible: clip.historyEnabled && fa)
+        KeyboardView.hapticsEnabled = hapticSetting && fa
+        if fa { reportStatusToApp() }
     }
 
     /// Dán chữ trong clipboard vào ô — nút Dán trên thanh gợi ý VÀ vuốt V lên (KeyCommand).
     /// Trả chữ đã chèn (nil = clipboard không có chữ). Gọi trong applyingEdit.
     @discardableResult
     fileprivate func pasteFromClipboard() -> String? {
-        let pb = UIPasteboard.general
+        let pb = pasteboard
         // Không có API hỏi "đã cho phép dán chưa": khi iOS hiện "Allow Paste?",
         // lệnh đọc BỊ CHẶN tới lúc user chọn (≥ vài trăm ms); đã Cho phép thì gần
         // như tức thì. Ghi kết quả vào App Group để app ẩn hướng dẫn (user 25/09/2026).
@@ -1766,7 +1815,7 @@ final class KeyboardViewController: UIInputViewController {
         addTonesUndo = nil
         swipeTyped = nil; swipeTypedUndo = nil
         if item == KeyboardView.pasteImageToken {       // chỉ hướng dẫn → ẩn thẻ
-            pasteUsedChange = UIPasteboard.general.changeCount
+            pasteUsedChange = pasteboard.changeCount
             pasteOnce.used(pasteUsedChange)
             pasteCached = false
             KeyboardView.clickModifier()
@@ -1952,18 +2001,20 @@ extension KeyboardViewController {
     }
 }
 
+extension UIPasteboard: PasteboardSource {}
+
 // MARK: Lịch sử clipboard — glue ClipboardFeature ↔ UIPasteboard ↔ panel
 extension KeyboardViewController {
     /// Trình quản lý mật khẩu đánh dấu clipboard "concealed" (quy ước nspasteboard.org,
     /// 1Password) — đọc `types` không bật hỏi quyền dán.
-    fileprivate static func isConcealed(_ pb: UIPasteboard) -> Bool {
+    fileprivate static func isConcealed(_ pb: PasteboardSource) -> Bool {
         pb.types.contains { $0 == "org.nspasteboard.ConcealedType" || $0.hasPrefix("com.agilebits") }
     }
 
     /// changeCount mới lúc bàn phím đang hiện: tự đọc + ghi CHỈ khi user đã chọn
     /// "Cho phép dán" (pasteNoPrompt) — nếu iOS vẫn hỏi (đọc chậm) thì ghi nhận lại
     /// pasteNoPrompt=false để lần sau không tự đọc nữa.
-    fileprivate func autoCaptureClipboard(_ pb: UIPasteboard, change: Int) {
+    fileprivate func autoCaptureClipboard(_ pb: PasteboardSource, change: Int) {
         let group = UserDefaultsProvider.shared
         let secure = fieldTraits?.secure == true
         let concealed = clip.historyEnabled ? Self.isConcealed(pb) : false
@@ -1997,6 +2048,7 @@ extension KeyboardViewController {
 
     fileprivate func toggleClipboardPanel() {
         if clipPanel != nil { closeClipboardPanel(); return }
+        captureClipboardForPanel()
         let p = ClipboardPanel()
         p.onPaste = { [weak self] t in self?.insertClip(t, chip: false); self?.closeClipboardPanel() }
         p.onTogglePin = { [weak self] t in
@@ -2014,6 +2066,27 @@ extension KeyboardViewController {
         clipPanel = p
         reloadClipboardPanel()
         keyboard.setNeedsLayout()
+    }
+
+    /// Mở panel = người dùng CHỦ ĐỘNG xem clipboard ⇒ đọc mục hiện tại nếu chưa ghi (kể cả
+    /// khi iOS còn hỏi "Cho phép dán?" — như bấm Dán). Trước đây panel chỉ hiện những gì
+    /// đã tự ghi được, mà tự ghi cần "Cho phép" + con trỏ sau khoảng trắng ⇒ mục vừa copy
+    /// hay vắng (tester Plus 15/10/2026).
+    private func captureClipboardForPanel() {
+        guard clip.historyEnabled, hasFullAccess else { return }
+        let pb = pasteboard
+        let cc = pb.changeCount
+        guard clip.known?.change != cc, pb.hasStrings else { return }
+        let secure = fieldTraits?.secure == true
+        let concealed = Self.isConcealed(pb)
+        guard clip.canRecord(secureField: secure, concealed: concealed) else { return }
+        let t0 = CACurrentMediaTime()
+        let str = pb.string
+        let noPrompt = str != nil && CACurrentMediaTime() - t0 < 0.25
+        UserDefaults(suiteName: "group.com.viettelex")?.set(noPrompt, forKey: "pasteNoPrompt")
+        guard let s = str else { return }
+        clip.captured(s, change: cc, now: Date().timeIntervalSince1970, secureField: secure, concealed: concealed)
+        pasteSeenChange = cc; pasteSeenAt = Date()
     }
 
     fileprivate func reloadClipboardPanel(notice: String? = nil) {
@@ -2609,10 +2682,15 @@ extension KeyboardViewController {
         wordSwipeRestore = nil
         textToolUndo = nil
         let selected = textDocumentProxy.selectedText
-        guard let src = TextTools.source(selected: selected, before: textDocumentProxy.documentContextBeforeInput) else {
+        let before = textDocumentProxy.documentContextBeforeInput
+        guard let src = TextTools.source(selected: selected, before: before) else {
             showTranslateNotice(L("Chọn hoặc gõ chữ cần dịch"))
             return
         }
+        // Không chọn ⇒ chỉ đoạn đang gõ (iOS không đưa bàn phím cả văn bản): ô còn chữ khác
+        // thì nói rõ thay vì lặng lẽ dịch một phần (tester Plus 15/10/2026).
+        let partial = TranslateText.coversOnlyPart(isSelection: src.isSelection, source: src.text, before: before,
+                                                   after: src.isSelection ? nil : textDocumentProxy.documentContextAfterInput)
         let target = TranslatePrefs.target(UserDefaultsProvider.shared)
         showTranslateNotice(L("Đang dịch…"))
         translateTask = Task { @MainActor [weak self] in
@@ -2624,11 +2702,12 @@ extension KeyboardViewController {
                 result = .failure(.unknownLanguage)
             }
             guard !Task.isCancelled, let self else { return }
-            self.finishTranslate(result.map { TranslateText.rewrap(original: src.text, translated: $0) }, src: src)
+            self.finishTranslate(result.map { TranslateText.rewrap(original: src.text, translated: $0) }, src: src,
+                                 partial: partial)
         }
     }
 
-    private func finishTranslate(_ r: Result<String, TranslateFailure>, src: TextTools.Source) {
+    private func finishTranslate(_ r: Result<String, TranslateFailure>, src: TextTools.Source, partial: Bool = false) {
         translateTask = nil
         translateNotice = nil
         switch r {
@@ -2639,7 +2718,10 @@ extension KeyboardViewController {
             if #available(iOS 16.0, *) { selected = textDocumentProxy.selectedText }
             switch TextToolRunner.replace(src, with: out, proxy: Proxy(p: textDocumentProxy),
                                           strict: true, currentSelection: selected) {
-            case .applied(let u): textToolUndo = u
+            case .applied(let u):
+                textToolUndo = u
+                // ⌫ ngay sau vẫn hoàn tác (textToolUndo); chip nói rõ chỉ dịch một đoạn.
+                if partial { showTranslateNotice(Self.translatePartialNotice, refresh: false) }
             case .failsafe:
                 TouchLog.write("failsafe: translate context changed while waiting → skip")
                 showTranslateNotice(L("Chữ đã đổi — bấm Dịch lại"), refresh: false)
@@ -2658,6 +2740,8 @@ extension KeyboardViewController {
         }
         updateAutoShift(); updateSuggestions()
     }
+
+    static var translatePartialNotice: String { L("Chỉ dịch đoạn đang gõ — chọn hết văn bản để dịch toàn bộ") }
 
     private func showTranslateNotice(_ text: String, opensApp: Bool = false, refresh: Bool = true) {
         translateNotice = (text, opensApp)

@@ -125,6 +125,15 @@ final class KeyboardBenchTests: XCTestCase {
     static let corpus = "xin chaof moij nguowif hoom nay tooi ddi lamf vieecj owr coong ty mowis "
         + "vaf gawpj nhieeuf ddoongf nghieepj raats vui veer chungs tooi cungf nhau baanf veef "
         + "keees hoachj sanr phaamr cho nawm sau "
+    /// Nặng phím dấu (s/f/r/x/j + đổi dấu giữa chừng) — VT_BENCH_CORPUS=tones.
+    static let toneCorpus = "vieejt tooi ddi hocj cas caf car cax caj vieejt nam tieengs vieetj "
+        + "tooi ddi hocj thaatj chawm chir ddaayf nguowif ddepj quas hoir nhuwngx caau hoir "
+        + "casf carx vieejts hoocj muoons ddeens tuowngr nhieeuf "
+    static var activeCorpus: String {
+        ProcessInfo.processInfo.environment["VT_BENCH_CORPUS"] == "tones" ? toneCorpus : corpus
+    }
+    /// Phím dấu Telex (đo riêng p50/p95 chỉ những phím này).
+    static let toneKeys: Set<Character> = ["s", "f", "r", "x", "j"]
 
     @MainActor final class Rig {
         let win = UIWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
@@ -196,17 +205,18 @@ final class KeyboardBenchTests: XCTestCase {
         let memOpen = Self.footprintMB()
 
         // Làm nóng (nạp lười) rồi đo.
-        let keys = Array(Self.corpus)
+        let keys = Array(Self.activeCorpus)
         for (i, c) in keys.enumerated() { _ = rig.key(c, index: i, drain: 0.01) }
         Self.spin(1)
         rig.proxy.contextReads = 0; rig.proxy.inserts = 0; rig.proxy.deletes = 0
-        var sync: [Double] = [], mainCPU: [Double] = []
+        var sync: [Double] = [], mainCPU: [Double] = [], toneSync: [Double] = [], toneMain: [Double] = []
         let p0 = Self.processCPU()
         var n = 0
         for _ in 0..<2 {
             for (i, c) in keys.enumerated() {
                 let r = rig.key(c, index: i, drain: drain)
                 sync.append(r.sync); mainCPU.append(r.mainCPU); n += 1
+                if Self.toneKeys.contains(c), i % 25 != 0 || i == 0 { toneSync.append(r.sync); toneMain.append(r.mainCPU) }
             }
         }
         let cpuPer100 = (Self.processCPU() - p0) * 1000 / Double(n) * 100
@@ -230,6 +240,9 @@ final class KeyboardBenchTests: XCTestCase {
             Double(rig.proxy.contextReads) / Double(n), Double(rig.proxy.inserts) / Double(n),
             Double(rig.proxy.deletes) / Double(n))
         print(line)
+        print(String(format: "BENCH tone_keys=%d tone_sync_p50=%.3f tone_sync_p95=%.3f tone_main_p50=%.3f tone_main_p95=%.3f",
+                     toneSync.count, Self.pct(toneSync, 0.5), Self.pct(toneSync, 0.95),
+                     Self.pct(toneMain, 0.5), Self.pct(toneMain, 0.95)))
         for (k, v) in rig.proxy.callers.sorted(by: { $0.value > $1.value }).prefix(8) { print("BENCH caller \(v) \(k)") }
         XCTContext.runActivity(named: line) { _ in }
         rig.close()

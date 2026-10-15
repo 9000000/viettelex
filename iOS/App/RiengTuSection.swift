@@ -19,13 +19,21 @@ struct RiengTuSection: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
         } header: { Text("Clipboard") } footer: {
-            Text(L("Tắt Lịch sử clipboard sẽ xoá toàn bộ mục đã lưu ở lần mở bàn phím kế tiếp."))
+            VStack(alignment: .leading, spacing: 6) {
+                if clipboardHistory { Text(Self.iosLimitNote) }
+                Text(L("Tắt Lịch sử clipboard sẽ xoá toàn bộ mục đã lưu ở lần mở bàn phím kế tiếp."))
+            }
         }
         Section {
             toggle(L("Chế độ ẩn danh"),
                    L("Bàn phím không học từ bạn gõ và không lưu clipboard."),
                    isOn: $incognitoMode)
         } header: { Text(L("Riêng tư")) }
+    }
+
+    /// Giới hạn iOS (bàn phím chỉ đọc clipboard khi đang hiện) — nói rõ để không tưởng là lỗi.
+    static var iosLimitNote: String {
+        L("Giới hạn của iOS: lúc bàn phím ẩn, bàn phím không thấy bạn copy gì — copy nhiều lần trong lúc đó chỉ ghi được mục cuối cùng, khi bàn phím hiện lại. Mở nút clipboard sẽ đọc ngay mục vừa copy. Mục dài quá 10.000 ký tự không được lưu.")
     }
 
     private func toggle(_ title: String, _ caption: String, isOn: Binding<Bool>) -> some View {

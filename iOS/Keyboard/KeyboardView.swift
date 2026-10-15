@@ -1112,6 +1112,17 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     func debugTapLeftZone() { burgerZone.sendActions(for: .touchUpInside) }
     var debugLeftZoneSymbol: String? { burgerZone.accessibilityLabel }
     var debugInTemplates: Bool { plane == .templates }
+    /// Test hook: chạm chip thứ `index` của lưới mẫu câu / công cụ (đúng delegate của lưới).
+    @discardableResult
+    func debugSelectTemplateChip(_ index: Int) -> Bool {
+        guard let chips = rowsContainer.arrangedSubviews.lazy.compactMap({ $0 as? TemplateChipsView }).first
+        else { return false }
+        return chips.debugSelect(index)
+    }
+    /// Test hook: nhãn các chip đặc biệt đầu lưới (⚒️ Công cụ / danh sách công cụ).
+    var debugTemplateExtras: [String] {
+        rowsContainer.arrangedSubviews.lazy.compactMap { $0 as? TemplateChipsView }.first?.debugExtras ?? []
+    }
     #endif
     private var templatesEnabled = true
     private var templatesActive: Bool { plane == .templates }
@@ -1321,6 +1332,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         addSubview(b)
         return b
     }()
+    #if DEBUG
+    var debugClipboardButtonVisible: Bool { clipboardButtonVisible }
+    #endif
     func setClipboardButton(visible: Bool) {
         guard visible != clipboardButtonVisible else { return }
         clipboardButtonVisible = visible
@@ -2064,6 +2078,16 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             }
             return cell
         }
+
+        #if DEBUG
+        var debugExtras: [String] { extras.map(\.display) }
+        func debugSelect(_ index: Int) -> Bool {
+            guard let cv = subviews.lazy.compactMap({ $0 as? UICollectionView }).first,
+                  index < collectionView(cv, numberOfItemsInSection: 0) else { return false }
+            collectionView(cv, didSelectItemAt: IndexPath(item: index, section: 0))
+            return true
+        }
+        #endif
 
         func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
             let i = ip.item - extras.count

@@ -324,6 +324,7 @@ enum L10n {
         "Nút clipboard trên thanh gợi ý mở 20 mục vừa copy; ghim để giữ lâu. Mục không ghim tự xoá sau 1 giờ (mật khẩu/OTP: 2 phút). Chỉ lưu trên máy. Plus: vừa copy STK/SĐT/OTP → chip “Dán …” hiện trên thanh gợi ý.": "The clipboard button on the suggestion bar opens your last 20 copies; pin items to keep them. Unpinned items are deleted after 1 hour (passwords/OTP: 2 minutes). Stored on device only. Plus: copy an account/phone number or OTP → a “Paste …” chip appears on the suggestion bar.",
         "iOS chỉ cho bàn phím đọc clipboard khi đang hiện và có Toàn quyền. Để tự ghi mục mới mà không bị hỏi: Cài đặt → VietTelex → Dán từ ứng dụng khác → Cho phép. Bỏ qua ô mật khẩu.": "iOS only lets the keyboard read the clipboard while it’s showing and has Full Access. To record new items without being asked: Settings → VietTelex → Paste from Other Apps → Allow. Password fields are skipped.",
         "Tắt Lịch sử clipboard sẽ xoá toàn bộ mục đã lưu ở lần mở bàn phím kế tiếp.": "Turning off Clipboard history deletes all saved items the next time the keyboard opens.",
+        "Giới hạn của iOS: lúc bàn phím ẩn, bàn phím không thấy bạn copy gì — copy nhiều lần trong lúc đó chỉ ghi được mục cuối cùng, khi bàn phím hiện lại. Mở nút clipboard sẽ đọc ngay mục vừa copy. Mục dài quá 10.000 ký tự không được lưu.": "iOS limit: while the keyboard is hidden it can’t see what you copy — several copies made in that time are recorded as just the last one, when the keyboard shows again. Opening the clipboard button reads what you just copied right away. Items longer than 10,000 characters aren’t saved.",
         "Bàn phím không học từ bạn gõ và không lưu clipboard.": "The keyboard doesn’t learn from what you type and doesn’t save the clipboard.",
         "Riêng tư": "Privacy",
 
@@ -556,6 +557,7 @@ enum L10n {
         // Dịch trên máy (Plus, 13/10/2026)
         "Dịch ↔ %@": "Translate ↔ %@",
         "Chọn hoặc gõ chữ cần dịch": "Select or type text to translate",
+        "Chỉ dịch đoạn đang gõ — chọn hết văn bản để dịch toàn bộ": "Only the current paragraph was translated — select all the text to translate everything",
         "Đang dịch…": "Translating…",
         "Chữ đã đổi — bấm Dịch lại": "Text changed — tap Translate again",
         "Mở app VietTelex để tải gói dịch": "Open VietTelex to download the language pack",

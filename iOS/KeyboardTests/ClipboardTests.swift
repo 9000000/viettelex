@@ -132,8 +132,14 @@ final class ClipboardHistoryTests: XCTestCase {
     func testRejectsEmptyAndHuge() {
         let h = ClipboardHistory(fileURL: nil)
         XCTAssertFalse(h.add("   \n", now: 0))
-        XCTAssertFalse(h.add(String(repeating: "x", count: 4001), now: 0))
+        XCTAssertFalse(h.add(String(repeating: "x", count: ClipboardHistory.maxTextLength + 1), now: 0))
         XCTAssertTrue(h.raw.isEmpty)
+        // Văn bản nhiều đoạn cỡ vài nghìn ký tự (trước: > 4000 bị bỏ lặng lẽ) phải được lưu.
+        let long = Array(repeating: String(repeating: "Đoạn văn khá dài. ", count: 30), count: 12)
+            .joined(separator: "\n\n")
+        XCTAssertGreaterThan(long.count, 4000)
+        XCTAssertTrue(h.add(long, now: 0))
+        XCTAssertEqual(h.raw.first?.text, long)
     }
 
     func testClearKeepsPinned() {

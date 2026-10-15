@@ -49,7 +49,9 @@ không nạp dữ liệu, không đọc context, không lên lịch việc mỗi
 Đo: `KeyboardBenchTests` (bộ chậm; `TEST_RUNNER_VT_BENCH_CONFIG=B|C|D`, `-O`) chạy controller
 thật + proxy giả; process extension thật đo bằng driver XCUITest + `footprint`. Simulator
 iPhone 17, máy có tải song song ⇒ lấy trung vị 4 lượt. A = 1.1.2 (36d2b6b), B = mặc định,
-C = mọi tính năng phụ tắt, D = bật hết.
+C = mọi tính năng phụ tắt, D = bật hết. `TEST_RUNNER_VT_BENCH_CORPUS=tones` = chuỗi nặng phím dấu
+(s/f/r/x/j, đổi dấu), in thêm dòng `BENCH tone_keys=… tone_sync_p50=…` chỉ tính phím dấu.
+Ngân sách nhanh (bộ mặc định): `PlusFeedback1015Tests.testToneKeyHotPathBudget`.
 
 | | A | B | C | D |
 |---|---|---|---|---|

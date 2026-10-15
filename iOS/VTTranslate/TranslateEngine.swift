@@ -25,6 +25,10 @@ enum TranslateEngineCode {
 }
 
 enum TranslateEngine {
+    /// Ngăn các mục của MỘT lô (văn bản nhiều dòng — Translate.swift `TranslateText.linePlan`
+    /// tách dòng, ghép bằng ký tự này). Phải khớp `TranslateText.batchSeparator`.
+    static let batchSeparator: Character = "\u{1E}"
+
     /// Dịch một lần. Kiểm tra gói đã cài TRƯỚC (LanguageAvailability, không tạo session);
     /// session sống trong hàm này rồi được nhả. Trả (mã, bản dịch khi ok / tên kiểu lỗi khi failed).
     static func run(_ text: String, source: String, target: String) async -> (code: Int32, text: String?) {
@@ -40,8 +44,20 @@ enum TranslateEngine {
         }
         let session = TranslationSession(installedSource: src, target: dst)
         do {
-            let r = try await session.translate(text)
-            return (TranslateEngineCode.ok, r.targetText)
+            let parts = text.split(separator: batchSeparator, omittingEmptySubsequences: false)
+            guard parts.count > 1 else {
+                let r = try await session.translate(text)
+                return (TranslateEngineCode.ok, r.targetText)
+            }
+            // Lô: mỗi dòng một yêu cầu, cùng session; trả về khớp theo clientIdentifier.
+            let reqs = parts.enumerated().map {
+                TranslationSession.Request(sourceText: String($0.element), clientIdentifier: String($0.offset))
+            }
+            var out = parts.map(String.init)
+            for r in try await session.translations(from: reqs) {
+                if let id = r.clientIdentifier, let i = Int(id), out.indices.contains(i) { out[i] = r.targetText }
+            }
+            return (TranslateEngineCode.ok, out.joined(separator: String(batchSeparator)))
         } catch {
             switch error {
             case TranslationError.notInstalled: return (TranslateEngineCode.notInstalled, nil)

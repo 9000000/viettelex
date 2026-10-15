@@ -127,6 +127,94 @@ enum TranslateText {
         let t = splitWhitespace(translated)
         return o.lead + t.core + o.trail
     }
+
+    // MARK: nhiều đoạn (bug tester Plus 15/10/2026: "không dịch được cả đoạn dài có ngắt dòng")
+    // Gửi cả khối nhiều dòng thành MỘT chuỗi cho Apple Translation thì dấu xuống dòng không
+    // được giữ (đoạn bị dồn/mất). Dịch TỪNG DÒNG trong một session (lô), ráp lại đúng ký tự
+    // xuống dòng gốc; dòng trống / dòng không có chữ cái giữ nguyên.
+
+    /// Ngăn giữa các mục của một lô qua C ABI `vt_translate` (khớp TranslateEngine.batchSeparator).
+    static let batchSeparator: Character = "\u{1E}"
+
+    /// Tách thành các dòng + chuỗi xuống dòng giữa chúng (`breaks.count == lines.count - 1`).
+    /// Mỗi ký tự xuống dòng ("\n", "\r\n" là MỘT Character, U+2028…) là một ranh giới, nên
+    /// dòng trống được giữ: "a\n\nb" ⇒ lines ["a", "", "b"], breaks ["\n", "\n"].
+    static func splitLines(_ s: String) -> (lines: [String], breaks: [String]) {
+        var lines: [String] = [], breaks: [String] = []
+        var cur = ""
+        for c in s {
+            if c.isNewline {
+                lines.append(cur); cur = ""
+                breaks.append(String(c))
+            } else {
+                cur.append(c)
+            }
+        }
+        lines.append(cur)
+        return (lines, breaks)
+    }
+
+    static func joinLines(_ lines: [String], breaks: [String]) -> String {
+        var out = ""
+        for (i, l) in lines.enumerated() {
+            out += l
+            if i < breaks.count { out += breaks[i] }
+        }
+        return out
+    }
+
+    /// Có chữ cái để dịch không.
+    static func hasLetters(_ s: String) -> Bool {
+        s.unicodeScalars.contains { $0.properties.isAlphabetic }
+    }
+
+    /// Kế hoạch dịch nhiều dòng: chỉ số các dòng cần dịch + lõi (bỏ khoảng trắng hai đầu) của chúng.
+    static func linePlan(_ s: String) -> (lines: [String], breaks: [String], indices: [Int], cores: [String]) {
+        let (lines, breaks) = splitLines(s)
+        var idx: [Int] = [], cores: [String] = []
+        for (i, l) in lines.enumerated() where hasLetters(l) {
+            idx.append(i)
+            cores.append(String(splitWhitespace(l).core.map { $0 == batchSeparator ? " " : $0 }))
+        }
+        return (lines, breaks, idx, cores)
+    }
+
+    /// Ráp bản dịch từng dòng (`translated[k]` ứng với `indices[k]`) — nil nếu số mục lệch.
+    static func assemble(lines: [String], breaks: [String], indices: [Int], translated: [String]) -> String? {
+        guard translated.count == indices.count else { return nil }
+        var out = lines
+        for (k, i) in indices.enumerated() { out[i] = rewrap(original: lines[i], translated: translated[k]) }
+        return joinLines(out, breaks: breaks)
+    }
+
+    /// Dịch văn bản (có thể nhiều dòng) bằng `one` — một lần gọi duy nhất: một dòng ⇒ gửi
+    /// nguyên; nhiều dòng ⇒ gửi lô các dòng có chữ (ngăn bằng `batchSeparator`), ráp lại.
+    static func translateLines(_ text: String,
+                               using one: (String) async -> Result<String, TranslateFailure>) async -> Result<String, TranslateFailure> {
+        let plan = linePlan(text)
+        guard plan.lines.count > 1 else { return await one(text) }
+        guard !plan.cores.isEmpty else { return .success(text) }
+        switch await one(plan.cores.joined(separator: String(batchSeparator))) {
+        case .failure(let f): return .failure(f)
+        case .success(let out):
+            let parts = out.split(separator: batchSeparator, omittingEmptySubsequences: false).map(String.init)
+            guard let joined = assemble(lines: plan.lines, breaks: plan.breaks,
+                                        indices: plan.indices, translated: parts) else { return .failure(.failed) }
+            return .success(joined)
+        }
+    }
+
+    /// Không có vùng chọn: chỉ dịch được đoạn (dòng) đang gõ trước con trỏ. Trả true khi ô còn
+    /// chữ khác ngoài đoạn đó (đoạn trước trong `before`, hoặc chữ sau con trỏ) ⇒ báo người
+    /// dùng chọn toàn bộ văn bản. iOS chỉ đưa bàn phím một cửa sổ chữ quanh con trỏ (thường
+    /// tới đầu đoạn) nên không thể tự lấy hết văn bản khi không có vùng chọn.
+    static func coversOnlyPart(isSelection: Bool, source: String, before: String?, after: String?) -> Bool {
+        guard !isSelection else { return false }
+        if let a = after, hasLetters(a) { return true }
+        guard let b = before else { return false }
+        let rest = b.unicodeScalars.dropLast(source.unicodeScalars.count)
+        return rest.contains { $0.properties.isAlphabetic }
+    }
 }
 
 /// Kết quả một lần dịch.
@@ -156,7 +244,13 @@ extension TranslateFailure {
 @available(iOS 26.0, macOS 26.0, *)
 enum OnDeviceTranslator {
     /// Dịch một lần (gói ngôn ngữ phải đã cài — kiểm trước, không tạo session thừa).
+    /// Nhiều dòng ⇒ một lô (một session), mỗi dòng có chữ là một mục; ráp lại giữ nguyên
+    /// xuống dòng / dòng trống (TranslateText.linePlan).
     static func translate(_ text: String, pair: TranslateDirection.Pair) async -> Result<String, TranslateFailure> {
+        await TranslateText.translateLines(text) { await translateOne($0, pair: pair) }
+    }
+
+    private static func translateOne(_ text: String, pair: TranslateDirection.Pair) async -> Result<String, TranslateFailure> {
         #if os(iOS)
         let r = await TranslateLoader.run(text, source: pair.source, target: pair.target)
         #else

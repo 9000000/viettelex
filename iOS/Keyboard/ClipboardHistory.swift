@@ -16,7 +16,9 @@ final class ClipboardHistory {
     let maxItems: Int
     let ttl: TimeInterval
     let sensitiveTTL: TimeInterval
-    static let maxTextLength = 4000
+    /// Mục dài hơn bị bỏ qua. 4000 cũ làm văn bản nhiều đoạn copy xong "không được lưu"
+    /// (tester Plus 15/10/2026); 20 mục × 10k ký tự vẫn nhỏ so với trần RAM extension.
+    static let maxTextLength = 10_000
     static let freshWindow: TimeInterval = 180
 
     private(set) var raw: [ClipItem] = []     // mới nhất trước

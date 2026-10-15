@@ -146,4 +146,21 @@ final class TranslateTests: XCTestCase {
         XCTAssertEqual(String(format: vi.localizedString(forKey: "Translate ↔ %@", value: nil, table: nil),
                               TranslatePrefs.displayName("en", uiLanguage: "vi")), "Dịch ↔ Tiếng Anh")
     }
+
+    // MARK: nhiều đoạn (góp ý tester 15/10/2026) — dịch từng dòng trong một lô
+
+    func testBatchSeparatorMatchesEngine() {
+        XCTAssertEqual(TranslateText.batchSeparator, TranslateEngine.batchSeparator)
+    }
+
+    func testMultiParagraphTranslatedPerLineKeepingBreaks() async {
+        var calls = 0
+        let r = await TranslateText.translateLines("Xin chào\n\nTạm biệt\n") { packed in
+            calls += 1
+            let parts = packed.split(separator: TranslateText.batchSeparator, omittingEmptySubsequences: false)
+            return .success(parts.map { "[\($0)]" }.joined(separator: String(TranslateText.batchSeparator)))
+        }
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(try r.get(), "[Xin chào]\n\n[Tạm biệt]\n")
+    }
 }

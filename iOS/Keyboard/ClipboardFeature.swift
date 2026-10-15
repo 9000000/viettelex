@@ -3,6 +3,15 @@
 // Tách riêng để test luồng không cần bàn phím thật.
 import Foundation
 
+/// Phần clipboard hệ thống bàn phím đọc (UIPasteboard.general; test thay bằng bản giả).
+/// changeCount / hasStrings / types không bật hỏi "Cho phép dán?"; `string` thì có.
+protocol PasteboardSource: AnyObject {
+    var changeCount: Int { get }
+    var hasStrings: Bool { get }
+    var string: String? { get }
+    var types: [String] { get }
+}
+
 final class ClipboardFeature {
     /// App Group keys (app ghi, extension chỉ đọc).
     static let historyKey = "clipboardHistory"   // mặc định TẮT

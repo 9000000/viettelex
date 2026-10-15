@@ -238,6 +238,7 @@
 		B449EAEFEA69CB861489859C /* TextTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = A49B2C3D02FA8B71A8BFA201 /* TextTools.swift */; };
 		B4F749EDE42751B7565B39F6 /* SyncMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E2E27B46842AE6F5EB0A74 /* SyncMerge.swift */; };
 		B5C9CB675A5310946844B520 /* PerfSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0129B5AA6C2F6547A9634969 /* PerfSwitchTests.swift */; };
+		BA4825C2AAE03F00404D6B4D /* PlusFeedback1015Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150EAA710911C53C0656FEBD /* PlusFeedback1015Tests.swift */; };
 		B5DA1E90A8B99B4F53BCFF96 /* PlusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8197742D5A3A7B8F8BE4C8DC /* PlusTests.swift */; };
 		B73BB0C8504D9159A129AB5F /* Translation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 575059AED927C97A7E6E33CD /* Translation.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		B77B19F8C2DD1B47583F091D /* SwipeLexicon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3994C0C17115101811283049 /* SwipeLexicon.swift */; };
@@ -501,6 +502,7 @@
 		80AB0C87154897C583AEB2AE /* AutoCorrect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoCorrect.swift; sourceTree = "<group>"; };
 		80CE2088FB873FD0D894A6C0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		818AAEF3703366E38E67813C /* EmojiAtlasBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiAtlasBuilder.swift; sourceTree = "<group>"; };
+		150EAA710911C53C0656FEBD /* PlusFeedback1015Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusFeedback1015Tests.swift; sourceTree = "<group>"; };
 		8197742D5A3A7B8F8BE4C8DC /* PlusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusTests.swift; sourceTree = "<group>"; };
 		81B2DDC0E24D11BD96525161 /* KeyboardTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardTheme.swift; sourceTree = "<group>"; };
 		821BD7CBEE8349CC782C3E41 /* SwipeTypingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeTypingTests.swift; sourceTree = "<group>"; };
@@ -813,6 +815,7 @@
 				0129B5AA6C2F6547A9634969 /* PerfSwitchTests.swift */,
 				6EAFABBBF6544841D633BFD9 /* PlaneCacheLayoutTests.swift */,
 				E2A6BDCAE323FDEA73473DB7 /* PlanePolicyTests.swift */,
+				150EAA710911C53C0656FEBD /* PlusFeedback1015Tests.swift */,
 				8197742D5A3A7B8F8BE4C8DC /* PlusTests.swift */,
 				9BD2C6C345D6A11225ECC3C7 /* PromoFramesTests.swift */,
 				A14878A23261C8A092054E6F /* RamBreakdownTests.swift */,
@@ -1440,6 +1443,7 @@
 				7D80FCC5647175620DC1D42E /* PlusConfig.swift in Sources */,
 				AB0F2E167DA8AA1EBD8F37E5 /* PlusGate.swift in Sources */,
 				16FCA2CDAD7489F48F628D81 /* PlusStoreModel.swift in Sources */,
+				BA4825C2AAE03F00404D6B4D /* PlusFeedback1015Tests.swift in Sources */,
 				B5DA1E90A8B99B4F53BCFF96 /* PlusTests.swift in Sources */,
 				B1C18381FB8CEDB3ABB54AAF /* PromoFramesTests.swift in Sources */,
 				98FFB5EF984F57F300DD554A /* RamBreakdownTests.swift in Sources */,
