@@ -73,6 +73,51 @@ enum EnglishLite {
             return false
         }
     }
+
+    /// Từ bắt đầu bằng `typed` (a–z, không phân biệt hoa thường), tần suất giảm dần, tối đa
+    /// `limit`, bỏ chính từ đang gõ, chữ hoa theo chữ đang gõ — CÙNG kết quả với
+    /// SwipeEnglish.completions (test so khớp) nhưng đọc thẳng trên mmap, không giải mã
+    /// lexicon ra heap (gợi ý từ — WordPrediction.swift).
+    static func completions(_ typed: String, limit: Int = 24) -> [VNSuggest.Match] {
+        let low = typed.lowercased()
+        guard let t = table, !low.isEmpty, limit > 0,
+              low.unicodeScalars.allSatisfy({ $0.value >= 97 && $0.value <= 122 }) else { return [] }
+        let w = Array(low.utf8)
+        return t.data.withUnsafeBytes { raw -> [VNSuggest.Match] in
+            let b = raw.bindMemory(to: UInt8.self)
+            func less(_ i: Int) -> Bool {          // entry i < w (theo byte)
+                let p = Int(t.offsets[i]), len = Int(b[p])
+                let m = min(len, w.count)
+                for k in 0..<m where b[p + 2 + k] != w[k] { return b[p + 2 + k] < w[k] }
+                return len < w.count
+            }
+            func hasPrefix(_ i: Int) -> (prefix: Bool, exact: Bool) {
+                let p = Int(t.offsets[i]), len = Int(b[p])
+                guard len >= w.count else { return (false, false) }
+                for k in 0..<w.count where b[p + 2 + k] != w[k] { return (false, false) }
+                return (true, len == w.count)
+            }
+            var lo = 0, hi = t.offsets.count
+            while lo < hi {
+                let mid = (lo + hi) / 2
+                if less(mid) { lo = mid + 1 } else { hi = mid }
+            }
+            var hits: [(f: UInt8, i: Int)] = []
+            var i = lo
+            while i < t.offsets.count {
+                let h = hasPrefix(i)
+                guard h.prefix else { break }
+                if !h.exact { hits.append((b[Int(t.offsets[i]) + 1], i)) }
+                i += 1
+            }
+            hits.sort { $0.f != $1.f ? $0.f > $1.f : $0.i < $1.i }
+            return hits.prefix(limit).map { h in
+                let p = Int(t.offsets[h.i]), len = Int(b[p])
+                let word = String(decoding: UnsafeBufferPointer(rebasing: b[(p + 2)..<(p + 2 + len)]), as: UTF8.self)
+                return VNSuggest.Match(word: SwipeEnglish.matchCase(word, typed), freq: Int(h.f))
+            }
+        }
+    }
 }
 
 // MARK: - 1. Sửa lỗi gõ sai

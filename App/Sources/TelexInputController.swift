@@ -913,6 +913,12 @@ final class TelexInputController: IMKInputController {
                                                       canReplace: !markedNow && Self.replacesCommittedText(id))
                 }
                 numberPrevRun = run
+                // Gợi ý từ kế tiếp (WordPrediction.swift): cài đặt hệ thống tắt ⇒ một lần đọc cờ.
+                if PredictionLogic.shouldSchedule(settingOn: SystemInlinePrediction.isOn,
+                                                  canReplace: !markedNow && !wasEdge && Self.replacesCommittedText(id)) {
+                    CaretHint.shared.schedulePrediction(typed: "", raw: "", english: engine.previousWordEnglish,
+                                                        client: client, controller: self)
+                }
             }
             if let s = inserted { shortcutTail.append(s) } else { shortcutTail.reset() }
             if let x = expandedAtBoundary, !markedNow, !wasEdge {
@@ -937,6 +943,10 @@ final class TelexInputController: IMKInputController {
             }
             return false
         }
+
+        // Gợi ý hoàn thành từ đang gõ (WordPrediction.swift) — chạy SAU khi phím đã xử lý
+        // xong (mọi nhánh return bên dưới). Cài đặt hệ thống tắt ⇒ một lần đọc cờ.
+        defer { predictAfterLetter(client, markedNow: markedNow, id: id) }
 
         // First key of a new word: anchor the caret once (never again mid-word).
         // If the app can't report a caret here (some Electron apps: Claude), fall
@@ -2028,6 +2038,7 @@ final class TelexInputController: IMKInputController {
             client.insertText(s.insert, replacementRange: kNoRange)
             shortcutTail.append(s.insert)
             logDecision("caret hint \(s.kind): insert")
+            if s.kind == .predict { afterPredictionApplied(s, client) }
             return
         }
         let id = AppState.shared.currentBundleID
@@ -2049,6 +2060,37 @@ final class TelexInputController: IMKInputController {
         shortcutTail.append(s.insert)
         numberPrevRun = ""
         logDecision("caret hint \(s.kind) \(id ?? "?"): -\(range.length) +\((s.insert as NSString).length)")
+        if s.kind == .predict { afterPredictionApplied(s, client) }
+    }
+
+    /// Gợi ý từ vừa áp dụng (từ + dấu cách): ngữ cảnh tiếng Anh theo từ vừa chèn, rồi mời từ
+    /// kế tiếp như sau một dấu cách gõ tay.
+    private func afterPredictionApplied(_ s: CaretSuggestion, _ client: IMKTextInput) {
+        let w = s.display.lowercased()
+        let english = !VNSuggest.contains(w) && TypoFixLogic.isEnglish(w)
+        engine.noteExternalWord(w, english: english)
+        numberPrevRun = s.display
+        if SystemInlinePrediction.isOn {
+            CaretHint.shared.schedulePrediction(typed: "", raw: "", english: english, client: client, controller: self)
+        }
+    }
+
+    /// Sau một phím chữ (đã xử lý): hẹn gợi ý hoàn thành từ đang gõ. Chỉ app đã chứng minh
+    /// thay được chữ đã chốt (in-place, không marked — cùng điều kiện gợi ý ranh giới từ).
+    private func predictAfterLetter(_ client: IMKTextInput, markedNow: Bool, id: String?) {
+        guard PredictionLogic.shouldSchedule(
+                settingOn: SystemInlinePrediction.isOn,
+                canReplace: !markedNow && !edgeTapWord && !engine.isEmpty && Self.replacesCommittedText(id))
+        else { return }
+        CaretHint.shared.schedulePrediction(typed: engine.composed, raw: engine.rawKeystrokes,
+                                            english: engine.previousWordEnglish,
+                                            client: client, controller: self)
+    }
+
+    /// Click một ứng viên trên ô nổi của CaretHint (gợi ý từ) — như Tab / click ô hệ thống.
+    func applyCaretHintChoice(_ display: String) {
+        guard let client = client() as IMKTextInput?, let s = CaretHint.shared.take(choosing: display) else { return }
+        applyCaretSuggestion(s, client)
     }
 
     /// Ô ứng viên hệ thống hỏi danh sách (updateCandidates). Chỉ có khi CaretHint đang hiện.
@@ -2058,7 +2100,8 @@ final class TelexInputController: IMKInputController {
 
     /// Click vào ứng viên trong ô hệ thống.
     override func candidateSelected(_ candidateString: NSAttributedString!) {
-        guard let client = client() as IMKTextInput?, let s = CaretHint.shared.take() else { return }
+        guard let client = client() as IMKTextInput?,
+              let s = CaretHint.shared.take(choosing: candidateString?.string) else { return }
         applyCaretSuggestion(s, client)
     }
 
@@ -2100,6 +2143,10 @@ final class TelexInputController: IMKInputController {
         if let client = activatedClient {
             AppState.shared.currentBundleID = client.bundleIdentifier()
         }
+        // "Show inline predictive text" của macOS (gợi ý từ — WordPrediction.swift): đọc lại khi
+        // đổi ô/app (≤ 1 lần / 2 giây), không bao giờ mỗi phím. Vừa tắt ⇒ bỏ dữ liệu đã nạp.
+        let predictionWasOn = SystemInlinePrediction.isOn
+        if !SystemInlinePrediction.refresh(), predictionWasOn { CaretHint.shared.predictionDisabled() }
         // Gõ tắt trùng Text Replacements của macOS (#117): làm mới bảng ≤ 1 lần/30 giây.
         SystemReplacementGuard.shared.activated(bundleID: AppState.shared.currentBundleID)
         // Tap-side view of this activation: focus epoch for re-edit(tap) (#111) and
