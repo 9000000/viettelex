@@ -104,6 +104,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
     private let suggestionBar = SuggestionBar()
     private var suggestionsEnabled = false
+    /// Thanh gợi ý đang bật cho ô hiện tại (setSuggestionsEnabled) — controller đối chiếu.
+    var suggestionsShownState: Bool { suggestionsEnabled }
     private var stripReserved = false
 
     private var plane: Plane = .letters {

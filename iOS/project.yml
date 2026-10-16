@@ -222,6 +222,7 @@ targets:
       - Keyboard/PasteOfferOnce.swift
       # Bench đường nóng qua controller thật (KeyboardBenchTests, bộ chậm).
       - Keyboard/KeyboardViewController.swift
+      - Keyboard/AppearanceCycle.swift
       - Keyboard/ObjC/VTCatch.m
       - Keyboard/ClipboardPanel.swift
       - App/EmojiAtlasBuilder.swift
