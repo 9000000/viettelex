@@ -67,6 +67,9 @@ struct HintRequest {
     // prediction after a space: every other caret suggestion wins over it).
     std::string fallback;
     int fallbackDelayMs = 0;
+    // Fire-and-forget line ("learn" / "learnclear" — Học từ bạn gõ): never superseded by a newer
+    // request, sent in order before the next job, answer ignored, `done` never called.
+    bool oneway = false;
 };
 
 namespace hints {
@@ -131,6 +134,40 @@ private:
 // Lowercase for the letters caret hints compare (ASCII + Vietnamese precomposed letters).
 std::string lower(const std::string &s);
 
+// "Học từ bạn gõ" — App/Sources/LearnedModel.swift (LearnedModel.learnable / LearnTracker), same
+// rules. learnable: letters only (Swift isLetter for the scripts an IME types), ≤ 12 characters,
+// no run of ≥ 3 equal characters ("heeey").
+bool learnable(const std::string &w);
+// Committed words at word boundaries → learning events (word, the ≤ 2 previous words of the same
+// sentence — single spaces apart — and a weight: 1 typed, 2 an accepted prediction). Each word is
+// HELD until the next event: ⌫ right after the boundary / a hint replacing it drops it, an
+// accepted typo fix learns the fixed form instead. Lowercase, like the model's keys.
+class LearnTracker {
+public:
+    struct Event {
+        std::string word, prev1, prev2;  // "" = none
+        int weight = 1;
+    };
+    // `word` committed by `boundary` (the character typed: ' ' keeps the context, anything else
+    // cuts it). true = `out` is the previous held event, final now.
+    bool commit(const std::string &word, uint32_t boundary, bool standsAlone, int weight, Event &out);
+    void replacePending(const std::string &fixed);
+    void discard();
+    // Enter / Tab / caret moved / focus: the held event is final, the context is cut.
+    bool breakContext(Event &out);
+    bool hasPending() const { return pending_; }
+    const Event &pending() const { return held_; }
+    const std::string &prev1() const { return prev1_; }
+    const std::string &prev2() const { return prev2_; }
+
+private:
+    std::string prev1_, prev2_;
+    bool pending_ = false;
+    Event held_;
+};
+// The helper line for an event ("learn\t<word>\t<prev1>\t<prev2>\t<weight>").
+std::string learnRequest(const LearnTracker::Event &e);
+
 }  // namespace hints
 
 // Runs HintRequests against a long-lived `viettelex-text-tool --serve` on one worker thread.
@@ -159,6 +196,7 @@ private:
         Done done;
     };
     void loop();
+    void startWorker();  // mu_ held
     bool ensureHelper();
     void stopHelper();
 
@@ -167,6 +205,7 @@ private:
     std::mutex mu_;
     std::condition_variable cv_;
     std::unique_ptr<Job> next_;  // guarded by mu_
+    std::deque<std::string> oneway_;  // guarded by mu_ — HintRequest::oneway lines, in order (≤ 256)
     bool stop_ = false;          // guarded by mu_
     std::thread worker_;
     std::shared_ptr<std::atomic<bool>> alive_;

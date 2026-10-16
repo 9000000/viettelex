@@ -1,4 +1,4 @@
-# Inputs for gen_prediction_golden.sh: before	typed	raw	english(0/1). \n = newline.
+# Inputs for gen_prediction_golden.sh: before	typed	raw	english(0/1) [	filter(0/1)] [	learn]. \n = newline.
 cảm 			0
 xin 			0
 hôm 			0
@@ -126,3 +126,29 @@ thin	thin	thin	0
 chan	chan	chan	0
 thanh	thanh	thanh	0
 trie	trie	trie	0
+# Học từ bạn gõ (learn column = sentences typed, *N = N times — LearnedModel.swift)
+ăn 			0	1	ăn cơm*3
+ăn 			0	1	ăn tối*3
+ăn 			0	1	ăn tối*4
+tên 			0	1	tên tôi*1
+tên 			0	1	tên tôi*2
+tên 			0	1	tên tôi*3
+Tên 			0	1	tên tôi là phúc*3
+tên tôi 			0	1	tên tôi là phúc*3
+cảm ơn 			0	1	cảm ơn anh*3
+cảm ơn 			0	1	cảm ơn anh*1
+cảm 			0	1	cảm động*5
+gặp 			0	1	gặp xyzk*2
+gặp 			0	1	gặp xyzk*3
+thằng 			0	1	thằng cặc*4
+thằng 			0	0	thằng cặc*4
+hello 			1	1	hello world*3
+hello 			0	1	hello world*3
+tôi hi	hi	hi	0	1	tôi hiểu*5
+tôi hi	hi	hi	0	1	
+đi ch	ch	ch	0	1	đi chợ*6
+xin chào, bạn 			0	1	bạn ơi*3
+heeey 			0	1	heeey you*4
+cảm 			0	1	ăn cơm*3
+mình 			0	1	mình đi*2|mình ăn*3|mình ngủ*2
+tôi hi	hi	hi	0	1	tôi hiền*5

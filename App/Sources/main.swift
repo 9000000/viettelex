@@ -154,6 +154,11 @@ final class ReopenDelegate: NSObject, NSApplicationDelegate {
         if !isTestHost { SettingsWindowController.shared.show(tab: .typing) }
         return false
     }
+
+    /// "Học từ bạn gõ": ghi nốt lượt học đang hẹn lưu (≤ 5 s cuối) trước khi thoát.
+    func applicationWillTerminate(_ notification: Notification) {
+        if !isTestHost { LearnedWords.shared.flush() }
+    }
 }
 let reopenDelegate = ReopenDelegate()          // held for the process lifetime
 NSApplication.shared.delegate = reopenDelegate

@@ -150,6 +150,7 @@ Settings with(bool period, bool cap, bool smart, bool predict) {
     s.autoCapitalize = cap;
     s.smartPunctuation = smart;
     s.wordPrediction = predict;
+    s.learnWords = false;  // "Học từ bạn gõ": its own tests (testLearnSession) turn it on
     return s;
 }
 
@@ -620,6 +621,136 @@ void testPredictionSession() {
     CHECK(sur.reqs.empty());  // Surrounding without edits: cannot replace the word on screen
 }
 
+// MARK: - Học từ bạn gõ (LearnedModel.swift / LearnStore.swift in the helper)
+
+std::vector<std::string> learnLines(const Rig &r) {
+    std::vector<std::string> out;
+    for (const auto &q : r.reqs)
+        if (q.oneway) out.push_back(q.line);
+    return out;
+}
+std::string L(std::string w, std::string p1 = "", std::string p2 = "", int weight = 1) {
+    return req({"learn", w, p1, p2, std::to_string(weight)});
+}
+
+void testLearnTracker() {
+    hints::LearnTracker t;
+    hints::LearnTracker::Event e;
+    CHECK(!t.commit("Ăn", ' ', true, 1, e));
+    CHECK(t.hasPending() && t.pending().word == "ăn");
+    CHECK(t.commit("cơm", ',', true, 1, e) && e.word == "ăn" && e.prev1.empty());
+    CHECK(t.prev1().empty());  // punctuation cuts the context
+    CHECK(t.commit("rồi", ' ', true, 1, e) && e.word == "cơm" && e.prev1 == "ăn");
+    t.discard();
+    CHECK(!t.hasPending() && !t.breakContext(e));
+    CHECK(!t.commit("đi", ' ', true, 1, e));
+    CHECK(t.commit("x1", ' ', true, 1, e) && e.word == "đi");
+    CHECK(!t.hasPending());
+    CHECK(!t.commit("học", ' ', false, 1, e) && !t.hasPending());
+    // typo fix: the fixed form, same context
+    hints::LearnTracker f;
+    f.commit("tôi", ' ', true, 1, e);
+    f.commit("dii", ' ', true, 1, e);
+    f.replacePending("đi");
+    CHECK(f.pending().word == "đi" && f.pending().prev1 == "tôi");
+    CHECK(f.commit("học", ' ', true, 1, e) && e.word == "đi");
+    CHECK_EQ(f.pending().prev1, std::string("đi"));
+    // = LearnedModel.learnable
+    CHECK(hints::learnable("cơm") && hints::learnable("Phúc") && hints::learnable("heey"));
+    CHECK(!hints::learnable("heeey") && !hints::learnable("a1") && !hints::learnable(""));
+    CHECK(hints::learnable("abcdefghijkl") && !hints::learnable("abcdefghijklm") && !hints::learnable("e-mail"));
+}
+
+void testLearnSession() {
+    Settings on = with(false, false, false, true);
+    on.learnWords = true;
+    // Words this Session composed, with the 2 previous words of the same sentence; each held
+    // until the next event (Enter makes the last one final).
+    Rig r(on);
+    type(r.s, r.m, "awn cowm awn cowm\n");
+    const std::vector<std::string> want = {L("ăn"), L("cơm", "ăn"), L("ăn", "cơm", "ăn"), L("cơm", "ăn", "cơm")};
+    CHECK(learnLines(r) == want);
+    // Predict requests say the learned data may be used (filter + learn fields).
+    Rig p(on);
+    type(p.s, p.m, "tooi dduw");
+    CHECK_EQ(p.last(), req({"predict", "tôi đư", "đư", "dduw", "0", "1", "1"}));
+    type(p.s, p.m, " ");
+    bool sawNext = false;
+    for (const auto &q : p.reqs) sawNext = sawNext || q.line == req({"predict", "tôi được ", "", "", "0", "1", "1"}) ||
+                                           q.line == req({"predict", "tôi đư ", "", "", "0", "1", "1"});
+    CHECK(sawNext);
+
+    // Gates: switch off / prediction off / terminal / code editor / password / English.
+    Settings noLearn = on;
+    noLearn.learnWords = false;
+    Settings noPredict = on;
+    noPredict.wordPrediction = false;
+    for (const Settings &st : {noLearn, noPredict}) {
+        Rig g(st);
+        type(g.s, g.m, "awn cowm\n");
+        CHECK(learnLines(g).empty());
+    }
+    Rig term(on, DisplayMode::Direct, false);
+    type(term.s, term.m, "awn cowm\n");
+    CHECK(learnLines(term).empty());
+    Rig code(on);
+    code.s.setAutoTextAllowed(false);
+    type(code.s, code.m, "awn cowm\n");
+    CHECK(learnLines(code).empty());
+    Rig pw(on);
+    pw.s.setPassthrough(true, pw.m);
+    type(pw.s, pw.m, "secret word\n");
+    CHECK(learnLines(pw).empty());
+    Rig eng(on);
+    eng.s.setVietnamese(false, eng.m);
+    type(eng.s, eng.m, "hello world\n");
+    CHECK(learnLines(eng).empty());
+    Rig nosink(on, DisplayMode::Preedit, true, false);
+    type(nosink.s, nosink.m, "awn cowm\n");  // no helper: nothing (and nothing crashes)
+
+    // ⌫ right after the boundary: the held word may be edited — dropped.
+    // (⌫ may re-open the word into the composition — re-edit; committing it again at a later
+    // boundary learns it then, once. Here focus leaves while it is open: nothing more.)
+    Rig bs(on);
+    type(bs.s, bs.m, "awn cowm <");
+    bs.s.finish(bs.m);
+    CHECK(learnLines(bs) == std::vector<std::string>{L("ăn")});
+    // Comma cuts the sentence context.
+    Rig cm(on);
+    type(cm.s, cm.m, "awn, cowm\n");
+    CHECK(learnLines(cm) == (std::vector<std::string>{L("ăn"), L("cơm")}));
+    // Shortcut expansion / digits: not ours — nothing learned, context cut.
+    Rig dg(on);
+    type(dg.s, dg.m, "awn 123 cowm\n");
+    CHECK(learnLines(dg) == (std::vector<std::string>{L("ăn"), L("cơm")}));
+    // Accepted typo fix: the fixed form.
+    Settings ty = on;
+    ty.typoHints = true;
+    Rig tf(ty);
+    type(tf.s, tf.m, "anh tpoi ");
+    CaretSuggestion typo;
+    typo.kind = Kind::Typo;
+    typo.display = "tôi";
+    typo.replace = "tpoi ";
+    typo.insert = "tôi ";
+    tf.s.deliverHint(tf.reqs.back().gen, typo, tf.m);
+    CHECK(press(tf.s, tf.m, ks::Tab, '\t'));
+    type(tf.s, tf.m, "\n");
+    CHECK(learnLines(tf) == (std::vector<std::string>{L("anh"), L("tôi", "anh")}));
+    // Accepted prediction: weight 2.
+    Rig ap(on);
+    type(ap.s, ap.m, "tooi dduw");
+    ap.answer(P("được", "đư"));
+    CHECK(press(ap.s, ap.m, ks::Tab, '\t'));
+    type(ap.s, ap.m, "\n");
+    CHECK(learnLines(ap) == (std::vector<std::string>{L("tôi"), L("được", "tôi", "", 2)}));
+    // Focus out (finish): the held word is final.
+    Rig fo(on);
+    type(fo.s, fo.m, "awn ");
+    fo.s.finish(fo.m);
+    CHECK(learnLines(fo) == std::vector<std::string>{L("ăn")});
+}
+
 // Tab on a prediction inserts "word␣"; the very next key . , ? ! ; : ) attaches to the word and
 // the space moves after it, the space after that is swallowed (WordPrediction.swift
 // acceptSpaceReplacement — ControllerHarnessTests on macOS).
@@ -705,6 +836,24 @@ void testHelperEndToEnd() {
     CHECK(c == P("chào", "ch"));  // one suggestion: the top-ranked word
     CHECK(svc.query(req({"predict", "abc.đư", "đư", "dduw", "0"}), ans));
     CHECK_EQ(ans, std::string("-"));
+    // Học từ bạn gõ: "learn" lines, then predict with learn = 1 (store in a temp file: main()
+    // sets VIETTELEX_LEARN_FILE before the helper starts).
+    CHECK(svc.query(L("tôi", "tên"), ans));
+    CHECK_EQ(ans, std::string("ok"));
+    CHECK(svc.query(L("tôi", "tên"), ans));
+    CHECK(svc.query(req({"predict", "Tên ", "", "", "0", "1", "1"}), ans));
+    CHECK_EQ(ans, std::string("predict\ttôi\t\ttôi "));
+    CHECK(svc.query(req({"predict", "Tên ", "", "", "0", "1"}), ans));
+    CHECK_EQ(ans, std::string("-"));  // learn off: not used
+    CHECK(svc.query("learnclear", ans));
+    CHECK(svc.query(req({"predict", "Tên ", "", "", "0", "1", "1"}), ans));
+    CHECK_EQ(ans, std::string("-"));
+    // One-way lines (Session learning) are never superseded by the next request.
+    HintRequest lr;
+    lr.oneway = true;
+    lr.line = L("tôi", "tên");
+    svc.submit(lr, nullptr);
+    svc.submit(lr, nullptr);
 
     auto drain = [&](int ms) {
         auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
@@ -766,6 +915,9 @@ void testHelperEndToEnd() {
 }  // namespace
 
 int main() {
+    // The helper's learned-words store: a temp file, never ~/.local/share/viettelex.
+    char learnTmpl[] = "/tmp/vt-learn-XXXXXX";
+    if (char *d = mkdtemp(learnTmpl)) setenv("VIETTELEX_LEARN_FILE", (std::string(d) + "/learned-words.bin").c_str(), 1);
     testSettings();
     testExcludedApps();
     testDoubleSpaceRule();
@@ -778,6 +930,8 @@ int main() {
     testSmartPunctuationSession();
     testPredictionSession();
     testAcceptedSpaceSession();
+    testLearnTracker();
+    testLearnSession();
     testHelperEndToEnd();
     std::printf("auto text tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;

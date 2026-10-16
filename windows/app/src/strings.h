@@ -115,6 +115,8 @@ enum class S {
     SecHints, TextToolsNoTray,
     // Tray menu: Chế độ game toggle
     MenuGameMode,
+    // Học từ bạn gõ (Chính tả page, Gợi ý section, next to Lọc từ nhạy cảm)
+    LearnWords, LearnWordsDesc, ClearLearned, ClearLearnedDesc, ClearLearnedButton, ClearLearnedConfirm,
     Count
 };
 

@@ -94,6 +94,12 @@ QuickType). Tự tắt ở field từ chối gợi ý (`isSecureTextEntry`,
   không cần đạt ngưỡng count, vào pool hoàn thiện với freq trần; sao lưu/đồng bộ cùng backup.
 - **Ẩn danh** (thủ công trong app, hoặc ô không-học): không học từ, không lưu clipboard,
   không chip clipboard.
+- **Bảng gọn + file** (`UserLMTables` / `UserLMCodec` "VTL2") nằm riêng ở `UserLMTables.swift`
+  (16/10/2026) để **máy tính** dùng đúng mã này cho "Học từ bạn gõ" của gợi ý từ cạnh con trỏ:
+  `App/Sources/LearnedModel.swift` (macOS + Linux; Windows port C++ `windows/app/core/learned_words.*`,
+  golden cột `learn`). Khác iOS: kho máy tính không mồi seed vào bảng — seed là dòng
+  `SeedNextData` truyền vào `nextWords(seeds:)` (mô hình rỗng ⇒ đúng kết quả cũ); cặp học được
+  chỉ gợi ý sau MỘT từ khi đã gõ ≥ 2 lần (`learnedPairMin` = `SuggestRank.learnedTriMin`).
 
 ### 3. `SeedData` — mồi ban đầu
 

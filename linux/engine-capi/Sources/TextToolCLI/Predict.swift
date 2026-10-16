@@ -19,7 +19,7 @@
 //    cổng rẻ + hẹn giờ 0,3 s (linux/common auto_text.h, Session), dữ liệu không vào process IME;
 //  • công tắc: [general] word_prediction trong config.toml (mặc định TẮT) — Linux không có cài
 //    đặt hệ thống tương đương "Show inline predictive text".
-// Không học từ người dùng (như macOS).
+// Học từ bạn gõ (16/10/2026): LearnStore.swift (process con này) + LearnedModel.swift (chung macOS).
 import Foundation
 import TelexCore
 
@@ -193,20 +193,34 @@ final class PredictionModel {
     /// Ứng viên (đã chỉnh hoa/thường) cho lượt `r`; `raw` = phím thô của từ đang gõ;
     /// `filterSensitive` = "Lọc từ nhạy cảm" ([general] filter_sensitive — như công tắc iOS, mặc
     /// định BẬT: SensitiveWords.filter ở đúng các chỗ thanh gợi ý iOS lọc).
-    func candidates(_ r: PredictionLogic.Request, raw: String, filterSensitive filterOn: Bool = true) -> [String] {
+    /// `learned` = "Học từ bạn gõ" (LearnedModel.swift; nil = tắt / chưa nạp ⇒ đúng kết quả
+    /// seed như trước). Cùng hợp đồng iOS: count = seed + đếm học, ngữ cảnh +4 = nextWords
+    /// cá nhân, từ kế tiếp = SuggestRank.nextFill(personal:triCount:) không lùi bigram tĩnh.
+    func candidates(_ r: PredictionLogic.Request, raw: String, filterSensitive filterOn: Bool = true,
+                    learned: LearnedModel? = nil) -> [String] {
         if r.typed.isEmpty {
             // = SuggestRank.nextFill với người dùng iOS mới (`personal` = nextWords seed ≤ 6, đã
             // lọc): có dòng trigram (prev2, prev) ⇒ trigram tĩnh trước rồi seed; không ⇒ chỉ seed
             // — KHÔNG lùi bigram tĩnh ("Tên ␣" → không gì). Hạng 1 vì thế đúng hạng 1 của iOS.
             guard PredictionLogic.wantsSeedNext(r), let prev = r.prev else { return [] }
-            var personal = SensitiveWords.filter(Array(seedNext(prev).prefix(6)), enabled: filterOn)
+            // personal = nextWords cá nhân (dữ liệu học ⊕ seed, ≤ 6) — cặp học chỉ vào khi đã gõ
+            // ≥ LearnedModel.learnedPairMin lần (luật không đoán bigram sau một từ).
+            let seeds = seedNext(prev)
+            let mine = learned.map { $0.nextWords(after: prev, prev2: r.prev2, seeds: seeds, limit: 6) }
+                ?? Array(seeds.prefix(6))
+            var personal = SensitiveWords.filter(mine, enabled: filterOn)
             if r.english { personal = personal.filter { SwipeEnglish.contains($0) } }
-            var tri: [String] = []
+            var tri: [String] = [], lead: [String] = []
             if PredictionLogic.wantsNextWord(r), let prev2 = r.prev2, VNSuggest.lexiconId(of: prev) != nil,
                let top = SuggestRank.topNext(prev, prev2: prev2, limit: 6), top.trigram {
                 tri = SensitiveWords.filter(top.words, enabled: filterOn)
+                // iOS nextFill: có dòng trigram tĩnh ⇒ bộ ba người dùng đã gõ ≥ learnedTriMin lần
+                // dẫn đầu (≤ 2), rồi trigram tĩnh, rồi personal.
+                if let l = learned {
+                    lead = Array(personal.filter { l.trigramCount(prev2, prev, $0) >= SuggestRank.learnedTriMin }.prefix(2))
+                }
             }
-            let next = SuggestionFill.pad([], with: tri + personal, need: PredictionLogic.rankDepth)
+            let next = SuggestionFill.pad(lead, with: tri + personal, need: PredictionLogic.rankDepth)
             return next.map { DisplayCase.apply($0, after: prev) }
         }
         let typed = r.typed
@@ -222,9 +236,15 @@ final class PredictionModel {
             let pmi = SuggestRank.inlinePmi(pool, prev: r.prev, prev2: r.prev2)
             // ctx = nextWords seed của từ trước (iOS: Set(nextWords(after: prev, limit: 24))) ⇒
             // +4 cho ứng viên seed, LM nhân bigramDamp — cùng hợp đồng tầng 2/7.
-            let ctx = r.prev.map { Set(seedNext($0)) } ?? []
+            // Học từ bạn gõ: ngữ cảnh = nextWords cá nhân (không chặn cặp, limit 24 như iOS),
+            // count = seed + đếm học (iOS: store mồi seed rồi cộng dồn).
+            let ctx: Set<String> = r.prev.map { p in
+                let seeds = seedNext(p)
+                return Set(learned.map { $0.nextWords(after: p, prev2: r.prev2, seeds: seeds, limit: 24, pairMin: 0) } ?? seeds)
+            } ?? []
+            let personalCount: (String) -> Int = learned.map { l in { self.count($0) + l.count($0) } } ?? count
             let ranked = SensitiveWords.filter(
-                SuggestRank.rankInline(pool, pmi: pmi, typedLen: typed.count, count: count, ctx: ctx),
+                SuggestRank.rankInline(pool, pmi: pmi, typedLen: typed.count, count: personalCount, ctx: ctx),
                 enabled: filterOn)
             return PredictionLogic.completions(ranked, typed: typed).map {
                 SuggestionCase.display(DisplayCase.apply($0, after: r.prev), shift: .off, typed: typed)
@@ -238,10 +258,15 @@ final class PredictionModel {
     }
 }
 
-/// Lệnh "predict" của --serve: `predict <before> <typed> <raw> <english 0|1> [<filter 0|1>]`.
-func predictAnswer(before: String, typed: String, raw: String, english: Bool, filterSensitive: Bool = true) -> String {
+/// Lệnh "predict" của --serve: `predict <before> <typed> <raw> <english 0|1> [<filter 0|1>] [<learn 0|1>]`.
+/// `learned` = "Học từ bạn gõ" (LearnStore); tắt ⇒ không nạp (đang nạp thì lưu nốt + bỏ khỏi RAM).
+func predictAnswer(before: String, typed: String, raw: String, english: Bool, filterSensitive: Bool = true,
+                   learned: Bool = false) -> String {
+    if !learned, LearnStore.shared.isLoaded { LearnStore.shared.unload() }
     guard VTDataFile.url("vnlexicon.bin") != nil,
           let r = PredictionLogic.request(before: before, typed: typed, english: english) else { return "-" }
-    return PredictionLogic.answer(PredictionModel.shared.candidates(r, raw: raw, filterSensitive: filterSensitive),
+    let m = learned ? LearnStore.shared.current() : nil
+    return PredictionLogic.answer(PredictionModel.shared.candidates(r, raw: raw, filterSensitive: filterSensitive,
+                                                                    learned: m),
                                   typed: r.typed)
 }

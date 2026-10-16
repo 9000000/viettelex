@@ -68,6 +68,7 @@ struct Settings {
     std::string quoteStyle = "curly"; // quote_style: "curly" “”‘’ | "low9" „“‚‘ | "guillemets" «»‹›
     bool wordPrediction = false;      // word_prediction: complete the word / next word (Tab)
     bool filterSensitive = true;      // filter_sensitive: "Lọc từ nhạy cảm" (iOS/macOS; default on)
+    bool learnWords = true;           // learn_words: "Học từ bạn gõ" (iOS/macOS; default on, needs word_prediction)
     // [app_modes] app id (lowercase) -> "preedit" | "surrounding" | "direct" | "off"
     std::map<std::string, std::string> appModes;
     // [experimental]

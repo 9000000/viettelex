@@ -1234,6 +1234,19 @@ final class AppState: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "filterSensitive"); CaretHint.shared.reloadSetting() }
     }
 
+    /// "Học từ bạn gõ" (LearnedWords.swift): gợi ý từ học từ/cặp từ bạn hay gõ, lưu trên máy này
+    /// (không mạng, không iCloud — khoá cũng không đồng bộ). Mặc định BẬT như iOS (học đi theo
+    /// gợi ý); chỉ có tác dụng khi gợi ý từ chạy ("Show inline predictive text" của macOS).
+    /// Tắt ⇒ không học, không dùng dữ liệu đã học (bỏ khỏi RAM); file giữ tới khi "Xoá từ đã học".
+    var learnWords: Bool {
+        get { defaults.object(forKey: "learnWords") as? Bool ?? true }
+        set {
+            defaults.set(newValue, forKey: "learnWords")
+            CaretHint.shared.reloadSetting()
+            if !newValue { LearnedWords.shared.unload() }
+        }
+    }
+
     /// Gợi ý thêm dấu cho cụm ≥3 âm tiết không dấu (". ! ?" hoặc dừng gõ sau dấu cách).
     /// Mặc định TẮT.
     var toneHints: Bool {

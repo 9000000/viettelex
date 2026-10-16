@@ -49,6 +49,12 @@ final class TelexInputController: IMKInputController {
     private var numberPrevRun = ""
     /// Phím thô của từ vừa chốt ở ranh giới gần nhất ("" = không có) — gợi ý sửa lỗi gõ.
     private var lastCommitRaw = ""
+    /// Từ bộ gõ vừa chốt ở ranh giới (boundary(); "" = không có / nở gõ tắt) — "Học từ bạn gõ".
+    private var lastCommitWord = ""
+    /// "Học từ bạn gõ" (LearnedWords.swift): lượt học chờ + ngữ cảnh của ô này.
+    private var learn = LearnTracker()
+    private var learnGen = 0
+    private var learnClicks: UInt64 = 0
     /// Đếm âm tiết không dấu liên tiếp (gợi ý Thêm dấu) — chỉ cập nhật ở ranh giới khi bật.
     private var toneRun = ToneRunLogic.Tracker()
     /// Controller vừa activate (main) — CaretHint mượn client của nó để lấy firstRect cho ô nổi.
@@ -531,6 +537,7 @@ final class TelexInputController: IMKInputController {
                 return true
             }
             endComposition(client)
+            learn.discard()   // Học từ bạn gõ: ⌘/⌃/⌥-tổ hợp có thể hoàn tác/xoá chữ (⌘Z) — bỏ lượt chờ
             // ⌥+phím gõ ra KÝ TỰ ("√", "≠" — khoá gõ tắt như "√√") vẫn là chữ nằm trước
             // con trỏ; mọi tổ hợp khác (⌘/⌃, ⌥⌫, ⌥←) dời/xoá chữ ⇒ cụm không còn biết.
             if mods == .option, event.keyCode != kDelete,
@@ -664,6 +671,8 @@ final class TelexInputController: IMKInputController {
                     return true
                 }
                 shortcutTail.backspace()
+                // Học từ bạn gõ: ⌫ vào chữ đã chốt ⇒ từ chờ học có thể đang bị sửa — bỏ.
+                learn.discard()
                 // ⌫ on the boundary character the last word ended with puts the caret
                 // back at that word's end, and the user is going to keep editing it
                 // ("tháy" ␣ ⌫ then `a` → "thấy" — issue #40). Re-open it into the buffer
@@ -807,9 +816,13 @@ final class TelexInputController: IMKInputController {
             // Esc chỉ khoá chữ (hành vi cũ). Không hoàn tác qua các phím này.
             let trigger: String? = newlineKey ? "\n" : (event.keyCode == kTab ? "\t" : nil)
             let allow = ShortcutMatch.triggers(boundary: trigger, glued: wordGluedToDigit)
+            let committedRun = shortcutTail.run
             let rewrote = boundary(client, allowShortcuts: allow.word, allowTokenShortcuts: allow.token,
                                    allowAlnumShortcuts: allow.alnum, commitSuffix: handling.commitSuffix)
             boundaryCommitInFlight = false
+            // Học từ bạn gõ: Enter/Tab/Esc chốt từ rồi cắt ngữ cảnh (lượt chờ được học).
+            learnAtBoundary(word: lastCommitWord, boundary: nil,
+                            standsAlone: committedRun.isEmpty, id: id, edge: wasEdge)
             wordGluedToDigit = false
             // Enter: dòng mới — cụm bắt đầu lại sau xuống dòng. Tab/Esc: có thể dời
             // focus / không chèn gì ⇒ cụm không còn biết.
@@ -903,6 +916,7 @@ final class TelexInputController: IMKInputController {
                trySystemReplace(boundaryChar == UInt8(ascii: " "), prevSpaceNs: prevSpaceNs,
                                 prevEmDashOurs: prevEmDashOurs, isRepeat: event.isARepeat, client, id: id) {
                 spMode = "system-auto-text"
+                learnFlush()   // Học từ bạn gõ: ". " / "—" vừa thay — câu (ngữ cảnh) kết thúc
                 return true
             }
             // Gõ tắt (khớp iOS/Android): khoá chữ chỉ nở ở khoảng trắng / dấu câu kết thúc
@@ -914,6 +928,9 @@ final class TelexInputController: IMKInputController {
             let rewrote = boundary(client, suppressAutoRestore: boundaryChar.map(isBracket) ?? false,
                                    allowShortcuts: allow.word, allowTokenShortcuts: allow.token,
                                    allowAlnumShortcuts: allow.alnum)
+            // Học từ bạn gõ: từ vừa chốt (đứng riêng = cụm đã chốt đúng bằng từ đó).
+            learnAtBoundary(word: lastCommitWord, boundary: inserted,
+                            standsAlone: shortcutTail.run == lastCommitWord, id: id, edge: wasEdge)
             wordGluedToDigit = Self.gluesShortcutToken(boundaryChar)   // #82 số, #87 / # @ . _ -
             // Chip số (chỉ dạng tiền): dấu cách ngay sau cụm có chữ số ⇒ đọc màn hình MỘT lần
             // sau khi dấu cách tới app. Chỉ app đã chứng minh in-place (thay chữ đã chốt bằng
@@ -1933,6 +1950,7 @@ final class TelexInputController: IMKInputController {
         let wasEdge = edgeTapWord
         expandedAtBoundary = nil
         lastCommitRaw = ""
+        lastCommitWord = ""
         defer { tracking = false; onLen = 0; edgeTapWord = false }
         let id = AppState.shared.currentBundleID
         let marked = usesMarkedNow(id)
@@ -1986,6 +2004,7 @@ final class TelexInputController: IMKInputController {
         let autoRestore = AppState.shared.autoRestore && !suppressAutoRestore
         lastCommitRaw = rawWord
         let restored = engine.commitText(autoRestore: autoRestore)
+        lastCommitWord = restored
         if marked {
             // Commit the marked text (replaces it with the final word). Optional
             // suffix is a newline folded in when Return cannot be re-posted.
@@ -2213,7 +2232,11 @@ final class TelexInputController: IMKInputController {
         shortcutTail.append(s.insert)
         numberPrevRun = ""
         logDecision("caret hint \(s.kind) \(id ?? "?"): -\(range.length) +\((s.insert as NSString).length)")
-        if s.kind == .predict { afterPredictionApplied(s, client) }
+        switch s.kind {
+        case .predict: afterPredictionApplied(s, client)
+        case .typo: learn.replacePending(with: s.display)   // học dạng ĐÃ SỬA, không học lỗi gõ
+        default: learn.discard()                            // chữ vừa chốt bị thay
+        }
     }
 
     /// Chữ vừa chèn khi nhận gợi ý từ ("được ") — sống tới PHÍM KẾ (PredictionLogic.AcceptSpace).
@@ -2252,6 +2275,7 @@ final class TelexInputController: IMKInputController {
         shortcutTail.append(out)
         engine.reset()
         if out.hasSuffix(" ") { carriedSpace = String(out.prefix(1)) + " " }
+        if let e = learn.breakContext() { LearnedWords.shared.record(e, generation: learnGen) }   // dấu câu cắt câu
         logDecision("accept-space: punctuation attached, space " + (out.hasSuffix(" ") ? "moved after it" : "removed"))
         return true
     }
@@ -2260,6 +2284,7 @@ final class TelexInputController: IMKInputController {
     /// kế tiếp như sau một dấu cách gõ tay.
     private func afterPredictionApplied(_ s: CaretSuggestion, _ client: IMKTextInput) {
         acceptedSpace = s.insert.hasSuffix(" ") ? s.insert : nil
+        learnAccepted(s.display)
         // Dấu cách tự thêm tính là dấu cách thứ nhất của "chấm câu nhấn đúp" (cài đặt macOS).
         if acceptedSpace != nil, SystemAutoTextSettings.shared.period { periodSpaceNs = DispatchTime.now().uptimeNanoseconds }
         let w = s.display.lowercased()
@@ -2269,6 +2294,58 @@ final class TelexInputController: IMKInputController {
         if SystemInlinePrediction.isOn {
             CaretHint.shared.schedulePrediction(typed: "", raw: "", english: english, client: client, controller: self)
         }
+    }
+
+    // MARK: Học từ bạn gõ (LearnedWords.swift / LearnedModel.swift)
+
+    /// Cổng học — mỗi ranh giới, tắt ⇒ một lần đọc cờ: công tắc "Học từ bạn gõ", cài đặt hệ thống
+    /// gợi ý từ, app không phải terminal / trình soạn mã (SystemAutoText.appAllowed). Ô mật khẩu /
+    /// Secure Input / app passthrough không bao giờ tới đây (handle() trả sớm, không soạn).
+    private func learnGate(_ id: String?) -> Bool {
+        CaretHint.shared.flagsSnapshot.learn && SystemInlinePrediction.isOn && SystemAutoText.appAllowed(id)
+    }
+
+    /// Thế hệ dữ liệu (Xoá từ đã học) / click (con trỏ có thể dời) đổi ⇒ bỏ / cắt ngữ cảnh.
+    private func syncLearnEpoch(ignoreClicks: Bool = false) {
+        let g = LearnedWords.shared.generation, c = LearnedWords.shared.clickCount
+        if g != learnGen { learn.discard(); learnGen = g }
+        if c != learnClicks {
+            learnClicks = c
+            if !ignoreClicks, let e = learn.breakContext() { LearnedWords.shared.record(e, generation: learnGen) }
+        }
+    }
+
+    /// Ranh giới (IMK): `word` = từ bộ gõ vừa soạn + chốt ("" = không có / gõ tắt nở — không học
+    /// nội dung nở), `boundary` = ký tự vừa chèn (nil = Enter / Tab / Esc / phím không chèn chữ ⇒
+    /// cắt ngữ cảnh). Edge (Slate — burst tổng hợp, chữ trên màn hình kém chắc) không học.
+    private func learnAtBoundary(word: String, boundary: String?, standsAlone: Bool, id: String?, edge: Bool) {
+        guard !edge, learnGate(id) else {
+            if learn.pending != nil || learn.prev1 != nil { learn.discard() }
+            return
+        }
+        syncLearnEpoch()
+        var out: [LearnTracker.Event] = []
+        if let b = boundary {
+            if let e = learn.commit(word, boundary: b, standsAlone: standsAlone) { out.append(e) }
+        } else {
+            if !word.isEmpty, let e = learn.commit(word, boundary: "\n", standsAlone: standsAlone) { out.append(e) }
+            if let e = learn.breakContext() { out.append(e) }
+        }
+        for e in out { LearnedWords.shared.record(e, generation: learnGen) }
+    }
+
+    /// Gợi ý từ vừa được nhận (Tab / click): học với trọng số 2 như iOS.
+    private func learnAccepted(_ word: String) {
+        guard learnGate(AppState.shared.currentBundleID) else { learn.discard(); return }
+        syncLearnEpoch(ignoreClicks: true)    // click nhận gợi ý không phải dời con trỏ
+        if let e = learn.commit(word, boundary: " ", standsAlone: true, weight: 2) {
+            LearnedWords.shared.record(e, generation: learnGen)
+        }
+    }
+
+    /// Đổi ô / app: lượt chờ được học, ngữ cảnh cắt.
+    private func learnFlush() {
+        if let e = learn.breakContext() { LearnedWords.shared.record(e, generation: learnGen) }
     }
 
     /// Sau một phím chữ (đã xử lý): hẹn gợi ý hoàn thành từ đang gõ. Chỉ app đã chứng minh
@@ -2330,6 +2407,7 @@ final class TelexInputController: IMKInputController {
         // have been a swallowed Tab).
         NavKeyWitness.reset()
         engine.resetContext()   // new field/app: don't inherit the last word's English context
+        learnFlush()            // Học từ bạn gõ: ô mới — ngữ cảnh không nối sang
         fieldVerified = false
         fieldForcedMarked = false
         fieldVerifyStrikes = 0
@@ -2463,6 +2541,7 @@ final class TelexInputController: IMKInputController {
     override func deactivateServer(_ sender: Any!) {
         dropComposition(cause: "deactivateServer")
         CaretHint.shared.dismiss()
+        learnFlush()   // Học từ bạn gõ: rời ô — lượt chờ được học, ngữ cảnh cắt
         if Self.activeController === self { Self.activeController = nil }
         if let obs = resetObserver { NotificationCenter.default.removeObserver(obs); resetObserver = nil }
         acceptedSpace = nil; carriedSpace = nil

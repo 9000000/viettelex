@@ -61,6 +61,10 @@ struct Settings {
     // "Lọc từ nhạy cảm" (iOS/macOS filterSensitive, default ON): word prediction + typo fixes
     // never offer SensitiveWords.set. Read by VietTelex.exe (HintJobs) — the TIP only shows.
     bool filterSensitive = true;
+    // "Học từ bạn gõ" (iOS/macOS, default ON; only with word prediction on): the TIP sends the
+    // words it composed and committed (caret_hint_ipc.h HintJob::Learn) to VietTelex.exe, which
+    // keeps the counts in %LOCALAPPDATA%\VietTelex\learned-words.bin (app/core/learned_words.h).
+    bool learnWords = true;
     // Games / fullscreen (app/core/game_logic.h, ime/core/game_ipc.h).
     //   autoOffFullscreen: VietTelex stands aside (eats no key) while an exclusive-fullscreen
     //     Direct3D app/game (or a slideshow) is in the foreground. Default ON — borderless

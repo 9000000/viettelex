@@ -50,6 +50,7 @@
 		1FF871030AE86A2D91C9B81E /* ShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121671DAC21692CEBCF9B296 /* ShortcutTests.swift */; };
 		20F63EA1CEB8F35CCDFB7724 /* emoji.bin in Resources */ = {isa = PBXBuildFile; fileRef = 0EBD4D68E1E032F0E0FBB27B /* emoji.bin */; };
 		21079B460094A0461A80E0FC /* EmojiAtlas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B235B84E86F71BBBB10E836 /* EmojiAtlas.swift */; };
+		216CC0F15C2D7F66502121F9 /* UserLMTables.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87B560D6CFFCE1B0B57742E3 /* UserLMTables.swift */; };
 		217BFFCE84C84D2083F2A528 /* MathResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1859475A5F95F02805768CA /* MathResults.swift */; };
 		219B1BC4D3AE371B52BF9259 /* EmojiDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 104D515FA297531BCEF3AA25 /* EmojiDataTests.swift */; };
 		21A0A2CBF27A70227AB2FE28 /* PlusStoreModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C44AD1817EC463233B42B2D /* PlusStoreModel.swift */; };
@@ -79,6 +80,7 @@
 		2DB77D80E80526F0BD1D7EEC /* userlm-vtl2.bin in Resources */ = {isa = PBXBuildFile; fileRef = 6FA7EECB778753ABA3C1B49B /* userlm-vtl2.bin */; };
 		2EB255281257BD33FED7B2D8 /* ClipDetect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F980E450F0B3851CDC5361F /* ClipDetect.swift */; };
 		2EB3139E049820E47859ECA3 /* SwipeDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 705734FC03226DA179E14A71 /* SwipeDecoder.swift */; };
+		30258E0C2371CFAE67F12754 /* UserLMTables.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87B560D6CFFCE1B0B57742E3 /* UserLMTables.swift */; };
 		3083AE37C20908DB486DE722 /* SyllableLM.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A253A0432EF946B10B4E511 /* SyllableLM.swift */; };
 		30F54CD6827BDA90BB2CAB53 /* TrackpadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D2E54E996214AA4F8CB065 /* TrackpadTests.swift */; };
 		3114B687743026F5D4FA7DCA /* TranslateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7340E73EA99323208B2E25A7 /* TranslateSettingsView.swift */; };
@@ -304,6 +306,7 @@
 		E295B1FEA8D18A42FF77BD3A /* EmojiSuggest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CCA79BB7903D0F4A2BC56B5 /* EmojiSuggest.swift */; };
 		E29FDF78A65EA7E6F0F8EF8F /* SensitiveWords.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9F4445707DBA22FE5219CD /* SensitiveWords.swift */; };
 		E318F2FD0A91CFD018E4BC65 /* Wallpaper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A12BC49EB45298684CF97D /* Wallpaper.swift */; };
+		E36CA3CB7199842336DF87EB /* UserLMTables.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87B560D6CFFCE1B0B57742E3 /* UserLMTables.swift */; };
 		E6D596FF4699916EC99C811C /* KeyGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 491E9FDC24E9CC711FC62BD8 /* KeyGeometryTests.swift */; };
 		E74F85FA5D7275FFA0E8F759 /* NumberRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE8993F83A60C653C26799EC /* NumberRowTests.swift */; };
 		E8DB9BE35A9F0D3CE0E869E6 /* FutoSwipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76444B4521814651DA2C026A /* FutoSwipe.swift */; };
@@ -512,6 +515,7 @@
 		821BD7CBEE8349CC782C3E41 /* SwipeTypingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeTypingTests.swift; sourceTree = "<group>"; };
 		853A101B912DF1524B01E1A2 /* KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
 		874923DAE33DB7FA95441F18 /* bigram-heldout.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "bigram-heldout.txt"; sourceTree = "<group>"; };
+		87B560D6CFFCE1B0B57742E3 /* UserLMTables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserLMTables.swift; sourceTree = "<group>"; };
 		8AD709650C25830CA926EBCF /* EngineBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineBridge.swift; sourceTree = "<group>"; };
 		8AF5F8C17DF806D66D530AA6 /* KeySound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeySound.swift; sourceTree = "<group>"; };
 		8B3578841CEB4885B61BD148 /* VTCatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VTCatchTests.swift; sourceTree = "<group>"; };
@@ -983,6 +987,7 @@
 				58D98494210ACD4B0ED51A92 /* Trackpad.swift */,
 				ADEE2E97D8CBDA3CAE8C94C1 /* Translate.swift */,
 				F316CA910C58A9377DC754A0 /* UserLangModel.swift */,
+				87B560D6CFFCE1B0B57742E3 /* UserLMTables.swift */,
 				5E29815B4F2B0747B961A561 /* VNLexicon2.swift */,
 				C445BEBA75DFC20101EC3BA9 /* VNSuggest.swift */,
 				69A12BC49EB45298684CF97D /* Wallpaper.swift */,
@@ -1297,6 +1302,7 @@
 				8DE8F0376AD4F1CB2382F531 /* Trackpad.swift in Sources */,
 				FADE8B2CFCE6F04C0B6235C0 /* Translate.swift in Sources */,
 				8ED2C863FDB34599CA463016 /* TranslatePrefs.swift in Sources */,
+				E36CA3CB7199842336DF87EB /* UserLMTables.swift in Sources */,
 				1FE0301F7BA4765FA3C922D5 /* UserLangModel.swift in Sources */,
 				99E9949680619BC9BFBE9CB6 /* VNLexicon2.swift in Sources */,
 				DD68A1CBFFCFAC0280ACC90C /* VNSuggest.swift in Sources */,
@@ -1346,6 +1352,7 @@
 				4A1DAD15F27FA4005C5D4058 /* TranslatePrefs.swift in Sources */,
 				3114B687743026F5D4FA7DCA /* TranslateSettingsView.swift in Sources */,
 				FFB0F631AA7DA97FB9E1240F /* UserDictView.swift in Sources */,
+				216CC0F15C2D7F66502121F9 /* UserLMTables.swift in Sources */,
 				69793AB17BAB31D9B59FBDDD /* UserLangModel.swift in Sources */,
 				22F2A416452F74CABC57AAC5 /* VNLexicon2.swift in Sources */,
 				8B2674020C20D7CCCE423A49 /* VNSuggest.swift in Sources */,
@@ -1510,6 +1517,7 @@
 				26F92D30462E28A390FD70A6 /* UXSnapshotTests.swift in Sources */,
 				C9ED085F787CE2F94907BAD6 /* UserDictionaryTests.swift in Sources */,
 				06924CF4C8D5C5EE80A6A054 /* UserLMCompactTests.swift in Sources */,
+				30258E0C2371CFAE67F12754 /* UserLMTables.swift in Sources */,
 				18EB5C9002EAD3991F709FD5 /* UserLangModel.swift in Sources */,
 				EDE33BDBBCE7875A6E52E1C9 /* VNIBridgeTests.swift in Sources */,
 				FE2B9309D2217292E28A9A44 /* VNLexicon2.swift in Sources */,

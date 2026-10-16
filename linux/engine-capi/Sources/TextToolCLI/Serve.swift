@@ -12,8 +12,12 @@
 //   date    <before> <prevRun> <run> <boundary> <Y> <M> <D> <h> <m>
 //   typo    <before> <word> <boundary> <raw> <flags 10×0/1> [<filter 0|1>]
 //   tones   <before>
-//   predict <before> <typed> <raw> <english 0|1> [<filter 0|1>]  (gợi ý từ — Predict.swift)
+//   predict <before> <typed> <raw> <english 0|1> [<filter 0|1>] [<learn 0|1>]  (gợi ý từ — Predict.swift)
+//   learn   <word> <prev1> <prev2> <weight>                  → ok   (Học từ bạn gõ — LearnStore.swift)
+//   learnclear                                                → ok   (Xoá từ đã học)
 // `filter` = [general] filter_sensitive ("Lọc từ nhạy cảm"); thiếu ⇒ 1 (bật, như iOS).
+// `learn` = dùng dữ liệu đã học ([general] learn_words); thiếu ⇒ 0 (không nạp gì). Lượt `learn`
+// chỉ tới khi Session đã qua mọi cổng (công tắc, ô mật khẩu, terminal, chế độ tiếng Anh…).
 // Trả lời: `-` (không gợi ý) hoặc `<kind> <display> <replace> <insert>` (predict: một ứng viên).
 import Foundation
 #if canImport(Glibc)
@@ -94,7 +98,16 @@ enum HintProtocol {
             return answer(TypoFixLogic.suggestion(before: before, word: word, boundary: boundary, raw: raw, fix: fix))
         case "predict":
             return predictAnswer(before: before, typed: at(2), raw: at(3), english: at(4) == "1",
-                                 filterSensitive: filterAt(5))
+                                 filterSensitive: filterAt(5), learned: at(6) == "1")
+        case "learn":
+            let w = at(1)
+            guard !w.isEmpty, w.utf8.count <= 64, let weight = Int(at(4)), (1...2).contains(weight) else { return "-" }
+            LearnStore.shared.record(word: w, prev1: at(2).isEmpty ? nil : at(2),
+                                     prev2: at(3).isEmpty ? nil : at(3), weight: weight)
+            return "ok"
+        case "learnclear":
+            LearnStore.shared.clear()
+            return "ok"
         case "tones":
             guard let run = ToneRunLogic.run(before: before),
                   let restored = apply(.addTones, run) else { return "-" }
@@ -106,20 +119,37 @@ enum HintProtocol {
     }
 }
 
-/// Vòng lặp --serve: đọc stdin theo dòng (poll có hạn giờ), trả lời ngay từng dòng.
+/// Vòng lặp --serve: đọc stdin theo dòng (poll có hạn giờ), trả lời ngay từng dòng. Có lượt học
+/// chờ lưu ⇒ poll thức dậy đúng hẹn để ghi (LearnStore); rảnh `idleSeconds` / bộ gõ đóng ống ⇒
+/// ghi nốt rồi thoát.
 func serve(idleSeconds: Int32 = 120) -> Never {
     var pending: [UInt8] = []
     var buf = [UInt8](repeating: 0, count: 16384)
+    let idle = Double(idleSeconds)
+    var lastRequest = LearnStore.now()
+    func quit(_ code: Int32) -> Never {
+        LearnStore.shared.saveIfDue(force: true)
+        exit(code)
+    }
     while true {
+        let now = LearnStore.now()
+        let idleLeft = max(0, lastRequest + idle - now)
+        var timeout = Int32(min(idleLeft * 1000, Double(Int32.max - 1)))
+        if let s = LearnStore.shared.msUntilSave(now: now) { timeout = min(timeout, s) }
         var p = pollfd(fd: 0, events: Int16(POLLIN), revents: 0)
-        let r = poll(&p, 1, idleSeconds * 1000)
-        if r < 0 { if errno == EINTR { continue }; exit(0) }
-        if r == 0 { exit(0) }                             // rảnh lâu: nhường RAM, bộ gõ mở lại khi cần
+        let r = poll(&p, 1, timeout)
+        if r < 0 { if errno == EINTR { continue }; quit(0) }
+        if r == 0 {
+            LearnStore.shared.saveIfDue()
+            if LearnStore.now() - lastRequest >= idle { quit(0) }   // rảnh lâu: nhường RAM
+            continue
+        }
         let n = buf.withUnsafeMutableBytes { read(0, $0.baseAddress, $0.count) }
-        if n < 0 { if errno == EINTR || errno == EAGAIN { continue }; exit(0) }
-        if n == 0 { exit(0) }                             // bộ gõ đóng ống
+        if n < 0 { if errno == EINTR || errno == EAGAIN { continue }; quit(0) }
+        if n == 0 { quit(0) }                             // bộ gõ đóng ống
+        lastRequest = LearnStore.now()
         pending.append(contentsOf: buf[0..<n])
-        if pending.count > 1 << 20 { exit(2) }
+        if pending.count > 1 << 20 { quit(2) }
         while let nl = pending.firstIndex(of: 10) {
             let line = String(decoding: pending[..<nl], as: UTF8.self)
             pending.removeSubrange(...nl)

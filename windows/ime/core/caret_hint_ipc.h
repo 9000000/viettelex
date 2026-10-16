@@ -13,6 +13,9 @@
 // Predict (gợi ý từ, app/core/word_prediction.h): text = packPredictText(before the caret,
 //   word being typed, its raw keys), flags = kPredictEnglish when the previous word was
 //   English; result = the top-ranked candidate ("" = none) — one suggestion, no list.
+// Learn ("Học từ bạn gõ", app/core/learned_words.h): text = packLearnEvents(committed words the
+//   TIP composed, each with its ≤ 2 context words and weight) — one-way: the app records them
+//   (if its own switch is on), never replies. Sent from a TIP timer, never inside a key handler.
 // Up the integrity ladder only via the WM_COPYDATA filter the app already opens.
 #pragma once
 #include <cstdint>
@@ -25,8 +28,59 @@ constexpr uint32_t kCopyHintRequest = 0x56544831u;  // "VTH1" TIP -> app
 constexpr uint32_t kCopyHintReply = 0x56544832u;    // "VTH2" app -> TIP
 constexpr size_t kHintMaxLength = 400;              // UTF-16 units (tones window + slack)
 
-enum class HintJob : uint32_t { Typo = 1, Tones = 2, Predict = 3 };
-inline bool isValidHintJob(uint32_t v) { return v >= 1 && v <= 3; }
+enum class HintJob : uint32_t { Typo = 1, Tones = 2, Predict = 3, Learn = 4 };
+inline bool isValidHintJob(uint32_t v) { return v >= 1 && v <= 4; }
+
+// ---- Learn job payload: events separated by U+001E, fields by U+001F:
+//   <weight digit> US <word> US <prev1> US <prev2>   (empty field = none)
+constexpr char16_t kLearnRecordSep = 0x1E;
+struct LearnEvent {
+    std::u16string word, prev1, prev2;
+    int weight = 1;
+    bool operator==(const LearnEvent& o) const {
+        return word == o.word && prev1 == o.prev1 && prev2 == o.prev2 && weight == o.weight;
+    }
+};
+
+// Appends `e` to a packed queue; false (unchanged) if it would exceed kHintMaxLength.
+inline bool appendLearnEvent(std::u16string& queue, const LearnEvent& e) {
+    std::u16string r;
+    r.push_back(static_cast<char16_t>(u'0' + (e.weight == 2 ? 2 : 1)));
+    for (const std::u16string* f : {&e.word, &e.prev1, &e.prev2}) {
+        r.push_back(0x1F);
+        for (char16_t c : *f)
+            if (c != 0x1F && c != kLearnRecordSep) r.push_back(c);
+    }
+    const size_t need = r.size() + (queue.empty() ? 0 : 1);
+    if (queue.size() + need > kHintMaxLength) return false;
+    if (!queue.empty()) queue.push_back(kLearnRecordSep);
+    queue += r;
+    return true;
+}
+
+// Malformed records are skipped.
+inline std::vector<LearnEvent> unpackLearnEvents(const std::u16string& t) {
+    std::vector<LearnEvent> out;
+    size_t a = 0;
+    while (a <= t.size()) {
+        size_t b = t.find(kLearnRecordSep, a);
+        if (b == std::u16string::npos) b = t.size();
+        const std::u16string r = t.substr(a, b - a);
+        std::vector<std::u16string> f;
+        size_t p = 0;
+        while (true) {
+            const size_t q = r.find(char16_t(0x1F), p);
+            f.push_back(r.substr(p, q == std::u16string::npos ? std::u16string::npos : q - p));
+            if (q == std::u16string::npos) break;
+            p = q + 1;
+        }
+        if (f.size() == 4 && (f[0] == u"1" || f[0] == u"2") && !f[1].empty())
+            out.push_back(LearnEvent{f[1], f[2], f[3], f[0] == u"2" ? 2 : 1});
+        if (b == t.size()) break;
+        a = b + 1;
+    }
+    return out;
+}
 
 // ---- Predict job payload. U+001F never occurs in typed text (control character).
 constexpr char16_t kPredictSep = 0x1F;

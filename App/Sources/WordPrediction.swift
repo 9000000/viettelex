@@ -24,7 +24,8 @@
 // tiếp SeedNextData — Scripts/gen-seed-next.sh) + DisplayCase + SensitiveWords (công tắc "Lọc
 // từ nhạy cảm", mặc định bật) + EnglishLite (enlexicon.bin mmap). Các file iOS được biên dịch
 // thẳng vào target macOS (project.yml).
-// KHÔNG HỌC từ người dùng trên macOS (chưa): xem `PredictionModel`.
+// HỌC TỪ BẠN GÕ (16/10/2026): LearnedModel.swift (mô hình + LearnTracker, chung Linux) +
+// LearnedWords.swift (kho macOS). `candidates(..., learned:)` — mô hình rỗng/nil cho đúng kết quả seed.
 //
 // HIỆU NĂNG (ưu tiên số 1): công tắc tắt ⇒ không nạp gì, mỗi phím một lần đọc Bool dưới khoá.
 // Bật: phím chỉ hẹn giờ (`idleDelay`, huỷ khi có phím mới); hết giờ mà không có phím mới mới
@@ -288,9 +289,9 @@ enum PredictionLogic {
 /// literal SeedData.bigrams: thứ tự seed đã được tính sẵn bằng chính mã iOS (SeedNextData).
 /// CHỈ dùng trên hàng đợi nền của CaretHint (`work`, nối tiếp).
 ///
-/// KHÔNG HỌC trên macOS (quyết định 16/10/2026): học cần nhận đúng từ đã chốt ở cả hai đường
-/// (IMK + tap), loại ô mật khẩu/terminal/app tắt, lưu file + đồng bộ — rủi ro riêng tư/độ đúng
-/// lớn hơn lợi ích ở bản đầu.
+/// Học từ bạn gõ (maintainer duyệt 16/10/2026, LearnedModel.swift): chỉ đường IMK (từ bộ gõ tự
+/// soạn + chốt ở ranh giới); đường tap không học (văn bản kém chắc — AX/dòng phím), không ở ô mật
+/// khẩu / Secure Input / terminal / trình soạn mã / app passthrough; không đồng bộ.
 final class PredictionModel {
     static let shared = PredictionModel()
 
@@ -324,20 +325,34 @@ final class PredictionModel {
     /// Ứng viên (đã chỉnh hoa/thường) cho lượt `r`; `raw` = phím thô của từ đang gõ;
     /// `filterSensitive` = "Lọc từ nhạy cảm" (AppState.filterSensitive — như công tắc iOS, mặc
     /// định BẬT: SensitiveWords.filter ở đúng các chỗ thanh gợi ý iOS lọc).
-    func candidates(_ r: PredictionLogic.Request, raw: String, filterSensitive filterOn: Bool = true) -> [String] {
+    /// `learned` = "Học từ bạn gõ" (LearnedModel.swift; nil = tắt / chưa nạp ⇒ đúng kết quả
+    /// seed như trước). Cùng hợp đồng iOS: count = seed + đếm học, ngữ cảnh +4 = nextWords
+    /// cá nhân, từ kế tiếp = SuggestRank.nextFill(personal:triCount:) không lùi bigram tĩnh.
+    func candidates(_ r: PredictionLogic.Request, raw: String, filterSensitive filterOn: Bool = true,
+                    learned: LearnedModel? = nil) -> [String] {
         if r.typed.isEmpty {
             // = SuggestRank.nextFill với người dùng iOS mới (`personal` = nextWords seed ≤ 6, đã
             // lọc): có dòng trigram (prev2, prev) ⇒ trigram tĩnh trước rồi seed; không ⇒ chỉ seed
             // — KHÔNG lùi bigram tĩnh ("Tên ␣" → không gì). Hạng 1 vì thế đúng hạng 1 của iOS.
             guard PredictionLogic.wantsSeedNext(r), let prev = r.prev else { return [] }
-            var personal = SensitiveWords.filter(Array(seedNext(prev).prefix(6)), enabled: filterOn)
+            // personal = nextWords cá nhân (dữ liệu học ⊕ seed, ≤ 6) — cặp học chỉ vào khi đã gõ
+            // ≥ LearnedModel.learnedPairMin lần (luật không đoán bigram sau một từ).
+            let seeds = seedNext(prev)
+            let mine = learned.map { $0.nextWords(after: prev, prev2: r.prev2, seeds: seeds, limit: 6) }
+                ?? Array(seeds.prefix(6))
+            var personal = SensitiveWords.filter(mine, enabled: filterOn)
             if r.english { personal = personal.filter { EnglishLite.contains($0) } }
-            var tri: [String] = []
+            var tri: [String] = [], lead: [String] = []
             if PredictionLogic.wantsNextWord(r), let prev2 = r.prev2, VNSuggest.lexiconId(of: prev) != nil,
                let top = SuggestRank.topNext(prev, prev2: prev2, limit: 6), top.trigram {
                 tri = SensitiveWords.filter(top.words, enabled: filterOn)
+                // iOS nextFill: có dòng trigram tĩnh ⇒ bộ ba người dùng đã gõ ≥ learnedTriMin lần
+                // dẫn đầu (≤ 2), rồi trigram tĩnh, rồi personal.
+                if let l = learned {
+                    lead = Array(personal.filter { l.trigramCount(prev2, prev, $0) >= SuggestRank.learnedTriMin }.prefix(2))
+                }
             }
-            let next = SuggestionFill.pad([], with: tri + personal, need: PredictionLogic.rankDepth)
+            let next = SuggestionFill.pad(lead, with: tri + personal, need: PredictionLogic.rankDepth)
             return next.map { DisplayCase.apply($0, after: prev) }
         }
         let typed = r.typed
@@ -353,9 +368,15 @@ final class PredictionModel {
             let pmi = SuggestRank.inlinePmi(pool, prev: r.prev, prev2: r.prev2)
             // ctx = nextWords seed của từ trước (iOS: Set(nextWords(after: prev, limit: 24))) ⇒
             // +4 cho ứng viên seed, LM nhân bigramDamp — cùng hợp đồng tầng 2/7.
-            let ctx = r.prev.map { Set(seedNext($0)) } ?? []
+            // Học từ bạn gõ: ngữ cảnh = nextWords cá nhân (không chặn cặp, limit 24 như iOS),
+            // count = seed + đếm học (iOS: store mồi seed rồi cộng dồn).
+            let ctx: Set<String> = r.prev.map { p in
+                let seeds = seedNext(p)
+                return Set(learned.map { $0.nextWords(after: p, prev2: r.prev2, seeds: seeds, limit: 24, pairMin: 0) } ?? seeds)
+            } ?? []
+            let personalCount: (String) -> Int = learned.map { l in { self.count($0) + l.count($0) } } ?? count
             let ranked = SensitiveWords.filter(
-                SuggestRank.rankInline(pool, pmi: pmi, typedLen: typed.count, count: count, ctx: ctx),
+                SuggestRank.rankInline(pool, pmi: pmi, typedLen: typed.count, count: personalCount, ctx: ctx),
                 enabled: filterOn)
             return PredictionLogic.completions(ranked, typed: typed).map {
                 SuggestionCase.display(DisplayCase.apply($0, after: r.prev), shift: .off, typed: typed)

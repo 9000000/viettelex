@@ -409,6 +409,94 @@ TEST(hints_session_reports_committed_word) {
     }
 }
 
+
+// ---------------------------------------------------------------- Học từ bạn gõ (TIP side)
+// LearnTracker / learnable = App/Sources/LearnedModel.swift (AppTests/LearnedWordsTests);
+// the session's lastCommitWord; the Learn job payload.
+
+TEST(learn_tracker_context_and_pending) {
+    LearnTracker t;
+    LearnTracker::Event e;
+    CHECK(!t.commit(U"Ăn", U' ', true, 1, e));
+    CHECK(t.hasPending() && t.pending().word == U"ăn");
+    CHECK(t.commit(U"cơm", U',', true, 1, e) && e.word == U"ăn" && e.prev1.empty());
+    CHECK(t.prev1().empty());  // punctuation cuts the context
+    CHECK(t.commit(U"rồi", U' ', true, 1, e) && e.word == U"cơm" && e.prev1 == U"ăn");
+    t.discard();
+    CHECK(!t.hasPending() && !t.breakContext(e));
+    CHECK(!t.commit(U"đi", U' ', true, 1, e));
+    CHECK(t.commit(U"x1", U' ', true, 1, e) && e.word == U"đi");
+    CHECK(!t.hasPending());
+    CHECK(!t.commit(U"học", U' ', false, 1, e) && !t.hasPending());
+    LearnTracker f;
+    f.commit(U"tôi", U' ', true, 1, e);
+    f.commit(U"dii", U' ', true, 1, e);
+    f.replacePending(U"đi");  // accepted typo fix: the fixed form, same context
+    CHECK(f.pending().word == U"đi" && f.pending().prev1 == U"tôi");
+    CHECK(f.commit(U"học", U' ', true, 1, e) && e.word == U"đi");
+    CHECK(f.pending().prev1 == U"đi");
+    CHECK(learnable(U"cơm") && learnable(U"Phúc") && learnable(U"heey"));
+    CHECK(!learnable(U"heeey") && !learnable(U"a1") && !learnable(U""));
+    CHECK(learnable(U"abcdefghijkl") && !learnable(U"abcdefghijklm") && !learnable(U"e-mail"));
+}
+
+TEST(learn_event_payload_roundtrip) {
+    std::u16string q;
+    CHECK(appendLearnEvent(q, LearnEvent{u"cơm", u"ăn", u"", 1}));
+    CHECK(appendLearnEvent(q, LearnEvent{u"được", u"tôi", u"anh", 2}));
+    CHECK(appendLearnEvent(q, LearnEvent{u"x\x1f\x1ey", u"", u"", 1}));  // separators stripped
+    const std::vector<LearnEvent> back = unpackLearnEvents(q);
+    CHECK_EQ(back.size(), static_cast<size_t>(3));
+    if (back.size() == 3) {
+        CHECK(back[0] == (LearnEvent{u"cơm", u"ăn", u"", 1}));
+        CHECK(back[1] == (LearnEvent{u"được", u"tôi", u"anh", 2}));
+        CHECK(back[2].word == u"xy");
+    }
+    CHECK(unpackLearnEvents(u"").empty());
+    CHECK(unpackLearnEvents(u"garbage").empty());
+    CHECK(unpackLearnEvents(u"9\x1fw\x1f\x1f").empty());  // bad weight
+    // Capped at kHintMaxLength: a full queue refuses (the TIP sends it, then queues again).
+    std::u16string full;
+    int n = 0;
+    while (appendLearnEvent(full, LearnEvent{u"abcdefghijkl", u"abcdefghijkl", u"abcdefghijkl", 1})) ++n;
+    CHECK(n > 5 && full.size() <= kHintMaxLength);
+    HintMessage m;
+    m.job = static_cast<uint32_t>(HintJob::Learn);
+    m.text = q;
+    const std::vector<uint8_t> b = packHintMessage(m);
+    HintMessage back2;
+    CHECK(unpackHintMessage(b.data(), b.size(), back2) && back2.job == 4 && back2.text == q);
+}
+
+TEST(learn_session_last_commit_word) {
+    TypingSession s;
+    Settings st;
+    SessionOptions o;
+    o.engineFlags = st.engineFlags();
+    o.autoRestore = st.autoRestore;
+    o.shortcuts = &st.shortcuts;
+    s.configure(o);
+    test::FakeDocument doc;
+    auto key = [&](KeyKind kind, char c) {
+        KeyInput k;
+        k.kind = kind;
+        k.ch = static_cast<unsigned char>(c);
+        const bool eaten = s.wantsKey(k) && s.handleKey(k, doc);
+        if (!eaten && kind == KeyKind::Char) doc.appInsert(static_cast<char16_t>(c));
+    };
+    for (char c : std::string("awn")) key(KeyKind::Char, c);
+    CHECK(s.lastCommitWord().empty());
+    key(KeyKind::Char, ' ');
+    CHECK_EQ(utf16ToUtf8(s.lastCommitWord()), std::string("ăn"));
+    for (char c : std::string("cowm")) key(KeyKind::Char, c);
+    key(KeyKind::Boundary, 0);  // Enter: committed too (lastCommitText stays printable-only)
+    CHECK_EQ(utf16ToUtf8(s.lastCommitWord()), std::string("cơm"));
+    CHECK(s.lastCommitText().empty());
+    for (char c : std::string("abc")) key(KeyKind::Char, c);
+    key(KeyKind::Chord, 0);  // Ctrl+key: never
+    CHECK(s.lastCommitWord().empty());
+}
+
 // ---------------------------------------------------------------- where to show
 
 TEST(hints_caret_rect_plausibility) {

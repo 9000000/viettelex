@@ -10,6 +10,8 @@
 #include <viettelex/add_tones.hpp>
 #include <viettelex/text_tools.hpp>
 
+#include "learned_words.h"
+
 namespace vtx::app::predict {
 
 namespace {
@@ -426,7 +428,8 @@ std::vector<std::u32string> Model::englishCompletions(const std::u32string& type
     return out;
 }
 
-std::vector<std::u32string> Model::candidates(const Request& r, const std::u32string& raw, bool filterOn) const {
+std::vector<std::u32string> Model::candidates(const Request& r, const std::u32string& raw, bool filterOn,
+                                              const learn::Model* learned) const {
     std::vector<std::u32string> out;
     if (!data_.ok()) return out;
     if (r.typed.empty()) {
@@ -434,14 +437,33 @@ std::vector<std::u32string> Model::candidates(const Request& r, const std::u32st
         // a trigram row for (prev2, prev) => the static trigram first, then the seed; else the
         // seed only — never the static bigram row.
         if (!wantsSeedNext(r)) return out;
+        // personal = learned next words ⊕ seed (≤ 6) — a learned pair only once typed
+        // ≥ learn::kLearnedPairMin times (no plain one-word bigram guess).
         std::vector<std::u32string> all = seedNext(lowerS(*r.prev)), personal;
-        if (all.size() > 6) all.resize(6);
+        if (learned) {
+            std::vector<std::string> seeds;
+            seeds.reserve(all.size());
+            for (const auto& s : all) seeds.push_back(u8(s));
+            all.clear();
+            for (const auto& w : learned->nextWords(u8(*r.prev), r.prev2 ? u8(*r.prev2) : std::string(), seeds, 6))
+                all.push_back(u32(w));
+        } else if (all.size() > 6) {
+            all.resize(6);
+        }
         for (const auto& w : filterSensitive(all, filterOn))
             if (!r.english || data_.english.contains(u8(w))) personal.push_back(w);
         std::vector<std::u32string> cands;
         Top tri;
-        if (wantsNextWord(r) && index_.lexiconId(*r.prev) >= 0 && topNext(*r.prev, r.prev2, 6, tri) && tri.trigram)
-            cands = filterSensitive(words(tri), filterOn);
+        if (wantsNextWord(r) && index_.lexiconId(*r.prev) >= 0 && topNext(*r.prev, r.prev2, 6, tri) && tri.trigram) {
+            // iOS nextFill: a learned triple typed ≥ learnedTriMin times leads (≤ 2), then the
+            // static trigram row, then personal.
+            if (learned)
+                for (const auto& w : personal)
+                    if (cands.size() < 2 && learned->trigramCount(u8(*r.prev2), u8(*r.prev), u8(w)) >= learn::kLearnedPairMin)
+                        cands.push_back(w);
+            const auto t = filterSensitive(words(tri), filterOn);
+            cands.insert(cands.end(), t.begin(), t.end());
+        }
         cands.insert(cands.end(), personal.begin(), personal.end());
         for (const auto& w : pad(cands, kRankDepth)) out.push_back(displayCase(w, r.prev));
         return out;
@@ -481,8 +503,17 @@ std::vector<std::u32string> Model::candidates(const Request& r, const std::u32st
         }
         // SuggestRank.rankInline: ctx = seed next words of the previous word (iOS
         // Set(nextWords(after: prev, limit: 24))) => +4, and the LM damped when any is in the pool.
+        // Học từ bạn gõ: context = personal next words (no pair gate, limit 24 as iOS), count =
+        // seed + learned (the iOS store is seeded, then counts up).
         std::vector<std::u32string> ctx;
         if (r.prev) ctx = seedNext(lowerS(*r.prev));
+        if (r.prev && learned) {
+            std::vector<std::string> seeds;
+            for (const auto& s : ctx) seeds.push_back(u8(s));
+            ctx.clear();
+            for (const auto& w : learned->nextWords(u8(*r.prev), r.prev2 ? u8(*r.prev2) : std::string(), seeds, 24, 0))
+                ctx.push_back(u32(w));
+        }
         auto inCtx = [&](const std::u32string& w) { return std::find(ctx.begin(), ctx.end(), w) != ctx.end(); };
         const size_t typedLen = glen(typed);
         std::vector<std::pair<size_t, double>> scored;
@@ -496,7 +527,8 @@ std::vector<std::u32string> Model::candidates(const Request& r, const std::u32st
             if (havePmi && i < pmi.size() && pmi[i] > 0)
                 b = std::min(kBigramCap, kBigramWeight * static_cast<double>(pmi[i])) * damp;
             const double s = std::log(static_cast<double>(pool[i].freq) + 1) +
-                             2.5 * std::log(static_cast<double>(seedCount(std::string(pool[i].word))) + 1) +
+                             2.5 * std::log(static_cast<double>(seedCount(std::string(pool[i].word)) +
+                                                                (learned ? learned->count(std::string(pool[i].word)) : 0)) + 1) +
                              (inCtx(poolWords[i]) ? 4 : 0) + (glen(poolWords[i]) == typedLen ? 1.5 : 0) + b;
             scored.emplace_back(i, s);
         }

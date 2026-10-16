@@ -81,7 +81,7 @@ for i in stride(from: 0, to: offs.count, by: 16) {
 inc += "};\n"
 try! inc.write(toFile: CommandLine.arguments[2], atomically: true, encoding: .utf8)
 SWIFT
-swiftc -O -o "$TMP/gen" "$TMP/main.swift" "$TMP/UserLangModel.swift" "$KB/SeedData.swift" \
+swiftc -O -o "$TMP/gen" "$TMP/main.swift" "$TMP/UserLangModel.swift" "$KB/UserLMTables.swift" "$KB/SeedData.swift" \
   "$KB/VNSuggest.swift" "$KB/VNLexicon2.swift" "$KB/SyllableLM.swift" "$KB/SwipeLexicon.swift"
 # VNLexicon2Data đọc vnlexicon.bin cạnh executable (Bundle.main của công cụ dòng lệnh).
 cp "$KB/Resources/vnlexicon.bin" "$TMP/"

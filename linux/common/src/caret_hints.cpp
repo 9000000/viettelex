@@ -274,6 +274,69 @@ void Rejected::add(const std::string &w) {
     }
 }
 
+// MARK: Học từ bạn gõ (LearnedModel.swift)
+
+bool learnable(const std::string &w) {
+    std::vector<uint32_t> cps = decode(w);
+    if (cps.empty() || cps.size() > 12) return false;
+    int run = 0;
+    uint32_t prev = 0;
+    for (uint32_t c : cps) {
+        if (!isLetterCp(c)) return false;
+        run = c == prev ? run + 1 : 1;
+        if (run >= 3) return false;
+        prev = c;
+    }
+    return true;
+}
+
+bool LearnTracker::commit(const std::string &word, uint32_t boundary, bool standsAlone, int weight, Event &out) {
+    const bool had = pending_;
+    if (had) out = held_;
+    pending_ = false;
+    const std::string w = lower(word);
+    if (!standsAlone || !learnable(w)) {
+        prev1_.clear();
+        prev2_.clear();
+        return had;
+    }
+    held_ = Event{w, prev1_, prev2_, weight};
+    pending_ = true;
+    if (boundary == ' ') {
+        prev2_ = prev1_;
+        prev1_ = w;
+    } else {
+        prev1_.clear();
+        prev2_.clear();
+    }
+    return had;
+}
+
+void LearnTracker::replacePending(const std::string &fixed) {
+    if (!pending_) return;
+    const std::string f = lower(fixed);
+    if (!learnable(f)) return discard();
+    if (prev1_ == held_.word) prev1_ = f;
+    held_.word = f;
+}
+
+void LearnTracker::discard() {
+    pending_ = false;
+    prev1_.clear();
+    prev2_.clear();
+}
+
+bool LearnTracker::breakContext(Event &out) {
+    const bool had = pending_;
+    if (had) out = held_;
+    discard();
+    return had;
+}
+
+std::string learnRequest(const LearnTracker::Event &e) {
+    return request({"learn", e.word, e.prev1, e.prev2, std::to_string(e.weight)});
+}
+
 }  // namespace hints
 
 // MARK: - HintService
@@ -288,8 +351,26 @@ HintService::~HintService() {
         std::lock_guard<std::mutex> l(mu_);
         stop_ = true;
         next_.reset();
+        oneway_.clear();
     }
     cv_.notify_all();
+    // No query in flight: close the helper's stdin and give it a moment to save what it learned
+    // (Học từ bạn gõ — it writes on EOF), then fall through to the kill below.
+    {
+        std::unique_lock<std::mutex> pl(procMu_, std::try_to_lock);
+        if (pl.owns_lock() && pid_ > 0 && in_ >= 0) {
+            close(in_);
+            in_ = -1;
+            for (int i = 0; i < 30; ++i) {  // ≤ 300 ms
+                int st = 0;
+                if (waitpid(pid_, &st, WNOHANG) == pid_) {
+                    pid_ = -1;
+                    break;
+                }
+                usleep(10000);
+            }
+        }
+    }
     int pid = pid_;
     if (pid > 0) kill(pid, SIGKILL);  // unblocks a query in flight
     if (worker_.joinable()) worker_.join();
@@ -299,19 +380,27 @@ HintService::~HintService() {
 
 bool HintService::available() const { return access(helper_.c_str(), X_OK) == 0; }
 
+void HintService::startWorker() {
+    if (worker_.joinable()) return;
+    try {
+        worker_ = std::thread([this] { loop(); });
+    } catch (...) {
+        next_.reset();
+        oneway_.clear();
+    }
+}
+
 void HintService::submit(HintRequest req, Done done) {
     {
         std::lock_guard<std::mutex> l(mu_);
         if (stop_) return;
-        next_.reset(new Job{std::move(req), std::move(done)});
-        if (!worker_.joinable()) {
-            try {
-                worker_ = std::thread([this] { loop(); });
-            } catch (...) {
-                next_.reset();
-                return;
-            }
+        if (req.oneway) {
+            if (req.line.empty() || oneway_.size() >= 256) return;  // the helper is stuck: drop
+            oneway_.push_back(std::move(req.line));
+        } else {
+            next_.reset(new Job{std::move(req), std::move(done)});
         }
+        startWorker();
     }
     cv_.notify_all();
 }
@@ -319,10 +408,22 @@ void HintService::submit(HintRequest req, Done done) {
 void HintService::loop() {
     while (true) {
         std::unique_ptr<Job> job;
+        std::deque<std::string> lines;
         {
             std::unique_lock<std::mutex> l(mu_);
-            cv_.wait(l, [this] { return stop_ || next_; });
+            cv_.wait(l, [this] { return stop_ || next_ || !oneway_.empty(); });
             if (stop_) return;
+            lines.swap(oneway_);
+        }
+        // One-way lines first, in order (answers ignored).
+        for (const std::string &line : lines) {
+            std::string ignored;
+            query(line, ignored, 1000);
+        }
+        {
+            std::unique_lock<std::mutex> l(mu_);
+            if (stop_) return;
+            if (!next_) continue;
             job = std::move(next_);
             if (job->req.delayMs > 0) {
                 // A pause trigger: wait it out; a newer request (or stop) wins.

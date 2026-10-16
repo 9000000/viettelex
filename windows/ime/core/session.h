@@ -144,6 +144,10 @@ public:
     // shortcut expansion or when nothing was committed (caret hints: typo gate).
     const std::u16string& lastCommitRaw() const { return lastRaw_; }
     const std::u16string& lastCommitText() const { return lastText_; }
+    // "Học từ bạn gõ": the word the LAST handleKey composed and committed at a printable
+    // boundary OR Enter / Tab / Esc (text on screen, auto-restore applied); empty otherwise
+    // (shortcut expansion, chords, navigation, nothing composed).
+    const std::u16string& lastCommitWord() const { return lastWord_; }
 
 private:
     bool isWordKey(char32_t c) const;
@@ -187,6 +191,7 @@ private:
     bool overflow_ = false;    // engine overflowed: rest of the word passes through raw
     bool reopenArmed_ = false; // last event was a printable boundary after a commit
     std::u16string lastRaw_, lastText_;  // see lastCommitRaw()
+    std::u16string lastWord_;            // see lastCommitWord()
 };
 
 // Characters that may belong to a word already on screen (ASCII letters + Latin

@@ -23,6 +23,13 @@ void textActionsShutdown();
 void predictionWatchStart();
 void predictionWatchStop();
 
+// "Học từ bạn gõ" (app/core/learned_words.h): the model + %LOCALAPPDATA%\VietTelex\
+// learned-words.bin live here (UI thread). The TIPs send committed words (HintJob::Learn);
+// recorded only while g_settings.learnWords && systemTextPrediction. Saved 5 s after the last
+// word (atomic: temp file + MoveFileEx) and at exit; corrupt file => start empty.
+void learnedClear();          // "Xoá từ đã học" (settings window): RAM + file
+void learnedSettingsChanged();  // switch / Windows setting off: save, drop from RAM
+
 // Main-window messages owned by this module (WM_HOTKEY, WM_COPYDATA from the TIP, timers).
 bool textActionsMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result);
 // AppCommand::TextToolReply from the TIP.

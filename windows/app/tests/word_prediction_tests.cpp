@@ -5,7 +5,9 @@
 // timing / memory numbers (printed as "PREDICT ...").
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <vector>
 
@@ -16,6 +18,7 @@
 #include "caret_hints.h"
 #include "test.h"
 #include "typo_fix.h"
+#include "learned_words.h"
 #include "word_prediction.h"
 
 #if defined(__APPLE__)
@@ -64,9 +67,9 @@ const predict::Model& model() {
 }
 
 std::string cands(const std::string& before, const std::string& typed = "", const std::string& raw = "",
-                  bool english = false, bool filter = true) {
+                  bool english = false, bool filter = true, const learn::Model* learned = nullptr) {
     auto r = predict::request(U(before), U(typed), english);
-    return r ? join(model().candidates(*r, U(raw), filter)) : std::string();
+    return r ? join(model().candidates(*r, U(raw), filter, learned)) : std::string();
 }
 
 std::vector<std::string> split(const std::string& s, char sep) {
@@ -84,6 +87,27 @@ std::vector<std::string> split(const std::string& s, char sep) {
 std::string unescapeNl(std::string s) {
     for (size_t p; (p = s.find("\\n")) != std::string::npos;) s.replace(p, 2, "\n");
     return s;
+}
+
+// The golden `learn` column: each sentence learned word by word, the 2 previous words of the
+// same sentence as context (= LearnTracker over single spaces; gen_prediction_golden.sh).
+std::unique_ptr<learn::Model> learnedFrom(const std::string& spec) {
+    auto m = std::make_unique<learn::Model>([](const std::string& w) { return model().knownWord(w); },
+                                            1760000000000ll);
+    for (const auto& part : split(spec, '|')) {
+        std::string sentence = part;
+        int times = 1;
+        const size_t star = sentence.rfind('*');
+        if (star != std::string::npos) {
+            times = std::atoi(sentence.c_str() + star + 1);
+            sentence.resize(star);
+        }
+        const auto words = split(sentence, ' ');
+        for (int t = 0; t < times; ++t)
+            for (size_t i = 0; i < words.size(); ++i)
+                m->record(words[i], i >= 1 ? words[i - 1] : std::string(), i >= 2 ? words[i - 2] : std::string());
+    }
+    return m;
 }
 
 #if defined(__APPLE__)
@@ -180,21 +204,24 @@ TEST(prediction_golden_matches_macos) {
     while (std::getline(f, line)) {
         if (line.empty() || line[0] == '#') continue;
         const auto c = split(line, '\t');
-        // before \t typed \t raw \t english \t filter ("Lọc từ nhạy cảm") \t candidates
-        if (c.size() != 6) {
+        // before \t typed \t raw \t english \t filter ("Lọc từ nhạy cảm") \t learn ("Học từ bạn
+        // gõ": sentences typed, "|" between, "*N" = N times) \t candidates
+        if (c.size() != 7) {
             std::printf("  bad fixture line: %s\n", line.c_str());
             ++bad;
             continue;
         }
         ++n;
-        const std::string got = cands(unescapeNl(c[0]), c[1], c[2], c[3] == "1", c[4] != "0");
-        if (got != c[5]) {
-            std::printf("  golden '%s' typed '%s': got [%s] want [%s]\n", c[0].c_str(), c[1].c_str(), got.c_str(),
-                        c[5].c_str());
+        std::unique_ptr<learn::Model> lm;
+        if (!c[5].empty()) lm = learnedFrom(c[5]);
+        const std::string got = cands(unescapeNl(c[0]), c[1], c[2], c[3] == "1", c[4] != "0", lm.get());
+        if (got != c[6]) {
+            std::printf("  golden '%s' typed '%s' learn '%s': got [%s] want [%s]\n", c[0].c_str(), c[1].c_str(),
+                        c[5].c_str(), got.c_str(), c[6].c_str());
             ++bad;
         }
     }
-    CHECK(n >= 100);
+    CHECK(n >= 140);
     CHECK_EQ(bad, 0);
 }
 
@@ -404,4 +431,170 @@ TEST(prediction_perf_and_memory) {
     std::printf("PREDICT MEM model build %+.1f KB, first queries %+.1f KB (heap in use; data files excluded)\n",
                 (m1 - m0) / 1024.0, (m2 - m1) / 1024.0);
     CHECK(avg < 3000);
+}
+
+// ---------------------------------------------------------------- Học từ bạn gõ (learned_words.h)
+// Same cases as macOS AppTests/LearnedWordsTests + Linux --self-test.
+
+namespace {
+std::unique_ptr<learn::Model> fresh() {
+    return std::make_unique<learn::Model>([](const std::string& w) { return model().knownWord(w); }, 1760000000000ll);
+}
+void typeIn(learn::Model& m, const std::string& sentence, int times = 1) {
+    const auto words = split(sentence, ' ');
+    for (int t = 0; t < times; ++t)
+        for (size_t i = 0; i < words.size(); ++i)
+            m.record(words[i], i >= 1 ? words[i - 1] : std::string(), i >= 2 ? words[i - 2] : std::string());
+}
+}  // namespace
+
+TEST(learned_record_semantics_match_ios) {
+    auto m = fresh();
+    typeIn(*m, "cảm ơn bạn");
+    CHECK_EQ(m->count("ơn"), 1);
+    CHECK_EQ(m->bigramCount("cảm", "ơn"), 1);
+    CHECK_EQ(m->trigramCount("cảm", "ơn", "bạn"), 0);  // the pair (p2, p1) must be ≥ 2 first
+    typeIn(*m, "cảm ơn bạn", 2);
+    CHECK_EQ(m->trigramCount("cảm", "ơn", "bạn"), 2);
+    CHECK_EQ(m->count("Bạn"), 3);  // keys are lowercase
+    CHECK(learn::learnable("cơm") && learn::learnable("Phúc") && learn::learnable("heey"));
+    CHECK(!learn::learnable("heeey") && !learn::learnable("a1") && !learn::learnable(""));
+    CHECK(learn::learnable("abcdefghijkl") && !learn::learnable("abcdefghijklm") && !learn::learnable("e-mail"));
+}
+
+TEST(learned_ranking) {
+    CHECK(data().ok);
+    auto m = fresh();
+    typeIn(*m, "ăn cơm", 3);
+    CHECK_EQ(std::string(split(cands("ăn ", "", "", false, true, m.get()), '|')[0]), std::string("cơm"));
+    auto t = fresh();
+    typeIn(*t, "tên tôi");
+    CHECK_EQ(cands("Tên ", "", "", false, true, t.get()), std::string());  // once: not yet
+    typeIn(*t, "tên tôi");
+    CHECK_EQ(cands("Tên ", "", "", false, true, t.get()), std::string("tôi"));
+    auto c = fresh();
+    typeIn(*c, "cảm ơn anh", 3);
+    CHECK_EQ(std::string(split(cands("cảm ơn ", "", "", false, true, c.get()), '|')[0]), std::string("anh"));
+    auto x = fresh();
+    typeIn(*x, "thằng cặc", 4);
+    CHECK_EQ(x->count("cặc"), 4);  // stored…
+    CHECK(cands("thằng ", "", "", false, true, x.get()).find("cặc") == std::string::npos);  // …filtered
+    CHECK_EQ(std::string(split(cands("thằng ", "", "", false, false, x.get()), '|')[0]), std::string("cặc"));
+    auto u = fresh();
+    typeIn(*u, "gặp xyzk", 2);
+    CHECK(cands("gặp ", "", "", false, true, u.get()).find("xyzk") == std::string::npos);
+    typeIn(*u, "gặp xyzk");
+    CHECK(cands("gặp ", "", "", false, true, u.get()).find("xyzk") != std::string::npos);
+    // An empty model = the plain seed ranking.
+    auto e = fresh();
+    for (const char* b : {"cảm ", "xin ", "ăn ", "cảm ơn ", "tên "}) CHECK_EQ(cands(b, "", "", false, true, e.get()), cands(b));
+    CHECK_EQ(cands("tôi hi", "hi", "hi", false, true, e.get()), cands("tôi hi", "hi", "hi"));
+}
+
+TEST(learned_file_matches_swift) {
+    // learned-words.bin = Swift LearnedModel after this spec (gen_prediction_golden.sh).
+    const std::vector<uint8_t> bin = readFile(VTX_APP_FIXTURES "/learned-words.bin");
+    CHECK(bin.size() > 36);
+    auto m = fresh();
+    for (const char* part : {"cảm ơn anh*3", "tên tôi là phúc*2", "ăn cơm*4", "heeey you*2", "gặp xyzk*3"}) {
+        std::string s = part;
+        const size_t star = s.rfind('*');
+        const int times = std::atoi(s.c_str() + star + 1);
+        s.resize(star);
+        typeIn(*m, s, times);
+    }
+    CHECK(m->encode() == bin);  // byte for byte
+    auto back = learn::Model::decode(bin.data(), bin.size());
+    CHECK(back != nullptr);
+    if (back) {
+        CHECK_EQ(back->count("cơm"), 4);
+        CHECK_EQ(back->trigramCount("cảm", "ơn", "anh"), 2);
+        CHECK_EQ(back->wordCount(), m->wordCount());
+        CHECK(back->lastDecayMs() == 1760000000000ll);
+        CHECK(back->encode() == bin);
+    }
+}
+
+TEST(learned_file_corruption_recovers) {
+    auto m = fresh();
+    typeIn(*m, "ăn cơm", 3);
+    std::vector<uint8_t> b = m->encode();
+    CHECK(learn::Model::decode(b.data(), b.size()) != nullptr);
+    std::vector<uint8_t> flipped = b;
+    flipped[flipped.size() / 2] ^= 0xFF;
+    CHECK(learn::Model::decode(flipped.data(), flipped.size()) == nullptr);  // CRC
+    CHECK(learn::Model::decode(b.data(), 20) == nullptr);                    // truncated
+    CHECK(learn::Model::decode(nullptr, 0) == nullptr);
+    const std::string junk = "garbage garbage garbage garbage garbage";
+    CHECK(learn::Model::decode(reinterpret_cast<const uint8_t*>(junk.data()), junk.size()) == nullptr);
+    // The empty store the Linux settings app writes for "Xoá từ đã học" (config.py).
+    // 56544c32 0100 0000 + 24 zero bytes (lastDecay, counts) + CRC 3a3b26a4
+    uint8_t empty[36] = {0x56, 0x54, 0x4c, 0x32, 1, 0};
+    empty[32] = 0x3a;
+    empty[33] = 0x3b;
+    empty[34] = 0x26;
+    empty[35] = 0xa4;
+    auto e = learn::Model::decode(empty, sizeof empty);
+    CHECK(e != nullptr && e->empty());
+}
+
+TEST(learned_prune_decay_clear) {
+    auto m = fresh();
+    for (int i = 0; i <= learn::kUniCap; ++i) {
+        std::string w = "x";
+        for (int v = i, k = 0; k < 3; ++k, v /= 26) w.push_back(static_cast<char>('a' + v % 26));
+        m->record(w);
+    }
+    CHECK(m->wordCount() <= learn::kUniCap);  // halved: count 1 → 0
+    learn::Model d(nullptr, 0);
+    for (int i = 0; i < 10; ++i) d.record("cơm", "ăn");
+    d.decayIfDue(6ll * 86400 * 1000);
+    CHECK_EQ(d.count("cơm"), 10);
+    d.decayIfDue(14ll * 86400 * 1000 + 1);
+    CHECK_EQ(d.count("cơm"), 4);  // 10 × 0.7² = 4.9 → 4
+    CHECK_EQ(d.bigramCount("ăn", "cơm"), 4);
+    d.clear(0);
+    CHECK(d.empty() && d.count("cơm") == 0 && d.changes() > 0);
+}
+
+TEST(learned_perf_and_memory) {
+    // A full model (the caps: 3000 words, 6000 pairs, 3000 triples) — RAM, file size, record cost.
+    std::vector<std::string> words;
+    for (int i = 0; i < 5000; ++i) {
+        std::string w = "w";
+        for (int v = i, k = 0; k < 3; ++k, v /= 26) w.push_back(static_cast<char>('a' + v % 26));
+        words.push_back(w);
+    }
+    const long long f0 = footprint();
+    auto m = std::make_unique<learn::Model>(nullptr, 0);
+    // Zipf-like text over 5000 distinct words, 8-word sentences (a heavy user: fills the caps).
+    uint32_t seed = 12345;
+    auto pick = [&]() {
+        seed = seed * 1664525u + 1013904223u;
+        const double u = (seed >> 8) / 16777216.0;
+        return words[static_cast<size_t>(5000 * u * u * u) % 5000];
+    };
+    const auto t0 = std::chrono::steady_clock::now();
+    const int n = 60000;
+    std::string p1, p2;
+    for (int i = 0; i < n; ++i) {
+        if (i % 8 == 0) p1.clear(), p2.clear();
+        const std::string w = pick();
+        m->record(w, p1, p2);
+        p2 = p1;
+        p1 = w;
+    }
+    const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count() / n;
+    const long long f1 = footprint();
+    const auto bin = m->encode();
+    std::printf("LEARN record %.2f us/word; model %d words / %d pairs / %d triples; heap %+.1f KB (est %.1f KB); "
+                "file %.1f KB\n",
+                us, m->wordCount(), m->pairCount(), m->tripleCount(), (f1 - f0) / 1024.0, m->memoryBytes() / 1024.0,
+                bin.size() / 1024.0);
+    CHECK(us < 50);
+    CHECK(m->wordCount() <= learn::kUniCap && m->pairCount() <= learn::kBiCap && m->tripleCount() <= learn::kTriCap);
+    const auto t1 = std::chrono::steady_clock::now();
+    for (int i = 0; i < 200; ++i) (void)m->nextWords(words[i % 2900], words[(i + 1) % 2800], {}, 6);
+    std::printf("LEARN nextWords %.2f us\n",
+                std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t1).count() / 200);
 }

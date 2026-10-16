@@ -4,8 +4,18 @@
 // (CaretSuggest.swift) và giao thức --serve (Serve.swift). Trả số ca lệch.
 import Foundation
 import TelexCore
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
 
 func caretSelfTest(fixtures: String) -> Int {
+    // Học từ bạn gõ: kho của --serve trong thư mục tạm — self-test KHÔNG BAO GIỜ đụng
+    // ~/.local/share/viettelex (đặt TRƯỚC lần đầu chạm LearnStore.shared).
+    let learnDir = "/tmp/viettelex-selftest-\(getpid())"
+    setenv("VIETTELEX_LEARN_FILE", learnDir + "/" + LearnedModel.fileName, 1)
+    defer { try? FileManager.default.removeItem(atPath: learnDir) }
     var bad = 0, n = 0
     func check(_ ok: Bool, _ what: @autoclosure () -> String) {
         n += 1
@@ -307,6 +317,117 @@ func caretSelfTest(fixtures: String) -> Int {
     let worstUs = worst.components.attoseconds / 1_000_000_000_000 + worst.components.seconds * 1_000_000
     print("PREDICT per-request avg \(Int(avgUs)) µs, worst \(worstUs) µs (\(50 * reqs.count) requests)")
     check(avgUs < 3000, "predict avg \(avgUs) µs")
+
+    // MARK: Học từ bạn gõ (LearnedModel.swift + LearnStore.swift) — cùng ca AppTests/LearnedWordsTests
+    func model() -> LearnedModel { LearnedModel(isKnownWord: { VNSuggest.contains($0) }) }
+    func typeIn(_ m: LearnedModel, _ sentence: String, times: Int = 1) {
+        for _ in 0..<times {
+            var tr = LearnTracker()
+            for w in sentence.split(separator: " ") {
+                if let e = tr.commit(String(w), boundary: " ") { m.record(word: e.word, after: e.prev1, prev2: e.prev2, weight: e.weight) }
+            }
+            if let e = tr.breakContext() { m.record(word: e.word, after: e.prev1, prev2: e.prev2, weight: e.weight) }
+        }
+    }
+    func next(_ b: String, _ m: LearnedModel?, filter: Bool = true) -> [String] {
+        guard let r = L.request(before: b, typed: "", english: false) else { return [] }
+        return PredictionModel.shared.candidates(r, raw: "", filterSensitive: filter, learned: m)
+    }
+    do {
+        let m = model()
+        typeIn(m, "ăn cơm", times: 3)
+        eq(next("ăn ", m).first, "cơm", "học: ăn cơm ×3")
+        let t = model()
+        typeIn(t, "tên tôi")
+        eq(next("Tên ", t), [], "học: một lần chưa đủ")
+        typeIn(t, "tên tôi")
+        eq(next("Tên ", t), ["tôi"], "học: hai lần")
+        let c = model()
+        typeIn(c, "cảm ơn anh", times: 3)
+        eq(next("cảm ơn ", c).first, "anh", "học: bộ ba dẫn trigram tĩnh")
+        let x = model()
+        typeIn(x, "thằng cặc", times: 4)
+        check(!next("thằng ", x).contains("cặc"), "học: lọc nhạy cảm")
+        eq(next("thằng ", x, filter: false).first, "cặc", "học: lọc tắt")
+        eq(next("cảm ", model()), next("cảm ", nil), "học: mô hình rỗng = seed")
+    }
+    // Golden chung Windows/macOS (cột learn).
+    let golden = fixtures + "/../../../windows/app/tests/fixtures/word-prediction.tsv"
+    var g = 0
+    for line in readFixture(golden) {
+        let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        guard f.count == 7 else { continue }
+        var m: LearnedModel?
+        if !f[5].isEmpty {
+            let mm = model()
+            for part in f[5].split(separator: "|") {
+                var sen = String(part), times = 1
+                if let star = sen.lastIndex(of: "*"), let k = Int(sen[sen.index(after: star)...]) { times = k; sen = String(sen[..<star]) }
+                typeIn(mm, sen, times: times)
+            }
+            m = mm
+        }
+        let before = f[0].replacingOccurrences(of: "\\n", with: "\n")
+        let got = L.request(before: before, typed: f[1], english: f[3] == "1").map {
+            PredictionModel.shared.candidates($0, raw: f[2], filterSensitive: f[4] != "0", learned: m)
+        } ?? []
+        // Linux: tiếng Anh = SwipeEnglish (macOS EnglishLite — cùng kết quả, test macOS chứng minh).
+        eq(got.joined(separator: "|"), f[6], "golden «\(f[0])» «\(f[1])» learn «\(f[5])»")
+        g += 1
+    }
+    check(g >= 140, "golden: chỉ \(g) dòng")
+    // Lưu file: round trip, hỏng ⇒ rỗng.
+    do {
+        let url = URL(fileURLWithPath: learnDir + "/rt/" + LearnedModel.fileName)
+        let m = model()
+        typeIn(m, "cảm ơn anh", times: 3)
+        check(LearnedModel.write(m.snapshot().encoded(), to: url), "học: ghi file")
+        let back = LearnedModel.load(from: url, isKnownWord: { VNSuggest.contains($0) }, now: m.lastDecay)
+        check(!back.recovered && back.model.t.uniDict() == m.t.uniDict() && back.model.t.triDict() == m.t.triDict(),
+              "học: round trip")
+        var data = m.snapshot().encoded()
+        data[data.count / 2] ^= 0xFF
+        _ = LearnedModel.write(data, to: url)
+        let bad1 = LearnedModel.load(from: url)
+        check(bad1.recovered && bad1.model.isEmpty, "học: file hỏng ⇒ rỗng")
+    }
+    // Giao thức --serve: learn → predict learn=1; learn=0 không dùng; learnclear; file bị xoá từ ngoài.
+    do {
+        for _ in 0..<2 { eq(HintProtocol.handle("learn\ttôi\ttên\t\t1"), "ok", "serve learn") }
+        eq(HintProtocol.handle("learn\t\t\t\t1"), "-", "serve learn rỗng")
+        eq(HintProtocol.handle("learn\ttôi\ttên\t\t9"), "-", "serve learn trọng số lạ")
+        eq(HintProtocol.handle("predict\tTên \t\t\t0\t1\t1"), "predict\ttôi\t\ttôi ", "serve predict học")
+        eq(HintProtocol.handle("predict\tTên \t\t\t0\t1"), "-", "serve predict không học ⇒ như cũ")
+        check(!LearnStore.shared.isLoaded, "learn = 0 ⇒ bỏ khỏi RAM")
+        check(FileManager.default.fileExists(atPath: LearnStore.shared.url.path), "bỏ khỏi RAM ⇒ đã ghi nốt")
+        eq(HintProtocol.handle("predict\tTên \t\t\t0\t1\t1"), "predict\ttôi\t\ttôi ", "serve: nạp lại từ file")
+        eq(HintProtocol.handle("learnclear"), "ok", "serve learnclear")
+        eq(HintProtocol.handle("predict\tTên \t\t\t0\t1\t1"), "-", "serve: sau khi xoá")
+        // Hẹn lưu: có lượt chờ ⇒ msUntilSave; tới hẹn ⇒ ghi.
+        _ = HintProtocol.handle("learn\tphở\t\t\t1")
+        check(LearnStore.shared.msUntilSave() != nil, "hẹn lưu")
+        LearnStore.shared.saveIfDue(now: LearnStore.now() + LearnStore.saveDelay + 1)
+        check(LearnStore.shared.msUntilSave() == nil, "đã lưu")
+        // App Cài đặt "Xoá từ đã học": ghi kho rỗng ⇒ process con thấy file đổi ⇒ nạp lại rỗng.
+        _ = HintProtocol.handle("learn\tphở\t\t\t1")
+        _ = LearnedModel.write(model().snapshot().encoded(), to: LearnStore.shared.url)
+        LearnStore.shared.saveIfDue(force: true)
+        let reread = LearnedModel.load(from: LearnStore.shared.url).model
+        eq(reread.count("phở"), 0, "xoá từ ngoài: không ghi đè lại dữ liệu cũ")
+        // Đo: một lượt học + RAM mô hình 5k từ (in ra cho báo cáo).
+        let big = model()
+        let clockL = ContinuousClock()
+        let words = (0..<5000).map { i -> String in
+            var s = "", v = i
+            for _ in 0..<3 { s.append(Character(UnicodeScalar(97 + v % 26)!)); v /= 26 }
+            return "w" + s
+        }
+        let tl0 = clockL.now
+        for i in 0..<20000 { big.record(word: words[i % 5000], after: words[(i * 7) % 5000], prev2: words[(i * 13) % 5000]) }
+        let per = (clockL.now - tl0) / 20000
+        print("LEARN per-record \(per) (20000 records, \(big.wordCount) words, \(big.pairCount) pairs, \(big.tripleCount) triples)")
+        print("LEARN file size \(big.snapshot().encoded().count) bytes")
+    }
 
     print("caret-suggest: \(n) ca, lệch: \(bad)")
     return bad

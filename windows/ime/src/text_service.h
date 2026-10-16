@@ -255,6 +255,20 @@ private:
     bool predictAfter_ = false;          // another hint was armed at this key: predict if it misses
     ITfContext* predCtx_ = nullptr;      // owned, with predictAfter_
     ITfContext* hintShownCtx_ = nullptr; // owned: where a shown prediction applies on click
+    // "Học từ bạn gõ" (Settings::learnWords, only with word prediction on): committed words this
+    // TIP composed → events, queued and sent to VietTelex.exe from a timer (HintJob::Learn) —
+    // never inside a key handler. Off: one bool read per key.
+    bool learnOn_ = false;
+    hints::LearnTracker learn_;
+    std::u16string learnQueue_;          // packed events (caret_hint_ipc.h appendLearnEvent)
+    bool prevKeyLetter_ = false;         // the previous key added to a word in progress
+    bool afterSpace_ = true;             // the previous character typed is whitespace / none
+    bool wordAlone_ = true;              // the word in progress started after whitespace
+    void noteLearnKey(const KeyInput& k, bool handled);
+    void learnSend(const hints::LearnTracker::Event& e);
+    void learnFlush();                   // breakContext + send
+    void learnResetKeys() { prevKeyLetter_ = false; afterSpace_ = true; wordAlone_ = true; }
+    void sendLearnQueue();               // kTimerLearn
     HintPopup popup_;
 
 };

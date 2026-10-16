@@ -162,6 +162,8 @@ public:
     // Text typed since the caret last moved, as sent to the helper (a leading newline /
     // U+FFFC = line start / unknown text before it). For tests.
     std::string typedBefore() const;
+    // "Học từ bạn gõ" state, for tests.
+    const hints::LearnTracker &learnTracker() const { return learn_; }
     // A click on the shown word prediction (Fcitx5 CandidateWord::select, IBus
     // candidate_clicked) = Tab. False when no prediction is shown / the text moved on.
     bool chooseHint(InputContext &ic);
@@ -304,6 +306,16 @@ private:
     bool autoCappedWord_ = false, suppressAutoCap_ = false;
     std::string declinedPrediction_;
     bool filter_ = true;          // Settings::filterSensitive — sent to the helper only when off
+    // "Học từ bạn gõ" (Settings::learnWords; LearnedModel.swift in the helper, LearnStore.swift):
+    // committed words this Session composed → "learn" lines (HintRequest::oneway). Only with word
+    // prediction on, a helper, and auto text allowed here (not a terminal / code editor / URL or
+    // e-mail field, not Direct); password fields / [app_modes] off / English never reach it.
+    bool learnWords_ = true;
+    hints::LearnTracker learn_;
+    bool learnOn() const { return predict_ && learnWords_ && hintSink_ && autoTextHere(); }
+    void learnAtBoundary(uint32_t ch, uint32_t keysym);
+    void learnSend(const hints::LearnTracker::Event &e);
+    void learnFlush();
     std::string acceptedSpace_;   // "được " just inserted by accepting a prediction (next key only)
     std::string carriedSpace_;    // ". " after the punctuation moved our space: next space swallowed
     int acceptedSpaceKey(const KeyEvent &ev, InputContext &ic);

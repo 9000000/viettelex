@@ -76,6 +76,9 @@ targets:
       #    (SuggestRank inline/từ kế tiếp, DisplayCase, lọc nhạy cảm); dữ liệu là
       #    vnlexicon.bin / vnlm.bin / enlexicon.bin + SeedData đã có sẵn.
       - path: iOS/Keyboard/SuggestionSupport.swift
+      #  • "Học từ bạn gõ" (LearnedModel.swift): bảng gọn + codec VTL2 của UserLangModel iOS
+      #    (không kéo phần di trú/sao lưu/từ điển cá nhân của UserLangModel.swift).
+      - path: iOS/Keyboard/UserLMTables.swift
       - path: iOS/Keyboard/DisplayCase.swift
       - path: iOS/Keyboard/SensitiveWords.swift
       - path: iOS/Keyboard/Resources/vnlexicon.bin

@@ -1244,6 +1244,64 @@ void popupOrigin(const Rect& caret, long w, long h, const Rect& work, long& x, l
 
 // ================================================================ word prediction
 
+// ---------------------------------------------------------------- Học từ bạn gõ
+
+bool learnable(const std::u32string& w) {
+    if (w.empty() || w.size() > 12) return false;  // NFC: one code point per Vietnamese letter
+    int run = 0;
+    char32_t prev = 0;
+    for (char32_t c : w) {
+        if (!isLetter(c)) return false;
+        run = c == prev ? run + 1 : 1;
+        if (run >= 3) return false;
+        prev = c;
+    }
+    return true;
+}
+
+bool LearnTracker::commit(const std::u32string& word, char32_t boundary, bool standsAlone, int weight, Event& out) {
+    const bool had = pending_;
+    if (had) out = held_;
+    pending_ = false;
+    const std::u32string w = lower(word);
+    if (!standsAlone || !learnable(w)) {
+        prev1_.clear();
+        prev2_.clear();
+        return had;
+    }
+    held_ = Event{w, prev1_, prev2_, weight};
+    pending_ = true;
+    if (boundary == U' ') {
+        prev2_ = prev1_;
+        prev1_ = w;
+    } else {
+        prev1_.clear();
+        prev2_.clear();
+    }
+    return had;
+}
+
+void LearnTracker::replacePending(const std::u32string& fixed) {
+    if (!pending_) return;
+    const std::u32string f = lower(fixed);
+    if (!learnable(f)) return discard();
+    if (prev1_ == held_.word) prev1_ = f;
+    held_.word = f;
+}
+
+void LearnTracker::discard() {
+    pending_ = false;
+    prev1_.clear();
+    prev2_.clear();
+}
+
+bool LearnTracker::breakContext(Event& out) {
+    const bool had = pending_;
+    if (had) out = held_;
+    discard();
+    return had;
+}
+
 bool predictionAllowedForApp(const std::string& exe) {
     // Code editors / IDEs: Tab indents, and the editor completes code itself.
     static const char* const kEditors[] = {

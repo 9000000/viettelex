@@ -35,6 +35,7 @@ targets:
       - Shared
       # Từ điển cá nhân: app đọc/sửa userlm.plist bằng chính model của bàn phím.
       - Keyboard/UserLangModel.swift
+      - Keyboard/UserLMTables.swift
       # Luyện vuốt (App/Practice): CÙNG decoder + hình học phím với bàn phím.
       - Keyboard/SwipeDecoder.swift
       - Keyboard/SwipeLexicon.swift
@@ -178,6 +179,7 @@ targets:
       - Keyboard/EmojiSuggest.swift
       - Keyboard/WordDelete.swift
       - Keyboard/UserLangModel.swift
+      - Keyboard/UserLMTables.swift
       - Keyboard/SeedData.swift
       - Keyboard/DisplayCase.swift
       - Keyboard/SensitiveWords.swift
