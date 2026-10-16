@@ -360,10 +360,14 @@ final class CaretHint {
     var isShowing: Bool { lock.withLock { pending != nil } }
     var current: CaretSuggestion? { lock.withLock { pending } }
 
+    /// Một HÀNG ngang: bảng cột dọc (SingleColumnScrolling) luôn cao ~9 dòng dù chỉ có
+    /// 1–3 ứng viên — gợi ý từ trong Notes chiếm cả khoảng trống (Phil 16/10/2026).
+    static let candidatePanelType = kIMKSingleRowSteppingCandidatePanel
+
     /// Ô ứng viên hệ thống dùng chung (một IMKServer ⇒ một cửa sổ). nil trong test host.
     private static let candidateWindow: IMKCandidates? = {
         guard let server = telexServer,
-              let c = IMKCandidates(server: server, panelType: kIMKSingleColumnScrollingCandidatePanel)
+              let c = IMKCandidates(server: server, panelType: candidatePanelType)
         else { return nil }
         // Phím tới controller TRƯỚC (mặc định cửa sổ ứng viên ăn trước ⇒ Enter/số/mũi tên
         // bị nó xử lý): mình tự quyết Tab/Enter/Esc; phím khác ẩn cửa sổ rồi mới đi tiếp.

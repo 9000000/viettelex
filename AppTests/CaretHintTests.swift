@@ -6,6 +6,7 @@
 // dưới chuột trong cửa sổ, không thì giữa-đáy cửa sổ). Không tạo cửa sổ nào.
 import AppKit
 import XCTest
+import InputMethodKit
 @testable import VietTelex
 
 final class CaretHintTests: XCTestCase {
@@ -15,6 +16,11 @@ final class CaretHintTests: XCTestCase {
         .appendingPathComponent("iOS/KeyboardTests/Fixtures/number-chips.txt")
 
     override func tearDown() { CaretHint.shared.setPendingForTesting(nil) }
+
+    /// Hồi quy (Phil 16/10/2026): bảng cột dọc luôn cao ~9 dòng dù chỉ 1–3 gợi ý ⇒ một hàng ngang.
+    func testCandidateWindowIsSingleRow() {
+        XCTAssertEqual(CaretHint.candidatePanelType, kIMKSingleRowSteppingCandidatePanel)
+    }
 
     // MARK: Phím
 
