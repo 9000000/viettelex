@@ -175,16 +175,14 @@ public:
             ibus_engine_hide_lookup_table(e_);
         }
     }
-    // Word prediction: an IBusLookupTable (horizontal, first candidate highlighted = Tab, no
-    // number labels — digits are never taken from the user); a click arrives as
-    // candidate_clicked. Aux text "Tab" next to it.
-    void showCandidates(const std::vector<std::string> &words, const std::string &aux) override {
-        IBusLookupTable *t = ibus_lookup_table_new(guint(words.size()), 0, TRUE, FALSE);
+    // Word prediction: an IBusLookupTable with ONE entry (highlighted = Tab, no number label —
+    // digits are never taken from the user); a click arrives as candidate_clicked. Aux text
+    // "Tab" next to it.
+    void showPrediction(const std::string &word, const std::string &aux) override {
+        IBusLookupTable *t = ibus_lookup_table_new(1, 0, TRUE, FALSE);
         ibus_lookup_table_set_orientation(t, IBUS_ORIENTATION_HORIZONTAL);
-        for (size_t i = 0; i < words.size(); ++i) {
-            ibus_lookup_table_append_candidate(t, ibus_text_new_from_string(words[i].c_str()));
-            ibus_lookup_table_append_label(t, ibus_text_new_from_static_string(""));
-        }
+        ibus_lookup_table_append_candidate(t, ibus_text_new_from_string(word.c_str()));
+        ibus_lookup_table_append_label(t, ibus_text_new_from_static_string(""));
         ibus_engine_update_lookup_table(e_, t, TRUE);  // floating ref: the engine sinks it
         reinterpret_cast<VtIBusEngine *>(e_)->tableShown = TRUE;
         ibus_engine_update_auxiliary_text(e_, ibus_text_new_from_string(aux.c_str()), TRUE);
@@ -601,14 +599,15 @@ void setContentType(IBusEngine *engine, guint purpose, guint hints) {
     IBUS_ENGINE_CLASS(vt_ibus_engine_parent_class)->set_content_type(engine, purpose, hints);
 }
 
-// Click on a word-prediction candidate (ibus-ui-gtk3, GNOME Shell's candidate popup).
+// Click on the word prediction (ibus-ui-gtk3, GNOME Shell's candidate popup).
 void candidateClicked(IBusEngine *engine, guint index, guint button, guint state) {
+    (void)index;  // a single entry
     (void)button;
     (void)state;
     auto *self = reinterpret_cast<VtIBusEngine *>(engine);
     try {
         IBusClient client(engine);
-        self->session->chooseHint(index, client);
+        self->session->chooseHint(client);
     } catch (...) {
     }
 }

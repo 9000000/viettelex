@@ -33,23 +33,15 @@ namespace viettelex {
 
 struct CaretSuggestion {
     // Predict: gợi ý từ (auto_text.h, WordPrediction.swift) — `replace` = the word being
-    // composed ("" = next word, insert only), up to 3 candidates (display + alternates), each
-    // inserted with a trailing space. Shown in the frontend's candidate list.
+    // composed ("" = next word, insert only), ONE candidate (the top-ranked word), inserted with
+    // a trailing space. Shown as the single entry of the frontend's candidate window.
     enum class Kind { Math, Number, Typo, Tones, Date, Predict };
     Kind kind = Kind::Math;
     std::string display;  // shown near the caret ("= 36", "1.200.000 ₫", "tôi")
     std::string replace;  // tail of the text before the caret to replace ("" = insert only)
     std::string insert;   // text inserted in its place
-    std::vector<std::string> alternates;  // Predict: candidates 2–3 (click only; Tab = display)
     bool operator==(const CaretSuggestion &o) const {
-        return kind == o.kind && display == o.display && replace == o.replace && insert == o.insert &&
-               alternates == o.alternates;
-    }
-    // Every candidate in display order (main first).
-    std::vector<std::string> candidates() const {
-        std::vector<std::string> v{display};
-        v.insert(v.end(), alternates.begin(), alternates.end());
-        return v;
+        return kind == o.kind && display == o.display && replace == o.replace && insert == o.insert;
     }
 };
 
@@ -91,8 +83,8 @@ std::string label(const CaretSuggestion &s);
 // Protocol (Serve.swift): fields joined by TAB, `\` TAB LF CR escaped.
 std::string escape(const std::string &s);
 std::string request(const std::vector<std::string> &fields);
-// "-" / garbage → false. "<kind>\t<display>\t<replace>\t<insert>" → true; "predict" may add
-// up to two more displays (the alternates).
+// "-" / garbage → false. "<kind>\t<display>\t<replace>\t<insert>" → true ("predict": `replace`
+// may be empty — the next word).
 bool parseAnswer(const std::string &line, CaretSuggestion &out);
 
 // Cheap boundary gates (no data), same rules as the macOS code they name.

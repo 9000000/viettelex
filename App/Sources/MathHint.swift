@@ -57,18 +57,6 @@ struct CaretSuggestion: Equatable {
     let display: String
     let replace: String
     let insert: String
-    /// Ứng viên phụ (gợi ý từ: ứng viên 2–3) — chỉ chọn bằng click; Tab luôn là ứng viên chính.
-    var alternates: [CaretSuggestion] = []
-
-    /// Mọi ứng viên theo thứ tự hiện (chính trước).
-    var all: [CaretSuggestion] { [self] + alternates }
-
-    /// Ứng viên có chữ hiện `display` (click), nil nếu không có.
-    func choosing(_ display: String) -> CaretSuggestion? {
-        all.first { $0.display == display }.map {
-            CaretSuggestion(kind: $0.kind, display: $0.display, replace: $0.replace, insert: $0.insert)
-        }
-    }
 }
 
 /// Logic THUẦN của gợi ý cạnh con trỏ (test được, không AppKit sống).
@@ -300,8 +288,12 @@ enum CaretHintLogic {
 
     /// Ô ứng viên hệ thống chỉ khi: đường IMK (client + controller), có IMKServer, và
     /// firstRect của client là nguồn thắng (hệ thống đặt cửa sổ theo chính client đó).
-    static func surface(imkPath: Bool, hasCandidateWindow: Bool, source: CaretSource) -> Surface {
-        imkPath && hasCandidateWindow && source == .imkFirstRect ? .candidates : .panel
+    /// Gợi ý từ: LUÔN ô nổi ("được  ⇥ Tab", click được) — ô hệ thống đánh số "1" trước ứng
+    /// viên, gợi ý từ chỉ có một ứng viên, không số thứ tự (Phil 16/10/2026).
+    static func surface(kind: CaretSuggestion.Kind, imkPath: Bool, hasCandidateWindow: Bool,
+                        source: CaretSource) -> Surface {
+        guard kind != .predict else { return .panel }
+        return imkPath && hasCandidateWindow && source == .imkFirstRect ? .candidates : .panel
     }
 }
 
@@ -361,7 +353,7 @@ final class CaretHint {
     var current: CaretSuggestion? { lock.withLock { pending } }
 
     /// Một HÀNG ngang: bảng cột dọc (SingleColumnScrolling) luôn cao ~9 dòng dù chỉ có
-    /// 1–3 ứng viên — gợi ý từ trong Notes chiếm cả khoảng trống (Phil 16/10/2026).
+    /// một ứng viên (Phil 16/10/2026).
     static let candidatePanelType = kIMKSingleRowSteppingCandidatePanel
 
     /// Ô ứng viên hệ thống dùng chung (một IMKServer ⇒ một cửa sổ). nil trong test host.
@@ -587,15 +579,7 @@ final class CaretHint {
     }
 
     /// Chuỗi hiện trong ô ứng viên (IMKInputController.candidates(_:)).
-    var candidateStrings: [String] { lock.withLock { pending.map { $0.all.map(\.display) } ?? [] } }
-
-    /// Bất kỳ thread. Lấy ứng viên được click (chữ hiện `display`) và tắt ô; chữ không khớp
-    /// ứng viên nào ⇒ ứng viên chính (hành vi cũ của ô một ứng viên).
-    func take(choosing display: String?) -> CaretSuggestion? {
-        guard let s = take() else { return nil }
-        guard let d = display, let c = s.choosing(d) else { return s }
-        return c
-    }
+    var candidateStrings: [String] { lock.withLock { pending.map { [$0.display] } ?? [] } }
 
     // MARK: Gợi ý từ (WordPrediction.swift)
 
@@ -638,7 +622,7 @@ final class CaretHint {
                 guard let self, let controller, self.keyGeneration == gen, !self.isShowing,
                       !IsSecureEventInputEnabled() else { return }
                 if AppState.shared.debugLogging {
-                    DebugLog.log("predict: \(req.typed.isEmpty ? "next" : "complete") n=\(s.all.count) \(us)µs")
+                    DebugLog.log("predict: \(req.typed.isEmpty ? "next" : "complete") \(us)µs")
                 }
                 self.present(s, before: before, client: client, controller: controller)
             }
@@ -728,7 +712,7 @@ final class CaretHint {
             DebugLog.log("caret hint \(s.kind): len=\(s.insert.count) via fallback(\(basis)) → panel")
             return
         }
-        let surface = CaretHintLogic.surface(imkPath: client != nil && controller != nil,
+        let surface = CaretHintLogic.surface(kind: s.kind, imkPath: client != nil && controller != nil,
                                              hasCandidateWindow: Self.candidateWindow != nil,
                                              source: found.source)
         lock.withLock { pending = s; pendingSurface = surface }
@@ -776,7 +760,7 @@ final class CaretHint {
     }
 
     private func showCandidates(_ c: IMKCandidates, _ s: CaretSuggestion, caret: NSRect) {
-        c.setCandidateData(s.all.map(\.display))
+        c.setCandidateData([s.display])
         c.show(kIMKLocateCandidatesBelowHint)
         // Hệ thống tự đặt theo client; đặt lại theo rect đã kiểm (cùng nguồn firstRect)
         // để không bao giờ lệch khỏi con trỏ, và lật lên trên khi sát đáy màn hình.
@@ -792,23 +776,17 @@ final class CaretHint {
     @discardableResult
     private func showPanel<Note>(_ s: CaretSuggestion,
                                  place: (NSSize) -> (origin: NSPoint, basis: Note)?) -> Note? {
-        // Gợi ý từ (≤ 3 ứng viên): ứng viên chính đậm (Tab), ứng viên phụ thường; đường IMK thì
-        // click được từng ứng viên (như ô ứng viên hệ thống). Loại khác: một nhãn như cũ.
+        // Một nhãn + "⇥ Tab" cho mọi loại; gợi ý từ (đường IMK) thì click cả ô = nhận.
         let clickable = s.kind == .predict && pickController != nil
-        var views: [NSView] = s.all.enumerated().map { i, c in
-            let label = HintLabel(labelWithString: c.display)
-            label.font = .monospacedDigitSystemFont(ofSize: 14, weight: i == 0 ? .semibold : .regular)
-            if i > 0 { label.textColor = .secondaryLabelColor }
-            if clickable {
-                label.onClick = { [weak self] in self?.pick(c.display) }
-            }
-            return label
-        }
-        let hint = NSTextField(labelWithString: "⇥ Tab")
+        let label = HintLabel(labelWithString: s.display)
+        label.font = .monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
+        let hint = HintLabel(labelWithString: "⇥ Tab")
         hint.font = .systemFont(ofSize: 11, weight: .medium)
         hint.textColor = .secondaryLabelColor
-        views.append(hint)
-        let stack = NSStackView(views: views)
+        if clickable {
+            for l in [label, hint] { l.onClick = { [weak self] in self?.pick() } }
+        }
+        let stack = NSStackView(views: [label, hint])
         stack.orientation = .horizontal
         stack.spacing = 10
         stack.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
@@ -846,10 +824,10 @@ final class CaretHint {
         return placed.basis
     }
 
-    /// MAIN. Click một ứng viên trên ô nổi (gợi ý từ, đường IMK) ⇒ controller áp dụng như Tab.
-    private func pick(_ display: String) {
+    /// MAIN. Click ô nổi (gợi ý từ, đường IMK) ⇒ controller áp dụng như Tab.
+    private func pick() {
         guard let c = pickController else { dismiss(); return }
-        c.applyCaretHintChoice(display)
+        c.applyCaretHintChoice()
     }
 
     private func hideWindows() {

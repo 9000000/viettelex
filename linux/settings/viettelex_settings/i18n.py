@@ -264,12 +264,12 @@ EN = {
     "\" ' → ngoặc cong theo ngữ cảnh (don't → don’t); -- → — (gõ thêm - thì thành ---).":
         "\" ' → curly quotes by context (don't → don’t); -- → — (one more - gives ---).",
     "Gợi ý từ": "Word suggestions",
-    "Dừng gõ một chút → tối đa 3 từ trong ô gợi ý của bộ gõ: hoàn thành từ đang gõ hoặc từ kế "
-    "tiếp. Tab chọn từ đầu, bấm chuột chọn từ bất kỳ, Esc bỏ; không bao giờ tự thay. Cần gói "
-    "viettelex-text-tools.":
-        "Pause briefly → up to 3 words in the input method’s candidate window: completions of the "
-        "word being typed, or the next word. Tab takes the first, a click takes any, Esc "
-        "dismisses; never replaces by itself. Needs the viettelex-text-tools package.",
+    "Dừng gõ một chút → một từ gợi ý trong ô gợi ý của bộ gõ: hoàn thành từ đang gõ, hoặc từ kế "
+    "tiếp khi đã có hai từ trước đó. Tab hoặc bấm chuột để chọn, Esc bỏ; không bao giờ tự thay. "
+    "Cần gói viettelex-text-tools.":
+        "Pause briefly → one suggested word in the input method’s candidate window: a completion of "
+        "the word being typed, or the next word once two words precede it. Tab or a click takes "
+        "it, Esc dismisses; never replaces by itself. Needs the viettelex-text-tools package.",
     "Kiểu ngoặc kép": "Quote style",
     "“ ” ‘ ’ (mặc định)": "“ ” ‘ ’ (default)",
     "menu Công cụ…": "Tools… menu",

@@ -148,13 +148,13 @@ private:
     void presentHint(const hints::Suggestion& s);
     void hideHint();
     void dropHintWork();
-    // `choice` = candidate index (prediction: click); `sync` = inside a key handler.
-    bool applyHint(ITfContext* ctx, size_t choice = 0, bool sync = true);
+    // `sync` = inside a key handler (false: a click on a prediction).
+    bool applyHint(ITfContext* ctx, bool sync = true);
     void declineHint();
     void missHint();  // a non-prediction hint found nothing: prediction for this key, if armed
     void notePredictKey(const KeyInput& k, ITfContext* target, bool otherScheduled);
     void schedulePredict(ITfContext* target);
-    void pickHint(size_t index);  // click on a prediction candidate
+    void pickHint();  // click on a shown prediction (= Tab)
     bool replaceForHint(ITfContext* c, TfEditCookie ec, const hints::Suggestion& s);
     void afterHintApplied(bool ok, ITfContext* c, const hints::Suggestion& s);
     bool hintKeyTest(WPARAM wp, BOOL* eaten);  // true = handled (eaten set)
@@ -245,7 +245,7 @@ private:
     std::u16string predRaw_;             // its raw keys
     bool predEnglish_ = false;
     std::u16string predBefore_;          // screen sent to the app (must be unchanged to show)
-    std::vector<std::u16string> predCands_;
+    std::u16string predCand_;            // the app's top-ranked word (the one suggestion)
     std::u32string declinedPredict_;     // Esc: muted while the word starts with this
     bool predictAfter_ = false;          // another hint was armed at this key: predict if it misses
     ITfContext* predCtx_ = nullptr;      // owned, with predictAfter_

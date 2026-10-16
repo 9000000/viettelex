@@ -165,8 +165,8 @@ switches between Vietnamese and English.
   qua viết tắt, email, URL; xoá chữ hoa đó thì chữ kế giữ thường; đầu ô chỉ viết hoa ở ô nhiều
   dòng — Fcitx5), **ngoặc kép cong và gạch dài** (`"` `'` → `“ ” ‘ ’`, `don't` → `don’t`, `--` →
   `—`, thêm `-` → `---`; kiểu ngoặc chọn được: `“ ”` / `„ “` / `« »`), **gợi ý từ** (dừng gõ
-  0,3 s → tối đa 3 từ trong ô ứng viên của Fcitx5 / IBus: hoàn thành từ đang gõ hoặc từ kế tiếp;
-  Tab = từ đầu, click = từ bất kỳ, Esc = bỏ; phím số vẫn là số; cùng xếp hạng thanh gợi ý iOS,
+  0,3 s → một từ trong ô ứng viên của Fcitx5 / IBus: hoàn thành từ đang gõ, hoặc từ kế tiếp khi
+  đã có hai từ trước đó; Tab / click = nhận, Esc = bỏ; phím số vẫn là số; cùng xếp hạng thanh gợi ý iOS,
   dữ liệu có sẵn trong `viettelex-text-tools`). Không chạy trong terminal, trình soạn code (VS
   Code, Zed, JetBrains, Kate…), ô URL/email, ô mật khẩu, khi English. Dấu chấm đúp-cách và `—`
   sửa chữ đã gõ nên chỉ ở app cho bộ gõ đọc chữ quanh con trỏ (không ở Chrome/Firefox/Electron).
@@ -175,8 +175,8 @@ switches between Vietnamese and English.
   uppercase key, so `dduwowcj` → `Được`; abbreviations / e-mails / URLs skipped; delete the
   capital and the next letter stays lowercase; the field start only in multi-line fields),
   smart quotes and dashes (`“ ”` / `„ “` / `« »` style), and word suggestions (after a 0.3 s
-  pause, up to 3 words in the Fcitx5 / IBus candidate window — completion or next word; Tab =
-  first, click = any, Esc dismisses; digits stay digits; iOS suggestion-bar ranking, data
+  pause, one word in the Fcitx5 / IBus candidate window — a completion, or the next word once
+  two words precede it; Tab or a click takes it, Esc dismisses; digits stay digits; iOS suggestion-bar ranking, data
   already in `viettelex-text-tools`). Never in terminals, code editors, URL / e-mail / password
   fields or English mode. The double-space period and `—` edit typed text, so only in apps that
   let the IM read the text around the caret.*

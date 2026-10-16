@@ -263,9 +263,10 @@ void phase4(EventDispatcher *dispatcher, Instance *instance, ICUUID uuid) {
         });
 }
 
-// Word prediction end to end (word_prediction = true, live reload): "cảm␣" → after the
-// 300 ms pause the native candidate list shows "ơn" first (no number labels, aux "Tab"); a
-// click (CandidateWord::select) commits it + a space. Smart quotes: '"' → “.
+// Word prediction end to end (word_prediction = true, live reload): "thành phố hồ␣" (two
+// context words with a trigram row) → after the 300 ms pause the native candidate list shows
+// ONE entry "Chí" (no number label, aux "Tab"); a click (CandidateWord::select) commits it + a
+// space. Smart quotes: '"' → “.
 std::unique_ptr<EventSourceTime> g_predTimer;
 
 void phase5(EventDispatcher *dispatcher, Instance *instance, ICUUID uuid) {
@@ -282,8 +283,8 @@ void phase5(EventDispatcher *dispatcher, Instance *instance, ICUUID uuid) {
             auto *tf = instance->addonManager().addon("testfrontend");
             if (g_polls == 0) {  // settings reloaded (inotify): type, then poll for the list
                 ++g_polls;
-                tf->call<ITestFrontend::pushCommitExpectation>("cảm");
-                type(tf, uuid, " camr ");  // after the "36" of phase 4: a word of its own
+                for (const char *w : {"thành", "phố", "hồ"}) tf->call<ITestFrontend::pushCommitExpectation>(w);
+                type(tf, uuid, " thanhf phoos hoof ");  // after the "36" of phase 4: words of their own
                 EXPECT(!ic->inputPanel().candidateList());  // not before the pause
                 src->setNextInterval(50000);
                 src->setOneShot();
@@ -295,11 +296,11 @@ void phase5(EventDispatcher *dispatcher, Instance *instance, ICUUID uuid) {
                 src->setOneShot();
                 return true;
             }
-            EXPECT(list && list->size() >= 1 && list->size() <= 3);
-            EXPECT(list->candidate(0).text().toString() == "ơn");
+            EXPECT(list && list->size() == 1);  // one suggestion, no list
+            EXPECT(list->candidate(0).text().toString() == "Chí");
             EXPECT(list->label(0).toString().empty());  // digits are never selection keys
             EXPECT(ic->inputPanel().auxDown().toString() == "Tab");
-            tf->call<ITestFrontend::pushCommitExpectation>("ơn ");
+            tf->call<ITestFrontend::pushCommitExpectation>("Chí ");
             list->candidate(0).select(ic);
             EXPECT(!ic->inputPanel().candidateList());
             tf->call<ITestFrontend::pushCommitExpectation>("“");

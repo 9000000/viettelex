@@ -124,11 +124,6 @@ KeyAction keyAction(CaretSuggestion::Kind kind, uint32_t keysym, uint32_t mods) 
 }
 
 std::string label(const CaretSuggestion &s) {
-    if (s.kind == CaretSuggestion::Kind::Predict) {
-        std::string o = s.display;
-        for (const auto &a : s.alternates) o += "  ·  " + a;
-        return o + "   Tab";
-    }
     return s.display + (s.kind == CaretSuggestion::Kind::Math ? "   Tab / Enter" : "   Tab");
 }
 
@@ -179,7 +174,7 @@ bool parseAnswer(const std::string &line, CaretSuggestion &out) {
         start = t + 1;
     }
     const bool predict = !f.empty() && f[0] == "predict";
-    if (f.size() < 4 || f.size() > (predict ? 6u : 4u) || f[1].empty() || f[3].empty()) return false;
+    if (f.size() != 4 || f[1].empty() || f[3].empty()) return false;
     CaretSuggestion s;
     if (f[0] == "math") s.kind = CaretSuggestion::Kind::Math;
     else if (f[0] == "number") s.kind = CaretSuggestion::Kind::Number;
@@ -193,8 +188,6 @@ bool parseAnswer(const std::string &line, CaretSuggestion &out) {
     s.display = f[1];
     s.replace = f[2];
     s.insert = f[3];
-    for (size_t i = 4; i < f.size(); ++i)
-        if (!f[i].empty()) s.alternates.push_back(f[i]);
     out = std::move(s);
     return true;
 }

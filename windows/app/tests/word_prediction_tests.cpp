@@ -198,14 +198,13 @@ TEST(prediction_golden_matches_macos) {
 
 TEST(prediction_macos_assertions) {
     // AppTests/WordPredictionTests.swift, the data-dependent assertions.
-    CHECK(split(cands("cảm "), '|')[0] == "ơn");
-    CHECK(cands("xin ").find("chào") != std::string::npos);
-    CHECK(cands("hôm ").find("nay") != std::string::npos);
-    CHECK(split(cands("đi "), '|').size() <= 3);
-    CHECK_EQ(cands("hello ", "", "", true), std::string());  // English: no next-word data
-    CHECK_EQ(cands("zzqx "), std::string());
-    for (const auto& w : split(cands("hồ "), '|')) CHECK(w != "chí");  // "Chí" after "hồ"
-    CHECK(cands("hồ ").find("Chí") != std::string::npos);
+    CHECK(!cands("cảm ơn ").empty());  // two context words with a trigram row
+    CHECK(!cands("xin chào ").empty());
+    CHECK(split(cands("hôm nay "), '|').size() <= static_cast<size_t>(predict::kRankDepth));
+    CHECK_EQ(cands("hello world ", "", "", true), std::string());  // English: no next-word data
+    CHECK_EQ(cands("zzqx zzqy "), std::string());
+    for (const auto& w : split(cands("thành phố hồ "), '|')) CHECK(w != "chí");  // "Chí" after "hồ"
+    CHECK(split(cands("thành phố hồ "), '|')[0] == "Chí");
     CHECK(cands("tôi đư", "đư", "dduw").find("được") != std::string::npos);
     CHECK(split(cands("xin ch", "ch", "ch"), '|')[0] == "chào");
     CHECK_EQ(cands("cảm ơ", "ơ", "ow"), std::string());
@@ -215,6 +214,25 @@ TEST(prediction_macos_assertions) {
         CHECK(w.rfind("this", 0) == 0 && w.size() > 4);
     for (const char* t : {"đị", "đi", "fu", "sh", "vc"})
         for (const auto& w : split(cands(t, t, t), '|')) CHECK(w.empty() || !predict::isSensitive(U(w)));
+}
+
+// Phil 16/10/2026: "Tên " -> "gọi" was a one-word bigram guess. Next word only with two
+// context words AND a trigram row for that pair — no bigram fallback.
+TEST(prediction_next_word_needs_two_word_trigram) {
+    CHECK_EQ(cands("Tên "), std::string());
+    CHECK_EQ(cands("cảm "), std::string());
+    CHECK_EQ(cands("xin "), std::string());
+    CHECK_EQ(cands("xong, tên "), std::string());  // the comma cuts the context
+    CHECK_EQ(cands("zzqx tên "), std::string());    // a pair without a trigram row
+    CHECK(!cands("cảm ơn ").empty());
+    predict::Request r;
+    r.prev = U("tên");
+    CHECK(!predict::wantsNextWord(r));
+    r.prev2 = U("họ");
+    CHECK(predict::wantsNextWord(r));
+    r.english = true;
+    CHECK(!predict::wantsNextWord(r));
+    CHECK(model().nextWords(U("tên"), std::nullopt).empty());
 }
 
 TEST(prediction_seed_matches_swift) {
@@ -255,10 +273,11 @@ TEST(prediction_ipc_answer) {
     CHECK(unpackHintMessage(b.data(), b.size(), back));
     const std::u16string a = jobs.answer(back);
     CHECK(jobs.predictionLoaded());
-    const auto c = splitCandidates(a);
-    CHECK(c.size() == 3 && c[0] == u"chào");
+    CHECK(a == u"chào");  // one suggestion: the top-ranked word only
     m.text = packPredictText(u"cảm ", u"", u"");
-    CHECK(splitCandidates(jobs.answer(m))[0] == u"ơn");
+    CHECK(jobs.answer(m).empty());  // one context word: no next-word guess
+    m.text = packPredictText(u"thành phố hồ ", u"", u"");
+    CHECK(jobs.answer(m) == u"Chí");
     m.flags = kPredictEnglish;  // English context: no next-word data
     CHECK(jobs.answer(m).empty());
     m.flags = 0;
@@ -268,8 +287,6 @@ TEST(prediction_ipc_answer) {
     CHECK(unpackPredictText(packPredictText(u"a\x1f b", u"x", u"y"), be, ty, raw));
     CHECK(be == u"a  b" && ty == u"x" && raw == u"y");
     CHECK(!unpackPredictText(u"a\x1f" u"b", be, ty, raw));
-    CHECK(splitCandidates(u"").empty());
-    CHECK(joinCandidates({u"a", u"b"}) == u"a\x1f" u"b");
 }
 
 // ---------------------------------------------------------------- numbers
@@ -291,9 +308,9 @@ TEST(prediction_perf_and_memory) {
     struct Q {
         const char *before, *typed, *raw;
     };
-    const Q qs[] = {{"cảm ", "", ""},        {"xin ", "", ""},          {"tôi đang ", "", ""}, {"hôm ", "", ""},
-                    {"đi ", "", ""},         {"không ", "", ""},        {"anh ", "", ""},      {"chúng ta ", "", ""},
-                    {"của ", "", ""},        {"và ", "", ""},           {"tôi đư", "đư", "dduw"}, {"xin ch", "ch", "ch"},
+    const Q qs[] = {{"cảm ơn ", "", ""},     {"xin chào ", "", ""},     {"tôi đang ", "", ""}, {"hôm nay ", "", ""},
+                    {"đi học ", "", ""},     {"không có ", "", ""},     {"anh ấy ", "", ""},   {"chúng ta ", "", ""},
+                    {"nhà của ", "", ""},    {"tôi và ", "", ""},           {"tôi đư", "đư", "dduw"}, {"xin ch", "ch", "ch"},
                     {"ng", "ng", "ng"},      {"anh th", "th", "th"},    {"my keyb", "keyb", "keyb"},
                     {"khô", "khô", "khoo"}};
     std::vector<predict::Request> reqs;

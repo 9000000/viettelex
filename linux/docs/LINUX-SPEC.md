@@ -218,11 +218,13 @@ theo cài đặt hệ thống; Linux: công tắc riêng, mặc định tắt (`
 - Gợi ý từ: `Session` hẹn yêu cầu `predict` (HintService chờ 0,3 s, thế hệ phím huỷ; sau dấu cách
   là `fallback` của yêu cầu gợi ý khác — chúng thắng). Tính ở `--serve`
   (`Predict.swift` + symlink `SuggestionSupport`/`DisplayCase`/`SensitiveWords`): xếp hạng y như
-  macOS/iOS, dữ liệu vnlexicon/vnlm/enlexicon đã có trong gói — không thêm file dữ liệu.
-  Hiển thị: Fcitx5 `CommonCandidateList` / IBus `IBusLookupTable` (ngang, nhãn rỗng, aux "Tab");
-  click → `Session::chooseHint`.
+  macOS/iOS, dữ liệu vnlexicon/vnlm/enlexicon đã có trong gói — không thêm file dữ liệu. Từ kế
+  tiếp chỉ khi có đủ 2 từ ngữ cảnh và dòng trigram cho cặp đó (không lùi bigram: "Tên␣" → không gì).
+  Hiển thị: MỘT ứng viên (hạng 1) — Fcitx5 `CommonCandidateList` / IBus `IBusLookupTable` một mục
+  (nhãn rỗng, aux "Tab"); Tab / click → `Session::chooseHint`, Esc bỏ.
 - Test: `auto_text` (ca SystemAutoTextTests + Session theo chế độ + helper thật), `caret_suggest`
-  (ca WordPredictionTests), `fcitx5_smoke` / `ibus_smoke` ("cảm␣" → ô ứng viên "ơn", chọn / Tab).
+  (ca WordPredictionTests), `fcitx5_smoke` / `ibus_smoke` ("thành phố hồ␣" → ô ứng viên một mục
+  "Chí", chọn / Tab; IBus: "tên␣" → không gì).
 
 ## 6. Riêng Linux cần xử lý
 

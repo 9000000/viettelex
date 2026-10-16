@@ -12,7 +12,7 @@
 // Tones: text = the unaccented run from the screen ("toi di hoc "), result = Thêm dấu.
 // Predict (gợi ý từ, app/core/word_prediction.h): text = packPredictText(before the caret,
 //   word being typed, its raw keys), flags = kPredictEnglish when the previous word was
-//   English; result = up to 3 candidates joined by kPredictSep ("" = none).
+//   English; result = the top-ranked candidate ("" = none) — one suggestion, no list.
 // Up the integrity ladder only via the WM_COPYDATA filter the app already opens.
 #pragma once
 #include <cstdint>
@@ -57,26 +57,6 @@ inline bool unpackPredictText(const std::u16string& t, std::u16string& before, s
     return true;
 }
 
-inline std::u16string joinCandidates(const std::vector<std::u16string>& c) {
-    std::u16string out;
-    for (size_t i = 0; i < c.size(); ++i) {
-        if (i) out.push_back(kPredictSep);
-        out += c[i];
-    }
-    return out;
-}
-
-inline std::vector<std::u16string> splitCandidates(const std::u16string& t, size_t max = 3) {
-    std::vector<std::u16string> out;
-    size_t s = 0;
-    while (s <= t.size() && out.size() < max) {
-        size_t e = t.find(kPredictSep, s);
-        if (e == std::u16string::npos) e = t.size();
-        if (e > s) out.push_back(t.substr(s, e - s));
-        s = e + 1;
-    }
-    return out;
-}
 
 struct HintMessage {
     uint32_t request = 0;

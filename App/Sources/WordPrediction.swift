@@ -2,10 +2,13 @@
 // macOS (maintainer 16/10/2026). Hai trường hợp:
 //   a) HOÀN THÀNH từ đang gõ ("đư" → được / đường / đưa; tiếng Anh khi ngữ cảnh là tiếng Anh
 //      hoặc không âm tiết Việt nào khớp: "keyb" → keyboard);
-//   b) TỪ KẾ TIẾP ngay sau dấu cách ("cảm ␣" → ơn).
+//   b) TỪ KẾ TIẾP ngay sau dấu cách — CHỈ khi có ĐỦ 2 từ ngữ cảnh và vnlm.bin có dòng TRIGRAM
+//      cho cặp đó ("cảm ơn ␣" → bạn); không lùi về bigram một từ ("Tên ␣" → gọi: quá đoán mò —
+//      Phil 16/10/2026).
 // Cùng luật với mọi gợi ý cạnh con trỏ: chỉ áp dụng bằng Tab (hoặc click ứng viên), Esc tắt,
 // không bao giờ tự thay, ĐỌC LẠI màn hình trước khi thay, không ở ô mật khẩu / Secure Input.
-// Tối đa 3 ứng viên; Tab = ứng viên đầu. Gợi ý khác (sửa lỗi gõ, thêm dấu, ngày giờ, phép tính,
+// MỘT ứng viên duy nhất (Phil 16/10/2026: không danh sách, không số thứ tự) — Tab / click
+// nhận, Esc bỏ; hiện như mọi gợi ý cạnh con trỏ khác ("được  ⇥ Tab"). Gợi ý khác (sửa lỗi gõ, thêm dấu, ngày giờ, phép tính,
 // chip số) đang hiện ⇒ không hiện gợi ý từ (chúng thắng); chúng tới sau thì thay gợi ý từ.
 //
 // CÔNG TẮC: theo đúng cài đặt hệ thống "Show inline predictive text" (System Settings →
@@ -81,7 +84,11 @@ enum SystemInlinePrediction {
 enum PredictionLogic {
     /// Dừng gõ bấy nhiêu giây mới đọc màn hình + hiện (gõ liền mạch ⇒ không làm gì).
     static let idleDelay: TimeInterval = 0.3
-    static let maxCandidates = 3
+    /// Số ứng viên HIỆN: một (Tab / click nhận nó).
+    static let maxCandidates = 1
+    /// Độ sâu danh sách xếp hạng — chỉ để đối chiếu bản port Windows/Linux (golden
+    /// windows/app/tests/fixtures/word-prediction.tsv so cả 3 hạng đầu); ô chỉ hiện hạng 1.
+    static let rankDepth = 3
     /// Hoàn thành từ chỉ khi đã gõ ít nhất bấy nhiêu chữ (1 chữ: quá nhiễu cho ô nổi).
     static let minTyped = 2
     /// Cửa sổ đọc màn hình (UTF-16) — đủ cho 2 từ ngữ cảnh.
@@ -166,34 +173,34 @@ enum PredictionLogic {
         return Request(typed: t, prev: words.first, prev2: words.count > 1 ? words[1] : nil, english: english)
     }
 
+    /// Từ kế tiếp chỉ khi có đủ HAI từ ngữ cảnh (dòng trigram mới có nghĩa) và không phải
+    /// ngữ cảnh tiếng Anh. Mô hình còn đòi dòng trigram thật (`SuggestRank.topNext(...).trigram`).
+    static func wantsNextWord(_ r: Request) -> Bool {
+        r.typed.isEmpty && !r.english && r.prev != nil && r.prev2 != nil
+    }
+
     /// Hoàn thành tiếng Anh khi: ngữ cảnh tiếng Anh, hoặc không âm tiết Việt nào khớp.
     static func wantsEnglish(_ r: Request, vietnameseHits: Int) -> Bool {
         r.english || vietnameseHits == 0
     }
 
-    /// Ứng viên hoàn thành (đã xếp hạng) → tối đa `maxCandidates`, chỉ từ DÀI HƠN chữ đã gõ
+    /// Ứng viên hoàn thành (đã xếp hạng) → tối đa `rankDepth`, chỉ từ DÀI HƠN chữ đã gõ
     /// (hoàn thành thật — biến thể chỉ khác dấu thì người gõ Telex tự gõ tiếp), bỏ trùng.
     static func completions(_ ranked: [String], typed: String) -> [String] {
         let n = typed.count
         var seen = Set<String>(), out: [String] = []
         for w in ranked where w.count > n {
             if seen.insert(w.lowercased()).inserted { out.append(w) }
-            if out.count >= maxCandidates { break }
+            if out.count >= rankDepth { break }
         }
         return out
     }
 
-    /// Ứng viên → gợi ý cạnh con trỏ: thay đúng từ đang gõ (`typed` — "" = chỉ chèn) bằng
-    /// ứng viên + dấu cách; ứng viên 2–3 là `alternates` (click).
+    /// Ứng viên đã xếp hạng → gợi ý cạnh con trỏ (CHỈ hạng 1): thay đúng từ đang gõ
+    /// (`typed` — "" = chỉ chèn) bằng ứng viên + dấu cách.
     static func suggestion(_ words: [String], typed: String) -> CaretSuggestion? {
-        let words = Array(words.prefix(maxCandidates))
-        guard let first = words.first else { return nil }
-        func make(_ w: String) -> CaretSuggestion {
-            CaretSuggestion(kind: .predict, display: w, replace: typed, insert: w + " ")
-        }
-        var s = make(first)
-        s.alternates = words.dropFirst().map(make)
-        return s
+        guard let first = words.first, !first.isEmpty else { return nil }
+        return CaretSuggestion(kind: .predict, display: first, replace: typed, insert: first + " ")
     }
 
     /// Esc trên gợi ý hoàn thành: không gợi ý lại khi từ đang gõ vẫn bắt đầu bằng chữ đã từ
@@ -209,7 +216,8 @@ enum PredictionLogic {
 /// Xếp hạng y như thanh gợi ý iOS (SuggestRank — cùng trọng số/lọc/hoa-thường), với tầng CÁ
 /// NHÂN chỉ còn phần unigram của seed (SeedData.unigrams — đã có trong binary cho sửa lỗi gõ):
 ///  • hoàn thành: `count` = đếm seed (từ chat "nhé", "ok"… như người dùng iOS mới), `ctx` rỗng;
-///  • từ kế tiếp: `personal` rỗng ⇒ nextFill lấy thẳng trigram/bigram tĩnh vnlm.bin.
+///  • từ kế tiếp: chỉ dòng trigram tĩnh vnlm.bin (SuggestRank.topNext, `trigram` = true) — không
+///    lùi bigram, không từ cá nhân.
 /// Bỏ UserLangModel + seed bigram (đo 16/10/2026: +~95 KB mỗi kiến trúc trong binary Release —
 /// phần lưu file/di trú/codec không dùng được trên Mac vẫn bị liên kết); iOS đo seed/bigram cá
 /// nhân đoán KÉM trigram tĩnh (docs tầng 7) nên mất rất ít.
@@ -240,10 +248,14 @@ final class PredictionModel {
     func candidates(_ r: PredictionLogic.Request, raw: String) -> [String] {
         let filterOn = true   // macOS không có công tắc lọc — như mặc định iOS (BẬT)
         if r.typed.isEmpty {
-            guard !r.english, let prev = r.prev, VNSuggest.lexiconId(of: prev) != nil else { return [] }
-            let next = SuggestRank.nextFill(prev, prev2: r.prev2, personal: [], triCount: { _ in 0 },
-                                            filter: { SensitiveWords.filter($0, enabled: filterOn) })
-            return Array(next.prefix(PredictionLogic.maxCandidates)).map { DisplayCase.apply($0, after: prev) }
+            // Chỉ dòng trigram (prev2, prev) — không lùi bigram ("Tên ␣" → không gì). Cùng thứ tự
+            // với nhánh trigram của SuggestRank.nextFill khi không có từ cá nhân.
+            guard PredictionLogic.wantsNextWord(r), let prev = r.prev, let prev2 = r.prev2,
+                  VNSuggest.lexiconId(of: prev) != nil,
+                  let top = SuggestRank.topNext(prev, prev2: prev2, limit: 6), top.trigram else { return [] }
+            let next = SuggestionFill.pad([], with: SensitiveWords.filter(top.words, enabled: filterOn),
+                                          need: PredictionLogic.rankDepth)
+            return next.map { DisplayCase.apply($0, after: prev) }
         }
         let typed = r.typed
         let pool = r.english ? [] : VNSuggest.matches(typed, poolLimit: 24, excluding: typed.lowercased())

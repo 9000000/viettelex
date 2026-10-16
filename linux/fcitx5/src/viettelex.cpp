@@ -94,20 +94,17 @@ class VietTelexEngine;
 // Settings::preeditUnderline, refreshed with every settings load (one Fcitx5 process).
 bool g_preeditUnderline = false;
 
-// Word prediction candidate clicked in the candidate window (the engine applies it).
-std::function<void(fcitx::InputContext *, int)> g_pickCandidate;
+// The word prediction clicked in the candidate window (the engine applies it).
+std::function<void(fcitx::InputContext *)> g_pickCandidate;
 
-// One word-prediction candidate. Selected by a click (classicui / kimpanel call select());
-// keys never select: Tab applies the first one (Session), digits keep typing digits.
+// The one word prediction. Selected by a click (classicui / kimpanel call select()); keys
+// never select: Tab applies it (Session), digits keep typing digits.
 class PredictionWord final : public fcitx::CandidateWord {
 public:
-    PredictionWord(const std::string &word, int index) : fcitx::CandidateWord(fcitx::Text(word)), index_(index) {}
+    explicit PredictionWord(const std::string &word) : fcitx::CandidateWord(fcitx::Text(word)) {}
     void select(fcitx::InputContext *ic) const override {
-        if (g_pickCandidate) g_pickCandidate(ic, index_);
+        if (g_pickCandidate) g_pickCandidate(ic);
     }
-
-private:
-    int index_;
 };
 
 // CapabilityFlag::Multiline (bit 35, Fcitx5 ≥ 5.1; older versions never set it).
@@ -200,14 +197,14 @@ public:
         if (ic_->inputPanel().candidateList()) ic_->inputPanel().setCandidateList(nullptr);
         ic_->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
     }
-    // Word prediction: the native candidate window, horizontal, first candidate highlighted
-    // (= Tab), no number labels (digits are never taken from the user), aux text "Tab".
-    void showCandidates(const std::vector<std::string> &words, const std::string &aux) override {
+    // Word prediction: ONE entry in the native candidate window (clickable), highlighted
+    // (= Tab), no number label (digits are never taken from the user), aux text "Tab".
+    void showPrediction(const std::string &word, const std::string &aux) override {
         auto list = std::make_unique<fcitx::CommonCandidateList>();
-        list->setLabels(std::vector<std::string>(words.size(), ""));
-        list->setPageSize(int(words.size()));
+        list->setLabels(std::vector<std::string>{""});
+        list->setPageSize(1);
         list->setLayoutHint(fcitx::CandidateLayoutHint::Horizontal);
-        for (size_t i = 0; i < words.size(); ++i) list->append<PredictionWord>(words[i], int(i));
+        list->append<PredictionWord>(word);
         list->setGlobalCursorIndex(0);
         ic_->inputPanel().setCandidateList(std::move(list));
         ic_->inputPanel().setAuxDown(fcitx::Text(aux));
@@ -360,11 +357,11 @@ public:
                 }
             });
         syncConfigFromSettings();
-        g_pickCandidate = [this](fcitx::InputContext *ic, int index) {
+        g_pickCandidate = [this](fcitx::InputContext *ic) {
             try {
-                if (!ic || index < 0 || instance_->inputMethod(ic) != "viettelex") return;
+                if (!ic || instance_->inputMethod(ic) != "viettelex") return;
                 FcitxClient client(ic, primaryReader(ic));
-                state(ic)->session.chooseHint(size_t(index), client);
+                state(ic)->session.chooseHint(client);
             } catch (...) {
             }
         };

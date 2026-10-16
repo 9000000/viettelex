@@ -55,10 +55,7 @@ LRESULT CALLBACK HintPopup::wndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
         case WM_NCHITTEST: return (self && self->notify_) ? HTCLIENT : HTTRANSPARENT;
         case WM_LBUTTONDOWN:
-            if (self && self->notify_) {
-                const int i = self->itemAt(static_cast<short>(LOWORD(lp)));
-                if (i >= 0) PostMessageW(self->notify_, self->pickMsg_, static_cast<WPARAM>(i), 0);
-            }
+            if (self && self->notify_) PostMessageW(self->notify_, self->pickMsg_, 0, 0);
             return 0;
         case WM_ERASEBKGND: return 1;
         case WM_PAINT: {
@@ -94,9 +91,6 @@ void HintPopup::makeFonts(int dpi) {
     if (font_ && fontDpi_ == dpi) return;
     if (font_) DeleteObject(font_);
     if (small_) DeleteObject(small_);
-    if (regular_) DeleteObject(regular_);
-    regular_ = CreateFontW(-scale(15, dpi), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                           CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
     font_ = CreateFontW(-scale(15, dpi), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                         CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
     small_ = CreateFontW(-scale(12, dpi), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
@@ -104,13 +98,13 @@ void HintPopup::makeFonts(int dpi) {
     fontDpi_ = dpi;
 }
 
-bool HintPopup::show(const std::vector<std::wstring>& items, const RECT& caret, HWND notify, UINT pickMsg) {
-    if (items.empty() || items[0].empty() || !ensureWindow()) return false;
+bool HintPopup::show(const std::wstring& text, const RECT& caret, HWND notify, UINT pickMsg) {
+    if (text.empty() || !ensureWindow()) return false;
     HWND focus = GetFocus();
     dpi_ = dpiFor(focus ? focus : GetForegroundWindow());
     dark_ = appsDark();
     makeFonts(dpi_);
-    items_ = items;
+    text_ = text;
     notify_ = notify;
     pickMsg_ = pickMsg;
     // Clicks: only a clickable (prediction) popup takes them; otherwise they fall through.
@@ -120,26 +114,16 @@ bool HintPopup::show(const std::vector<std::wstring>& items, const RECT& caret, 
 
     HDC dc = GetDC(wnd_);
     if (!dc) return false;
-    const int padX = scale(10, dpi_), padY = scale(6, dpi_), gap = scale(10, dpi_), sepGap = scale(8, dpi_);
-    SIZE b = {0, 0};
-    long textH = 0, x = padX;
-    cellRight_.clear();
+    SIZE a = {0, 0}, b = {0, 0};
     HGDIOBJ old = SelectObject(dc, font_);
-    for (size_t i = 0; i < items_.size(); ++i) {
-        SelectObject(dc, i == 0 ? font_ : regular_);
-        SIZE a = {0, 0};
-        GetTextExtentPoint32W(dc, items_[i].c_str(), static_cast<int>(items_[i].size()), &a);
-        if (a.cy > textH) textH = a.cy;
-        x += a.cx;
-        if (i + 1 < items_.size()) x += 2 * sepGap + 1;  // gap | gap
-        cellRight_.push_back(static_cast<int>(i + 1 < items_.size() ? x - sepGap - 1 : x + gap / 2));
-    }
+    GetTextExtentPoint32W(dc, text_.c_str(), static_cast<int>(text_.size()), &a);
     SelectObject(dc, small_);
     GetTextExtentPoint32W(dc, kTabLabel, lstrlenW(kTabLabel), &b);
     SelectObject(dc, old);
     ReleaseDC(wnd_, dc);
-    const long w = x + gap + b.cx + padX;
-    const long h = (textH > b.cy ? textH : b.cy) + 2 * padY;
+    const int padX = scale(10, dpi_), padY = scale(6, dpi_), gap = scale(10, dpi_);
+    const long w = a.cx + gap + b.cx + 2 * padX;
+    const long h = (a.cy > b.cy ? a.cy : b.cy) + 2 * padY;
 
     MONITORINFO mi = {};
     mi.cbSize = sizeof mi;
@@ -155,12 +139,6 @@ bool HintPopup::show(const std::vector<std::wstring>& items, const RECT& caret, 
     return true;
 }
 
-int HintPopup::itemAt(int x) const {
-    for (size_t i = 0; i < cellRight_.size(); ++i)
-        if (x < cellRight_[i]) return static_cast<int>(i);
-    return -1;  // the "Tab" label
-}
-
 void HintPopup::paint(HDC dc) {
     RECT rc;
     GetClientRect(wnd_, &rc);
@@ -173,27 +151,15 @@ void HintPopup::paint(HDC dc) {
     DeleteObject(b);
     HBRUSH fb = CreateSolidBrush(border);
     FrameRect(dc, &rc, fb);
+    DeleteObject(fb);
     SetBkMode(dc, TRANSPARENT);
-    const int padX = scale(10, dpi_), sepGap = scale(8, dpi_), padY = scale(6, dpi_);
+    const int padX = scale(10, dpi_);
     RECT t = rc;
     t.left += padX;
     t.right -= padX;
     HGDIOBJ old = SelectObject(dc, font_);
-    for (size_t i = 0; i < items_.size(); ++i) {
-        SelectObject(dc, i == 0 ? font_ : regular_);
-        SetTextColor(dc, i == 0 ? fg : sub);
-        SIZE a = {0, 0};
-        GetTextExtentPoint32W(dc, items_[i].c_str(), static_cast<int>(items_[i].size()), &a);
-        DrawTextW(dc, items_[i].c_str(), static_cast<int>(items_[i].size()), &t,
-                  DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_NOPREFIX);
-        t.left += a.cx;
-        if (i + 1 < items_.size()) {  // thin separator between candidates
-            RECT sep = {t.left + sepGap, rc.top + padY, t.left + sepGap + 1, rc.bottom - padY};
-            FillRect(dc, &sep, fb);
-            t.left += 2 * sepGap + 1;
-        }
-    }
-    DeleteObject(fb);
+    SetTextColor(dc, fg);
+    DrawTextW(dc, text_.c_str(), static_cast<int>(text_.size()), &t, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_NOPREFIX);
     SelectObject(dc, small_);
     SetTextColor(dc, sub);
     DrawTextW(dc, kTabLabel, -1, &t, DT_SINGLELINE | DT_VCENTER | DT_RIGHT | DT_NOPREFIX);
@@ -212,8 +178,7 @@ void HintPopup::destroy() {
     }
     if (font_) DeleteObject(font_);
     if (small_) DeleteObject(small_);
-    if (regular_) DeleteObject(regular_);
-    font_ = small_ = regular_ = nullptr;
+    font_ = small_ = nullptr;
     fontDpi_ = 0;
 }
 

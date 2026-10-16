@@ -221,17 +221,21 @@ func caretSelfTest(fixtures: String) -> Int {
         guard let r = L.request(before: before, typed: typed, english: english) else { return [] }
         return PredictionModel.shared.candidates(r, raw: raw)
     }
-    eq(cands("cảm ").first, "ơn", "next cảm → ơn")
-    check(cands("xin ").contains("chào"), "next xin: \(cands("xin "))")
-    check(cands("hôm ").contains("nay"), "next hôm: \(cands("hôm "))")
-    check(cands("đi ").count <= L.maxCandidates, "next ≤ 3")
-    eq(cands("hello ", english: true), [], "next tiếng Anh: không")
-    eq(cands("zzqx "), [], "next từ lạ")
-    let ho = cands("hồ ")
-    check(!ho.contains("chí"), "display case hồ: \(ho)")
+    // Từ kế tiếp: chỉ 2 từ ngữ cảnh + dòng trigram (Phil 16/10/2026: "Tên ␣" → "gọi" là đoán mò).
+    eq(cands("Tên "), [], "next một từ ngữ cảnh: không")
+    eq(cands("cảm "), [], "next cảm: không (một từ)")
+    eq(cands("xong, tên "), [], "next dấu phẩy cắt: không")
+    eq(cands("zzqx tên "), [], "next cặp không trigram: không")
+    check(!cands("cảm ơn ").isEmpty, "next cảm ơn: có")
+    check(!cands("xin chào ").isEmpty, "next xin chào: có")
+    check(cands("hôm nay ").count <= L.rankDepth, "next ≤ rankDepth")
+    eq(cands("hello world ", english: true), [], "next tiếng Anh: không")
+    eq(cands("zzqx zzqy "), [], "next từ lạ")
+    let ho = cands("thành phố hồ ")
+    check(!ho.contains("chí") && ho.first == "Chí", "display case hồ: \(ho)")
     let du = cands("tôi đư", typed: "đư", raw: "dduw")
     check(du.contains("được"), "complete đư: \(du)")
-    check(du.count <= L.maxCandidates && du.allSatisfy { $0.count > 2 }, "complete thật: \(du)")
+    check(du.count <= L.rankDepth && du.allSatisfy { $0.count > 2 }, "complete thật: \(du)")
     let up = cands("Đư", typed: "Đư", raw: "Dduw")
     check(!up.isEmpty && up.allSatisfy { $0.first?.isUppercase == true }, "complete hoa: \(up)")
     eq(cands("cảm ơ", typed: "ơ", raw: "ow"), [], "complete 1 chữ")
@@ -244,13 +248,14 @@ func caretSelfTest(fixtures: String) -> Int {
         let c = cands(b, typed: t, raw: t)
         check(c.allSatisfy { !SensitiveWords.set.contains($0.lowercased()) }, "nhạy cảm «\(t)»: \(c)")
     }
-    eq(L.answer(["được", "đường", "đưa", "đứng"], typed: "đư"), "predict\tđược\tđư\tđược \tđường\tđưa", "answer 3")
+    eq(L.answer(["được", "đường", "đưa", "đứng"], typed: "đư"), "predict\tđược\tđư\tđược ", "answer: chỉ hạng 1")
     eq(L.answer(["ơn"], typed: ""), "predict\tơn\t\tơn ", "answer từ kế tiếp")
     eq(L.answer([], typed: "x"), "-", "answer rỗng")
-    eq(HintProtocol.handle("predict\tcảm \t\t\t0").hasPrefix("predict\tơn\t\tơn "), true, "serve predict next")
+    eq(HintProtocol.handle("predict\tcảm \t\t\t0"), "-", "serve predict một từ: không")
+    eq(HintProtocol.handle("predict\tthành phố hồ \t\t\t0"), "predict\tChí\t\tChí ", "serve predict next")
     eq(HintProtocol.handle("predict\tabc.đư\tđư\tdduw\t0"), "-", "serve predict không")
     // Đo (in ra để báo cáo): thời gian một lượt đã nạp.
-    let reqs: [(String, String, String)] = [("cảm ", "", ""), ("xin ", "", ""), ("tôi đang ", "", ""), ("hôm ", "", ""),
+    let reqs: [(String, String, String)] = [("cảm ơn ", "", ""), ("xin chào ", "", ""), ("tôi đang ", "", ""), ("hôm nay ", "", ""),
                                             ("tôi đư", "đư", "dduw"), ("xin ch", "ch", "ch"), ("ng", "ng", "ng"),
                                             ("my keyb", "keyb", "keyb"), ("khô", "khô", "khoo")]
     let clock = ContinuousClock()

@@ -10,7 +10,11 @@
 //
 //   a) completion of the word being typed ("tôi đư" -> đừng / được / đưa; English when the
 //      context is English or no Vietnamese syllable matches: "keyb" -> keyboards …);
-//   b) next word right after a space ("cảm " -> ơn / thấy / hứng).
+//   b) next word right after a space — ONLY with two context words whose pair has a TRIGRAM
+//      row in vnlm.bin ("cảm ơn " -> bạn …); no one-word bigram fallback ("Tên " -> nothing).
+// The ranking keeps up to kRankDepth words (the golden compares all of them); the TIP shows
+// only the first — one suggestion, Tab / click accepts, Esc dismisses (no list, no numbers).
+
 //
 // Runs in VietTelex.exe only (like typo fixes and tones, caret_hint_ipc.h): the TIP sends
 // the text before the caret + the word being typed; nothing of this is linked into the TIP.
@@ -43,7 +47,7 @@ inline bool resolveHwkbPrediction(bool present, uint32_t value) {
 
 // ---------------------------------------------------------------- PredictionLogic
 constexpr int kIdleDelayMs = 300;  // pause before reading the screen (typing on = nothing)
-constexpr int kMaxCandidates = 3;
+constexpr int kRankDepth = 3;      // ranked list depth (golden); the answer to the TIP = the first
 constexpr int kMinTyped = 2;       // completion only from 2 typed letters
 constexpr int kWindow = 64;        // UTF-16 units read before the caret
 
@@ -61,7 +65,9 @@ struct Request {
 // the word being composed. nullopt = nothing to suggest.
 std::optional<Request> request(const std::u32string& before, const std::u32string& typed, bool english);
 bool wantsEnglish(const Request& r, int vietnameseHits);
-// Ranked words -> at most kMaxCandidates real completions (longer than typed), no dupes.
+// PredictionLogic.wantsNextWord: next word only with two context words, not English.
+bool wantsNextWord(const Request& r);
+// Ranked words -> at most kRankDepth real completions (longer than typed), no dupes.
 std::vector<std::u32string> completions(const std::vector<std::u32string>& ranked, const std::u32string& typed);
 // Esc on a completion: no suggestion while the typed word still starts with the declined one.
 bool muted(const std::u32string& typed, const std::u32string& declined);
@@ -82,7 +88,8 @@ public:
     // Candidates (case adjusted) for `r`; `raw` = raw keys of the word being typed.
     std::vector<std::u32string> candidates(const Request& r, const std::u32string& raw) const;
 
-    // Exposed for tests: SuggestRank.nextFill(prev, prev2, personal: [], …) and
+    // Exposed for tests: the trigram row of SuggestRank.topNext(prev, prev2) (sensitive-filtered,
+    // ≤ kRankDepth; empty without prev2 or without a trigram row — no bigram fallback) and
     // VNSuggest-pool ranking (rankInline + inlinePmi + sensitive filter).
     std::vector<std::u32string> nextWords(const std::u32string& prev, const std::optional<std::u32string>& prev2) const;
     std::vector<std::u32string> englishCompletions(const std::u32string& typed, int limit) const;

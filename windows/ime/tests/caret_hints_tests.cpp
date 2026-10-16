@@ -158,7 +158,7 @@ TEST(hints_typo_gate_only_invalid_letter_words_at_boundary) {
 TEST(hints_typo_suggestion_keeps_boundary_and_case) {
     auto t = typoSuggestion(U("anh tpoi,"), U("tpoi"), U',', U("tpoi"), U("tôi"));
     CHECK(t.has_value());
-    if (t) CHECK(*t == (Suggestion{Kind::Typo, u"tôi", u"tpoi,", u"tôi,", {}}));
+    if (t) CHECK(*t == (Suggestion{Kind::Typo, u"tôi", u"tpoi,", u"tôi,"}));
     CHECK(!typoSuggestion(U("anh xtpoi "), U("tpoi"), U' ', U("tpoi"), U("tôi")));
     CHECK(!typoSuggestion(U("anh tpoi"), U("tpoi"), U' ', U("tpoi"), U("tôi")));
     CHECK(typoSuggestion(U("Xong. Tpoi "), U("Tpoi"), U' ', U("Tpoi"), U("Tôi")).has_value());
@@ -234,7 +234,7 @@ TEST(hints_tone_suggestion) {
     const std::u32string run = U("toi di hoc ");
     auto s = toneSuggestion(run, U("tôi đi học "));
     CHECK(s.has_value());
-    if (s) CHECK(*s == (Suggestion{Kind::Tones, u"tôi đi học", u"toi di hoc ", u"tôi đi học ", {}}));
+    if (s) CHECK(*s == (Suggestion{Kind::Tones, u"tôi đi học", u"toi di hoc ", u"tôi đi học "}));
     CHECK(!toneSuggestion(run, run));         // unchanged
     CHECK(!toneSuggestion(run, U("tôi")));    // length differs
     std::u32string longRun, longOut;
@@ -285,7 +285,7 @@ TEST(hints_date_format) {
 
 TEST(hints_date_suggestion_replaces_phrase) {
     auto a = dateSuggestion(U("Hẹn hôm nay "), U("hôm"), U("nay"), Phrase::Today, kNow);
-    CHECK(a && *a == (Suggestion{Kind::Date, u"28/09/2026", u"hôm nay ", u"28/09/2026 ", {}}));
+    CHECK(a && *a == (Suggestion{Kind::Date, u"28/09/2026", u"hôm nay ", u"28/09/2026 "}));
     auto b = dateSuggestion(U("bây giờ "), U("bây"), U("giờ"), Phrase::Now, kNow);
     CHECK(b && b->insert == u"21:35 ");
     auto c = dateSuggestion(U("see you tomorrow "), U("you"), U("tomorrow"), Phrase::Tomorrow, kNow);
@@ -489,39 +489,30 @@ TEST(predict_keys_never_accept_on_enter_or_arrows) {
     CHECK(action(Kind::Predict, 0x26 /* VK_UP */, true) == KeyAction::DismissPass);
     CHECK(action(Kind::Predict, kVkEscape, true) == KeyAction::DismissConsume);
     CHECK(action(Kind::Predict, kVkTab, false) == KeyAction::DismissPass);  // Shift+Tab etc.
+    CHECK(action(Kind::Predict, '1', true) == KeyAction::DismissPass);      // no numbered picks
 }
 
-TEST(predict_suggestion_from_candidates) {
-    auto s = predictSuggestion(U"xin chào bạn đư", U"đư", {u"được", u"đường", u"đưa"});
+// One suggestion only (the app answers with its top-ranked word): Tab / click accept it.
+TEST(predict_suggestion_from_candidate) {
+    auto s = predictSuggestion(U"xin chào bạn đư", U"đư", u"được");
     CHECK(s.has_value());
-    if (s) {
-        CHECK(s->kind == Kind::Predict);
-        CHECK(s->display == u"được" && s->replace == u"đư" && s->insert == u"được ");
-        CHECK(s->alternates == (std::vector<std::u16string>{u"đường", u"đưa"}));
-        CHECK(chooseCandidate(*s, 0).insert == u"được ");
-        CHECK(chooseCandidate(*s, 2).insert == u"đưa ");
-        CHECK(chooseCandidate(*s, 9).insert == u"được ");  // out of range: the first
-        CHECK(chooseCandidate(*s, 1).alternates.empty());
-    }
+    if (s) CHECK(*s == (Suggestion{Kind::Predict, u"được", u"đư", u"được "}));
     // the screen changed / the word is glued to something: nothing
-    CHECK(!predictSuggestion(U"xin chào bạn đươ", U"đư", {u"được"}));
-    CHECK(!predictSuggestion(U"abc.đư", U"đư", {u"được"}));
-    CHECK(!predictSuggestion(U"đư", U"đư", {}));
+    CHECK(!predictSuggestion(U"xin chào bạn đươ", U"đư", u"được"));
+    CHECK(!predictSuggestion(U"abc.đư", U"đư", u"được"));
+    CHECK(!predictSuggestion(U"đư", U"đư", u""));
     // next word: right after "word "
-    auto n = predictSuggestion(U"cảm ", U"", {u"ơn", u"thấy"});
-    CHECK(n && n->replace.empty() && n->insert == u"ơn " && n->alternates.size() == 1);
-    CHECK(!predictSuggestion(U"xong. ", U"", {u"ơn"}));
-    CHECK(!predictSuggestion(U"cảm", U"", {u"ơn"}));
-    // at most 3 shown
-    auto m = predictSuggestion(U"a ", U"", {u"1", u"2", u"3", u"4"});
-    CHECK(m && m->alternates.size() == 2);
+    auto n = predictSuggestion(U"cảm ơn ", U"", u"bạn");
+    CHECK(n && n->replace.empty() && n->insert == u"bạn ");
+    CHECK(!predictSuggestion(U"xong. ", U"", u"ơn"));
+    CHECK(!predictSuggestion(U"cảm", U"", u"ơn"));
 }
 
 TEST(predict_still_valid_before_replacing) {
-    auto s = predictSuggestion(U"tôi đư", U"đư", {u"được"});
+    auto s = predictSuggestion(U"tôi đư", U"đư", u"được");
     CHECK(s && hintStillValid(*s, U"tôi đư"));
     CHECK(s && !hintStillValid(*s, U"tôi đưa"));
-    auto n = predictSuggestion(U"cảm ", U"", {u"ơn"});
+    auto n = predictSuggestion(U"cảm ", U"", u"ơn");
     CHECK(n && hintStillValid(*n, U"cảm "));
     CHECK(n && !hintStillValid(*n, U"cảm  "));
     CHECK(n && !hintStillValid(*n, U"cảm"));
@@ -557,7 +548,6 @@ TEST(predict_ipc_payload) {
     HintMessage back;
     CHECK(unpackHintMessage(bytes.data(), bytes.size(), back));
     CHECK(back.job == 3 && back.flags == kPredictEnglish && back.text == m.text);
-    CHECK(splitCandidates(joinCandidates({u"a", u"b", u"c", u"d"})).size() == 3);
 }
 
 TEST(predict_snapshot_mirror_bit) {

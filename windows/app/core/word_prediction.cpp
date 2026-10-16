@@ -118,6 +118,8 @@ std::optional<Request> request(const std::u32string& beforeIn, const std::u32str
 
 bool wantsEnglish(const Request& r, int vietnameseHits) { return r.english || vietnameseHits == 0; }
 
+bool wantsNextWord(const Request& r) { return r.typed.empty() && !r.english && r.prev && r.prev2; }
+
 std::vector<std::u32string> completions(const std::vector<std::u32string>& ranked, const std::u32string& typed) {
     const size_t n = glen(typed);
     std::vector<std::u32string> out, seen;  // ≤ 3: a linear scan
@@ -128,7 +130,7 @@ std::vector<std::u32string> completions(const std::vector<std::u32string>& ranke
             seen.push_back(std::move(l));
             out.push_back(w);
         }
-        if (out.size() >= static_cast<size_t>(kMaxCandidates)) break;
+        if (out.size() >= static_cast<size_t>(kRankDepth)) break;
     }
     return out;
 }
@@ -336,19 +338,12 @@ bool Model::topNext(const std::u32string& prev, const std::optional<std::u32stri
     return true;
 }
 
-// SuggestRank.nextFill(prev, prev2:, personal: [], triCount: 0, filter: SensitiveWords).
+// The trigram branch of SuggestRank.nextFill(prev, prev2:, personal: []) only: no (prev2, prev)
+// trigram row => nothing (WordPrediction.swift, no one-word bigram guess).
 std::vector<std::u32string> Model::nextWords(const std::u32string& prev, const std::optional<std::u32string>& prev2) const {
     Top tri;
-    const bool haveTri = prev2.has_value() && topNext(prev, prev2, 6, tri);
-    if (haveTri && tri.trigram) return pad(filterSensitive(words(tri)), 3);
-    std::vector<std::u32string> list;
-    if (haveTri) {
-        list = words(tri);
-    } else {
-        Top bi;  // bigramNext(prev, limit: 6)
-        if (topNext(prev, std::nullopt, 6, bi)) list = words(bi);
-    }
-    return pad(filterSensitive(list), 3);
+    if (!prev2 || !topNext(prev, prev2, 6, tri) || !tri.trigram) return {};
+    return pad(filterSensitive(words(tri)), kRankDepth);
 }
 
 // EnglishLite.completions: words starting with `typed` (a–z, any case), frequency desc then
@@ -386,10 +381,8 @@ std::vector<std::u32string> Model::candidates(const Request& r, const std::u32st
     std::vector<std::u32string> out;
     if (!data_.ok()) return out;
     if (r.typed.empty()) {
-        if (r.english || !r.prev || index_.lexiconId(*r.prev) < 0) return out;
-        std::vector<std::u32string> next = nextWords(*r.prev, r.prev2);
-        for (size_t i = 0; i < next.size() && i < static_cast<size_t>(kMaxCandidates); ++i)
-            out.push_back(displayCase(next[i], r.prev));
+        if (!wantsNextWord(r) || index_.lexiconId(*r.prev) < 0) return out;
+        for (const auto& w : nextWords(*r.prev, r.prev2)) out.push_back(displayCase(w, r.prev));
         return out;
     }
     const std::u32string& typed = r.typed;

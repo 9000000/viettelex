@@ -43,11 +43,8 @@ enum class Kind : uint8_t { Math, Number, Typo, Tones, Date, Predict };
 struct Suggestion {
     Kind kind = Kind::Math;
     std::u16string display, replace, insert;
-    // Predict: candidates 2–3 (display text; picked by click only — Tab is always the first).
-    std::vector<std::u16string> alternates;
     bool operator==(const Suggestion& o) const {
-        return kind == o.kind && display == o.display && replace == o.replace && insert == o.insert &&
-               alternates == o.alternates;
+        return kind == o.kind && display == o.display && replace == o.replace && insert == o.insert;
     }
 };
 
@@ -179,24 +176,23 @@ bool standsAlone(const std::u32string& before, const std::u32string& token);
 // decides when to ask (after a kPredictDelayMs pause, cancelled by the next key) and checks
 // the screen before showing and again before replacing. Gate: Settings::systemTextPrediction
 // (Windows' "Show text suggestions when typing on the physical keyboard"): off ⇒ one bool
-// read per key. Tab = first candidate, click = any, Esc = dismiss (and mute the word being
-// typed until the next word); Enter / arrows never accept; never auto-replaces.
+// read per key. ONE suggestion (the top-ranked word; no list, no numbers): Tab or a click
+// accepts it, Esc dismisses (and mutes the word being typed until the next word); Enter /
+// arrows / digits never accept; never auto-replaces. Next word only after two context words
+// with a trigram row (the app decides; "Tên " -> nothing).
 constexpr int kPredictDelayMs = 300;
 constexpr int kPredictWindow = 64;  // UTF-16 units before the caret (2 context words)
-constexpr size_t kPredictMaxCandidates = 3;
 // Code editors / IDEs (Tab indents there, completion is the editor's job) and terminals:
 // never. `exe` normalized (lowercase file name).
 bool predictionAllowedForApp(const std::string& exe);
-// Candidates from the app -> the suggestion, if the screen (`before`, ending at the caret)
-// still ends with the typed word standing alone ("" = next word: one space after a letter).
+// The app's candidate -> the suggestion, if the screen (`before`, ending at the caret) still
+// ends with the typed word standing alone ("" = next word: one space after a letter).
 // Replaces exactly `typed` with candidate + " ".
 std::optional<Suggestion> predictSuggestion(const std::u32string& before, const std::u32string& typed,
-                                            const std::vector<std::u16string>& candidates);
+                                            const std::u16string& candidate);
 // Right before replacing (Tab / click): the text before the caret still ends as `s` expects
 // (math: "=", next word: a space after a letter, otherwise `replace` standing alone).
 bool hintStillValid(const Suggestion& s, const std::u32string& before);
-// Candidate `index` (0 = the first; out of range = the first) as a single suggestion.
-Suggestion chooseCandidate(const Suggestion& s, size_t index);
 // Esc on a completion mutes it while the typed word still starts with the declined one.
 bool predictMuted(const std::u32string& typed, const std::u32string& declined);
 

@@ -591,7 +591,7 @@ void Session::deliverHint(uint64_t gen, const CaretSuggestion &s, InputContext &
             if (autotext::predictionMuted(s.replace, declinedPrediction_)) return;
         }
         hint_ = s;
-        ic.showCandidates(s.candidates(), "Tab");
+        ic.showPrediction(s.display, "Tab");
         return;
     }
     if (!vt_is_empty(e_)) return;
@@ -605,13 +605,11 @@ void Session::deliverHint(uint64_t gen, const CaretSuggestion &s, InputContext &
     ic.showHint(hints::label(s));
 }
 
-bool Session::chooseHint(size_t index, InputContext &ic) {
+bool Session::chooseHint(InputContext &ic) {
     if (!hint_ || hint_->kind != CaretSuggestion::Kind::Predict) return false;
-    std::vector<std::string> c = hint_->candidates();
-    if (index >= c.size()) return false;
     selectionMemo_ = -1;
     if (hintsOn_) keyGen_->fetch_add(1);
-    return applyPrediction(c[index], ic);
+    return applyPrediction(hint_->display, ic);
 }
 
 // Tab / click on a word prediction: the word being composed (or nothing, after a space) becomes

@@ -279,9 +279,10 @@ def main():
         expect(c.doc == "12*3=36" and c.aux == "", f"math hint applied {c.doc!r} aux {c.aux!r}")
         expect(not c.key(IBus.KEY_Tab, "\t"), "Tab consumed without a hint")
 
-        # 11. word prediction (word_prediction = true, live reload): "cảm␣" → after the 300 ms
-        #     pause an IBusLookupTable (first = "ơn", no number labels) + aux "Tab"; Tab
-        #     commits "ơn ". Smart quotes: '"' → “.
+        # 11. word prediction (word_prediction = true, live reload): "tên␣" (one context word)
+        #     → nothing; "thành phố hồ␣" (trigram row) → after the 300 ms pause an
+        #     IBusLookupTable with ONE entry "Chí" (no number label) + aux "Tab"; Tab commits
+        #     "Chí ". Smart quotes: '"' → “.
         with open(CFG + "/config.toml.tmp", "w") as f:
             f.write('[typing]\ninput_method = "telex"\n[general]\nword_prediction = true\n'
                     'smart_punctuation = true\n')
@@ -301,19 +302,22 @@ def main():
         w.ic.set_capabilities(IBus.Capabilite.PREEDIT_TEXT | IBus.Capabilite.FOCUS |
                               IBus.Capabilite.AUXILIARY_TEXT | IBus.Capabilite.LOOKUP_TABLE)
         w.focus()
-        w.type("camr ")
+        w.type("teen ")
+        pump(0.8)
+        expect(not w.table, f"prediction after one context word {w.table!r}")
+        w.type("thanhf phoos hoof ")
         expect(not w.table, f"prediction before the pause {w.table!r}")
         for _ in range(100):
             if w.table:
                 break
             pump(0.05)
-        expect(w.table and w.table[0] == "ơn" and len(w.table) <= 3, f"prediction table {w.table!r} aux {w.aux!r}")
+        expect(w.table == ["Chí"], f"prediction table {w.table!r} aux {w.aux!r}")
         expect(all(not lb for lb in w.labels), f"prediction labels {w.labels!r}")
         expect(w.aux == "Tab", f"prediction aux {w.aux!r}")
         expect(w.key(IBus.KEY_Tab, "\t"), "Tab not consumed by the prediction")
-        expect(w.doc == "cảm ơn " and not w.table, f"prediction applied {w.doc!r} {w.table!r}")
+        expect(w.doc == "tên thành phố hồ Chí " and not w.table, f"prediction applied {w.doc!r} {w.table!r}")
         w.type('"')
-        expect(w.doc == "cảm ơn “", f"smart quote {w.doc!r}")
+        expect(w.doc == "tên thành phố hồ Chí “", f"smart quote {w.doc!r}")
     print(f"ibus smoke: {checks} checks passed (IBus {IBus.MAJOR_VERSION}.{IBus.MINOR_VERSION}.{IBus.MICRO_VERSION})")
 
 

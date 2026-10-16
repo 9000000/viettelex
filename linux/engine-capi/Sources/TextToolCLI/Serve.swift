@@ -13,8 +13,7 @@
 //   typo    <before> <word> <boundary> <raw> <flags 10×0/1>
 //   tones   <before>
 //   predict <before> <typed> <raw> <english 0|1>              (gợi ý từ — Predict.swift)
-// Trả lời: `-` (không gợi ý) hoặc `<kind> <display> <replace> <insert>`; "predict" thêm tối đa
-// hai ứng viên phụ (chỉ chữ hiện).
+// Trả lời: `-` (không gợi ý) hoặc `<kind> <display> <replace> <insert>` (predict: một ứng viên).
 import Foundation
 #if canImport(Glibc)
 import Glibc

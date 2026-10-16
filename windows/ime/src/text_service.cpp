@@ -1102,7 +1102,7 @@ constexpr UINT kMsgToolRead = WM_APP + 0x59;   // read session finished (possibl
 constexpr UINT kMsgToolApply = WM_APP + 0x5A;  // result arrived (WM_COPYDATA) -> replace
 constexpr UINT kMsgHintRead = WM_APP + 0x5B;   // caret hint: read session done (wParam = key generation)
 constexpr UINT kMsgHintReply = WM_APP + 0x5C;  // caret hint: VietTelex.exe answered (wParam = generation)
-constexpr UINT kMsgHintPick = WM_APP + 0x5D;   // caret hint: candidate clicked (wParam = index)
+constexpr UINT kMsgHintPick = WM_APP + 0x5D;   // caret hint: the prediction popup was clicked
 constexpr UINT_PTR kTimerHint = 0x5648;        // caret hint: read the screen now
 constexpr UINT_PTR kTimerHintHide = 0x5649;    // caret hint: auto-hide
 
@@ -1162,7 +1162,7 @@ LRESULT CALLBACK TextService::toolWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp
             else if (self) self->dropHintWork();
             return 0;
         case kMsgHintPick:
-            if (self) self->pickHint(static_cast<size_t>(wp));
+            if (self) self->pickHint();
             return 0;
         case kMsgToolRead:
             if (self) self->sendTextToolSelection();
@@ -1646,7 +1646,7 @@ void TextService::onHintRead() {
             if (hintTrig_.kind == hints::TriggerKind::Math) {
                 if (auto r = hints::mathChip(before))
                     sug = hints::Suggestion{hints::Kind::Math, hints::toU16(hints::mathLabel(*r)), u"",
-                                            hints::toU16(*r), {}};
+                                            hints::toU16(*r)};
             } else if (hintTrig_.kind == hints::TriggerKind::Number) {
                 sug = hints::moneyChip(before);
             } else if (hintTrig_.kind == hints::TriggerKind::Date) {
@@ -1677,7 +1677,7 @@ void TextService::onHintRead() {
             askApp(HintJob::Predict, packPredictText(hintRead_.before, hints::toU16(predTyped_), predRaw_));
             return;
         case HintStage::PredictShow:
-            if (hintRead_.before == predBefore_) sug = hints::predictSuggestion(before, predTyped_, predCands_);
+            if (hintRead_.before == predBefore_) sug = hints::predictSuggestion(before, predTyped_, predCand_);
             break;
         default: break;
     }
@@ -1721,8 +1721,7 @@ void TextService::onHintReply() {
     hintAwaitingApp_ = false;
     if (hintAnswer_.empty()) return missHint();
     if (hintStage_ == HintStage::PredictShow) {
-        predCands_ = splitCandidates(hints::toU16(hintAnswer_), hints::kPredictMaxCandidates);
-        if (predCands_.empty()) return dropHintWork();
+        predCand_ = hints::toU16(hintAnswer_);  // one suggestion: the app's top-ranked word
         return readForHint(HintStage::PredictShow, hints::kPredictWindow);  // re-read: screen unchanged?
     }
     readForHint(hintStage_, hintStage_ == HintStage::TonesShow ? hints::kToneWindow : kHintWindow);
@@ -1736,17 +1735,13 @@ void TextService::presentHint(const hints::Suggestion& s) {
         return;
     }
     hideHint();
-    if (s.kind == hints::Kind::Predict) {
-        std::vector<std::wstring> items;
-        items.emplace_back(s.display.begin(), s.display.end());
-        for (const auto& a : s.alternates) items.emplace_back(a.begin(), a.end());
-        if (!popup_.show(items, caret, toolWnd_, kMsgHintPick)) return;
+    const std::wstring text(s.display.begin(), s.display.end());
+    const bool predict = s.kind == hints::Kind::Predict;  // clickable (= Tab)
+    if (!popup_.show(text, caret, predict ? toolWnd_ : nullptr, predict ? kMsgHintPick : 0)) return;
+    if (predict) {
         SafeRelease(hintShownCtx_);
         hintShownCtx_ = hintCtx_;
         if (hintShownCtx_) hintShownCtx_->AddRef();
-    } else {
-        std::wstring text(s.display.begin(), s.display.end());
-        if (!popup_.show(text, caret)) return;
     }
     hint_ = s;
     hintCaret_ = caret;
@@ -1754,7 +1749,6 @@ void TextService::presentHint(const hints::Suggestion& s) {
     hintShownBefore_ = b.size() > 32 ? b.substr(b.size() - 32) : b;
     SetTimer(toolWnd_, kTimerHintHide, kHintHideMs, nullptr);
     config::log(std::string("caret hint ") + hintKindName(s.kind) + ": shown, len=" + std::to_string(s.insert.size()) +
-                (s.kind == hints::Kind::Predict ? " n=" + std::to_string(1 + s.alternates.size()) : std::string()) +
                 (hintRead_.caretOk ? " (view)" : " (win32 caret)"));
 }
 
@@ -1774,7 +1768,7 @@ void TextService::dropHintWork() {
     hintAwaitingApp_ = false;
     hintAnswer_.clear();
     hintRun_.clear();
-    predCands_.clear();
+    predCand_.clear();
     predictAfter_ = false;
     SafeRelease(predCtx_);
     SafeRelease(hintCtx_);
@@ -1798,12 +1792,11 @@ bool TextService::hintKeyTest(WPARAM wp, BOOL* eaten) {
 }
 
 // Tab: replace `replace` (just before the caret, re-read now) with `insert`. False = the
-// screen no longer matches (nothing changed; the Tab goes to the app). A click on a
-// prediction candidate (`sync` false: no key handler is running) does the same in an
-// async session.
-bool TextService::applyHint(ITfContext* ctx, size_t choice, bool sync) {
+// screen no longer matches (nothing changed; the Tab goes to the app). A click on a shown
+// prediction (`sync` false: no key handler is running) does the same in an async session.
+bool TextService::applyHint(ITfContext* ctx, bool sync) {
     if (!hint_) return false;
-    const hints::Suggestion s = hint_->kind == hints::Kind::Predict ? hints::chooseCandidate(*hint_, choice) : *hint_;
+    const hints::Suggestion s = *hint_;
     hideHint();
     ITfContext* target = ctx ? (sync ? keyTarget(ctx) : ctx) : nullptr;
     if (!target || composition_) return false;
@@ -1918,13 +1911,13 @@ void TextService::missHint() {
     dropHintWork();
 }
 
-void TextService::pickHint(size_t index) {
+void TextService::pickHint() {
     if (!hint_ || hint_->kind != hints::Kind::Predict || !hintShownCtx_) return;
     ITfContext* c = hintShownCtx_;
     c->AddRef();
     ++keyGen_;  // whatever was pending belongs to the text before the click
     dropHintWork();
-    applyHint(c, index, false);
+    applyHint(c, false);
     c->Release();
 }
 
