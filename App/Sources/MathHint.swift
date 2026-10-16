@@ -153,10 +153,14 @@ enum CaretHintLogic {
 
     static let order: [CaretSource] = CaretSource.allCases
 
-    /// Khoảng cách ô gợi ý ↔ con trỏ (pt). 4pt (mặc định bảng Công cụ) đè chân chữ ở
-    /// Notes — rect con trỏ có app chỉ cao tới đường chân chữ, không gồm phần đuôi
-    /// (g, y, ợ…) (Phil 16/10/2026).
-    static let panelGap: CGFloat = 10
+    /// Khoảng cách ô gợi ý ↔ đáy rect con trỏ (pt). Đo 16/10/2026 (nhật ký caret diag):
+    /// TextMate trả rect cao đúng dòng (1x16–19) ⇒ 4pt là vừa (10pt bị chê xa); Notes trả
+    /// rect 0x16 cho chữ to hơn, đáy rect nằm trên chân chữ ⇒ 4pt và 10pt đều đè/sát chữ.
+    static let panelGap: CGFloat = 4
+    static let extraGapApps: [String: CGFloat] = ["com.apple.Notes": 14]
+    static func panelGap(for bundleID: String?) -> CGFloat {
+        bundleID.flatMap { extraGapApps[$0] } ?? panelGap
+    }
 
     /// Rect con trỏ đầu tiên dùng được theo `order`. `provider` được gọi LẦN LƯỢT và dừng
     /// ở nguồn đầu tiên hợp lệ (mỗi nguồn là vài lần gọi AX/IMK — không gọi thừa).
@@ -682,7 +686,11 @@ final class CaretHint {
             let fr = posClient.flatMap(Self.imkCaretRect), lr = posClient.flatMap(Self.imkLineRect)
             let ac = ax?.caretBounds()
             func ok(_ r: NSRect?) -> String { r.map { CaretHintLogic.plausibleCaret($0, field: field, window: frontWindow, screens: screens) ? "ok" : "rej" } ?? "-" }
-            DebugLog.log("caret diag: sel=\(posClient?.selectedRange().location ?? -1) first=\(f(fr))\(ok(fr)) line=\(f(lr))\(ok(lr)) ax=\(f(ac))\(ok(ac)) field=\(f(field)) win=\(f(frontWindow)) mouse=\(f(NSRect(origin: NSEvent.mouseLocation, size: .zero)))")
+            let diag = "caret diag \(posClient?.bundleIdentifier() ?? "?"): sel=\(posClient?.selectedRange().location ?? -1) first=\(f(fr))\(ok(fr)) line=\(f(lr))\(ok(lr)) ax=\(f(ac))\(ok(ac)) field=\(f(field)) win=\(f(frontWindow)) mouse=\(f(NSRect(origin: NSEvent.mouseLocation, size: .zero)))"
+            DebugLog.log(diag)
+            // Cũng ra unified log (chỉ khi bật nhật ký): đo vị trí con trỏ theo app bằng
+            // `log show` mà không cần người dùng chép nhật ký.
+            Signposts.log.notice("\(diag, privacy: .public)")
         }
         let found = CaretHintLogic.anchor(field: field, window: frontWindow, screens: screens) { src in
             switch src {
@@ -731,11 +739,15 @@ final class CaretHint {
             let caret = found.rect             // ignoresMouseEvents: mọi click đều "ngoài"
             showPanel(s) { size in
                 (TextToolsPanelLogic.origin(caret: caret, panelSize: size, visible: Self.visibleFrame(for: caret),
-                                            gap: CaretHintLogic.panelGap), ())
+                                            gap: CaretHintLogic.panelGap(for: AppState.shared.currentBundleID)), ())
             }
         }
         scheduleAutoHide()
         DebugLog.log("caret hint \(s.kind): len=\(s.insert.count) via \(found.source) → \(surface)")
+        if AppState.shared.debugLogging {
+            let r = found.rect
+            Signposts.log.notice("caret hint \(String(describing: s.kind), privacy: .public) via \(String(describing: found.source), privacy: .public) rect=(\(Int(r.minX)),\(Int(r.minY)) \(Int(r.width))x\(Int(r.height)))")
+        }
     }
 
     private func scheduleAutoHide() {
@@ -773,7 +785,7 @@ final class CaretHint {
         let size = c.candidateFrame().size
         if size.width > 0, size.height > 0 {
             let o = TextToolsPanelLogic.origin(caret: caret, panelSize: size, visible: Self.visibleFrame(for: caret),
-                                               gap: CaretHintLogic.panelGap)
+                                               gap: CaretHintLogic.panelGap(for: AppState.shared.currentBundleID))
             c.setCandidateFrameTopLeft(NSPoint(x: o.x, y: o.y + size.height))
         }
     }
