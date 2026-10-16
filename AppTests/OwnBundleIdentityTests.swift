@@ -75,12 +75,13 @@ final class OwnBundleIdentityTests: XCTestCase {
         let appBundle = Bundle(for: TelexInputController.self)
         let info = try! XCTUnwrap(appBundle.infoDictionary)
         XCTAssertEqual(appBundle.bundleIdentifier, expected)
+        // Plist THÔ (infoDictionary): InfoPlist.strings bản địa hoá CFBundleDisplayName =
+        // "VietTelex" cho mọi cấu hình (menu macOS 27 cần khoá đó) nên giá trị đã bản địa
+        // hoá không phân biệt được Dev — kiểm danh tính theo cấu hình ở plist.
         #if DEBUG
-        XCTAssertEqual(appBundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
-                       "VietTelex Dev")
+        XCTAssertEqual(info["CFBundleDisplayName"] as? String, "VietTelex Dev")
         #else
-        XCTAssertEqual(appBundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
-                       "VietTelex")
+        XCTAssertEqual(info["CFBundleDisplayName"] as? String, "VietTelex")
         #endif
         XCTAssertEqual(info["TISInputSourceID"] as? String, expected)
         XCTAssertEqual(info["InputMethodConnectionName"] as? String, expected + "_Connection")
