@@ -1,9 +1,11 @@
 // Updater.swift
-// Manual, opt-in update check. The ONLY code path in VietTelex that touches the
-// network — and only when the user clicks "Kiểm tra cập nhật" in the About tab.
-// It asks the GitHub Releases API for the latest tag, compares versions, and (if
-// newer) offers to open the download page. No auto-download, no telemetry, no
-// background polling — keeping the app's "no network unless you ask" stance.
+// Update check + self-update: the only code in VietTelex that makes network requests
+// itself. Two triggers: the "Kiểm tra cập nhật" button in Settings → General → Updates
+// (manual, GitHub releases/latest), and the weekly stable-channel check, which runs only
+// after the user opts in. A newer version is announced (notification + General tab);
+// it is downloaded only when the user picks "Update now" (SelfUpdater below).
+// Apple Translation language packs are downloaded by the system, only when the user
+// requests one in Settings → Tools & suggestions. No telemetry.
 
 import Foundation
 import AppKit
@@ -11,10 +13,10 @@ import UserNotifications
 import Security
 
 enum UpdateCheck {
-    /// Set by the weekly auto-check when a newer STABLE version exists, so the About tab
+    /// Set by the weekly auto-check when a newer STABLE version exists, so General → Updates
     /// can show it (see `UpdateSection.onAppear`). This is the whole point of the notification
     /// rewrite: the news must never arrive as a modal in the middle of a sentence, and if
-    /// notifications are denied the About tab is the only place left to say it.
+    /// notifications are denied General → Updates is the only place left to say it.
     /// Persisted so it survives the IME being relaunched between the check and the visit.
     nonisolated(unsafe) static var pendingUpdateVersion: String? {
         get { notifyDefaults.string(forKey: "pendingUpdateVersion").flatMap { $0.isEmpty ? nil : $0 } }
@@ -22,7 +24,7 @@ enum UpdateCheck {
     }
 
     /// Changelog for `pendingUpdateVersion`, persisted for the same reason it is: the
-    /// weekly check and the About-tab visit are separated by an IME relaunch, and
+    /// weekly check and the General-tab visit are separated by an IME relaunch, and
     /// re-fetching on `onAppear` would put the network back on a path the user never
     /// clicked. Always written and cleared together with the version above.
     nonisolated(unsafe) static var pendingUpdateNotes: String? {
@@ -40,7 +42,7 @@ enum UpdateCheck {
     /// It follows the STABLE channel, not the newest GitHub release: users are only
     /// nudged toward versions the maintainer explicitly promoted by bumping
     /// docs/stable.json on the website (deployed by GitHub Pages). The manual
-    /// About-tab button still checks releases/latest — that's the "I want it now"
+    /// button in General → Updates still checks releases/latest — that's the "I want it now"
     /// path.
     ///
     /// Issue #120 (1.7.8 user, 3+ weeks, never notified): the throttle used to be stamped
@@ -69,7 +71,7 @@ enum UpdateCheck {
             await MainActor.run {
                 guard AppState.shared.lastNotifiedUpdateVersion != latest else { return }
                 AppState.shared.lastNotifiedUpdateVersion = latest
-                // Always record it first: the About tab shows this even if the banner
+                // Always record it first: General → Updates shows this even if the banner
                 // never appears (permission denied / Do Not Disturb). The notes ride
                 // along so that surface can answer "what changed?", not just "something did".
                 pendingUpdateVersion = latest
@@ -187,7 +189,7 @@ enum UpdateCheck {
         return sanitizeNotes(obj["body"] as? String)
     }
 
-    /// Longest changelog we will render. The About tab is a 640pt window, not a browser;
+    /// Longest changelog we will render. The Settings window is 640pt wide, not a browser;
     /// past this the "Full changelog" link is the better answer.
     static let notesCharacterCap = 2000
 
@@ -254,8 +256,8 @@ enum UpdateCheck {
         return token.lowercased().hasSuffix("-by")
     }
 
-    /// Network happens ONLY here (and checkStable above). Called from the About tab's
-    /// button. NOTE: GitHub's `/releases/latest` deliberately SKIPS pre-releases, so this
+    /// Manual check (checkStable above is the weekly one; SelfUpdater downloads only after
+    /// "Update now"). Called from the button in General → Updates. NOTE: GitHub's `/releases/latest` deliberately SKIPS pre-releases, so this
     /// is the newest STABLE release — a pre-release (v1.4.16 while stable is 1.4.15) is
     /// never pushed onto someone who just clicked "check". Same channel as the weekly
     /// auto-check in spirit; testers install a pre-release by hand.
@@ -401,7 +403,7 @@ enum UpdateCheck {
 /// moment the user did not choose. A notification is the right shape for "news that can
 /// wait": no focus change, no modal, dismissible, and it queues while Do Not Disturb is on.
 /// Authorization is requested LAZILY on the first post (only opted-in users ever see the
-/// system prompt); when it is refused we say nothing here and let the About tab carry the
+/// system prompt); when it is refused we say nothing here and let General → Updates carry the
 /// news via `UpdateCheck.pendingUpdateVersion`.
 enum UpdateNotifier {
     static let categoryID = "viettelex.update"
@@ -419,10 +421,10 @@ enum UpdateNotifier {
             center.delegate = d
         }
         center.requestAuthorization(options: [.alert]) { granted, _ in
-            guard granted else { return }   // About tab is the fallback surface
+            guard granted else { return }   // General → Updates is the fallback surface
             let content = UNMutableNotificationContent()
             content.title = String(format: VTLocalized("VietTelex %@ is available"), version)
-            content.body = VTLocalized("Open Settings → About to install it.")
+            content.body = VTLocalized("Open Settings → General to install it.")
             content.userInfo = ["version": version]
             let req = UNNotificationRequest(identifier: requestPrefix + version,
                                             content: content, trigger: nil)

@@ -12,24 +12,24 @@
   <img src="https://img.shields.io/badge/macOS-13%2B-17233d" alt="macOS 13+">
 </p>
 
-**VietTelex** (ViệtTelex / ViếtTelex) là bộ gõ tiếng Việt **Telex** (và **VNI**) cho macOS, được xây dựng trên **InputMethodKit** của Apple để tích hợp sâu. Không gạch chân từ đang gõ, con trỏ luôn ở cuối, dấu bỏ trực tiếp vào chữ, và gõ được cả trong **Terminal** mà không phá autocomplete của shell.
+**VietTelex** (ViệtTelex / ViếtTelex) là bộ gõ tiếng Việt cho macOS, hỗ trợ **Telex** và **VNI**. VietTelex tích hợp trực tiếp với macOS, tự chọn cách nhập phù hợp cho từng ứng dụng để chữ hiện đúng vị trí và hạn chế gạch chân. Bạn có thể dùng trong **Terminal**, trình duyệt, bảng tính và nhiều ứng dụng khác.
 
-Triết lý: **tối giản, nhanh, ổn định, mã nguồn mở** — cài xong là gõ, hầu như không phải chỉnh gì thêm.
+Thiết kế gọn nhẹ, dễ bắt đầu: cài đặt xong là có thể gõ ngay; các tuỳ chọn nâng cao luôn sẵn nếu bạn cần.
 
 > Dự án của **Phil Trịnh**, viết lại từ đầu sau gần 20 năm dùng macOS mà chưa thấy bộ gõ tiếng Việt nào thật sự *ngon, chuẩn, mượt*.
 
 https://github.com/user-attachments/assets/1d9bdef1-f814-4070-9b2d-01436f7d3020
 
-<p align="center"><sub>VietTelex trong 33 giây — Telex/VNI, không gạch chân, tự giữ tiếng Anh, gõ vuốt trên điện thoại, có mặt trên mọi nền tảng.</sub></p>
+<p align="center"><sub>VietTelex trong 33 giây — gõ Telex/VNI trên Mac và điện thoại, giữ nguyên từ tiếng Anh, có gõ vuốt và nhiều tính năng tiện dụng.</sub></p>
 
 ## Điểm nổi bật
 
-- **Chuẩn IMKit** — là input method thật của hệ thống (không phải app chặn phím), nên thừa hưởng miễn phí: tự đổi kiểu gõ theo từng app, chính tả/dự đoán/viết hoa của macOS, con trỏ/undo/VoiceOver đều đúng.
-- **Nhanh** — luật chính tả compile thành trie + bitmap, incremental parse, SIMD, zero-alloc: **~130 ns/phím**, gõ nhanh cỡ nào cũng mượt.
-- **Gõ được ở nơi bộ gõ khác hay vỡ** — Terminal/iTerm (giữ autocomplete shell), address bar Chrome, ô Excel, Spotlight; tự học theo từng app.
-- **Thông minh với English/code** — tự khôi phục `google`/`github`, nhận token camelCase (`OmS`, `JavaScript`) để không bỏ dấu nhầm, có Telex nghiêm ngặt.
-- **Đúng, có số đo** — bộ regression 9.091 ca: **100%** từ tiếng Việt ra đúng dấu, **98,9%** từ tiếng Anh bị biến dạng được khôi phục. Chi tiết + phần chưa phủ: [`docs/REGRESSION.md`](docs/REGRESSION.md).
-- **Nhẹ & riêng tư** — không chạy nền, không thu thập dữ liệu; chỉ gọi mạng khi bạn bấm *Kiểm tra cập nhật*.
+- **Tích hợp với macOS** — hoạt động như một bộ gõ của hệ thống, tương thích với tính năng tự đổi bộ gõ theo ứng dụng, cùng chính tả, hoàn tác và VoiceOver.
+- **Phản hồi nhanh** — xử lý mỗi phím trong khoảng **130 ns** theo benchmark; gõ liên tục vẫn mượt.
+- **Dùng được trong nhiều ứng dụng** — từ Terminal/iTerm đến thanh địa chỉ Chrome, Excel và Spotlight; VietTelex tự tìm cách gõ phù hợp cho từng ứng dụng.
+- **Giữ nguyên tiếng Anh và mã lệnh** — tự khôi phục các từ như `google`, `github`, nhận diện cách viết camelCase (`OmS`, `JavaScript`) và có tuỳ chọn Telex nghiêm ngặt.
+- **Độ chính xác được kiểm thử** — trong bộ kiểm thử 9.091 trường hợp, VietTelex xử lý đúng **100%** từ tiếng Việt và khôi phục **98,9%** từ tiếng Anh bị biến dạng. Xem [`docs/REGRESSION.md`](docs/REGRESSION.md) để biết thêm kết quả và giới hạn.
+- **Tôn trọng quyền riêng tư** — VietTelex không thu thập nội dung bạn gõ. Ứng dụng kết nối mạng khi kiểm tra cập nhật (theo yêu cầu của bạn hoặc lịch hằng tuần đã bật) và khi bạn chủ động tải gói ngôn ngữ Apple trong Cài đặt. Bản cập nhật chỉ tải khi bạn chọn cập nhật. Văn bản được dịch ngay trên máy Mac, không gửi đi nơi khác.
 
 | Menu trên thanh menu | Cửa sổ Cài đặt |
 |---|---|
@@ -60,40 +60,40 @@ sang ABC, thoát VietTelex, xoá app ở đường dẫn trên rồi mới chạ
 `s f r x j` = sắc huyền hỏi ngã nặng · `aa ee oo` = â ê ô · `aw ow uw` = ă ơ ư · `dd` = đ · `z` xóa dấu.
 Ví dụ: `vieejt` → việt · `truowngf` → trường · `hoas` → hóa.
 
-Tùy chọn (Simple Telex, bỏ dấu tự do, kiểu cũ/mới, kiểm tra chính tả, gõ tắt) ở menu bộ gõ → **Cài đặt…**
+Các tuỳ chọn về kiểu gõ nằm trong menu bộ gõ → **Cài đặt…** → tab **Gõ phím**. Tuỳ chọn công cụ và gợi ý nằm trong tab **Công cụ & gợi ý**; danh sách gõ tắt có tab riêng.
 
-**Gõ kiểu VNI:** menu bộ gõ → **Cài đặt…** → tab **Tùy chỉnh** → bật **Gõ kiểu VNI**. Dấu gõ bằng số: `1-5` = sắc/huyền/hỏi/ngã/nặng, `6` = â/ê/ô, `7` = ơ/ư, `8` = ă, `9` = đ, `0` = bỏ dấu (ví dụ `Vie6t5` → Việt). Nên giữ **Kiểm tra chính tả khi gõ** bật để số như `mp3` không bị biến thành dấu.
+**Gõ kiểu VNI:** menu bộ gõ → **Cài đặt…** → tab **Gõ phím** → chọn **VNI**. Dấu gõ bằng số: `1-5` = sắc/huyền/hỏi/ngã/nặng, `6` = â/ê/ô, `7` = ơ/ư, `8` = ă, `9` = đ, `0` = bỏ dấu (ví dụ `Vie6t5` → Việt). Nên bật **Kiểm tra chính tả khi gõ** để các chuỗi như `mp3` không bị hiểu nhầm thành dấu.
 
 ## FAQ — câu hỏi thường gặp
 
 <details>
 <summary><strong>Cài xong gõ vẫn bị gạch chân?</strong></summary>
 
-Do VietTelex chưa được cấp quyền Trợ năng: System Settings → Privacy & Security → **Accessibility** → tick VietTelex (đã tick mà vẫn lỗi thì bỏ tick rồi tick lại). Có thể cần khởi động lại máy một lần để quyền có tác dụng.
+Nếu chữ bị gạch chân, có thể VietTelex chưa được cấp quyền Trợ năng. Mở Cài đặt hệ thống (System Settings) → Quyền riêng tư & Bảo mật (Privacy & Security) → Trợ năng (Accessibility), rồi bật VietTelex. Nếu đã bật mà vẫn lỗi, hãy tắt rồi bật lại. Có thể cần khởi động lại máy để quyền có hiệu lực.
 
 Nếu đã bật quyền mà VietTelex vẫn báo thiếu, hãy kiểm tra bản đang chạy. Bản Debug
 trong Xcode có định danh riêng và không dùng quyền của bản cài trong
 `~/Library/Input Methods`; thoát bản Debug rồi mở lại bản đã cài. Nếu bản đã cài
-vẫn báo thiếu, xoá mục VietTelex khỏi Accessibility rồi thêm lại chính app trong
+vẫn báo thiếu, xoá mục VietTelex khỏi Accessibility rồi thêm lại ứng dụng trong
 `~/Library/Input Methods`.
 </details>
 
 <details>
-<summary><strong>Không thấy ViệtTelex trong Input Sources?</strong></summary>
+<summary><strong>Không thấy ViệtTelex trong danh sách bộ gõ?</strong></summary>
 
 Đăng xuất/đăng nhập lại một lần rồi thêm lại.
 </details>
 
 <details>
-<summary><strong>Một app cụ thể gõ lỗi?</strong></summary>
+<summary><strong>Một ứng dụng cụ thể gõ lỗi?</strong></summary>
 
-Menu bộ gõ → **Cài đặt…** → tab **Bảng cơ chế gõ** → thêm app (có sẵn danh sách app mở gần đây) → ép tay thử lần lượt: **Tap (backspace)**, **Gõ trực tiếp**, **Marked text**. Cách nào gõ đúng thì [báo về GitHub](https://github.com/ptrinh/viettelex/issues/new/choose) để bản sau thành mặc định cho mọi người.
+Menu bộ gõ → **Cài đặt…** → tab **Ứng dụng** → chọn ứng dụng vừa dùng hoặc nhập mã ứng dụng, rồi thử cách gõ phù hợp. Nếu chưa biết nên chọn gì, hãy để **Tự động**. Khi đã tìm được cách gõ đúng, [báo lại trên GitHub](https://github.com/ptrinh/viettelex/issues/new/choose) để mọi người cùng dùng được.
 </details>
 
 <details>
 <summary><strong>Có hỗ trợ VNI không?</strong></summary>
 
-Có: **Cài đặt…** → tab **Tùy chỉnh** → bật **Gõ kiểu VNI**.
+Có: **Cài đặt…** → tab **Gõ phím** → chọn **VNI**.
 </details>
 
 <details>

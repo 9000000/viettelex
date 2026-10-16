@@ -42,6 +42,41 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(Set(SettingsTab.allCases.map(\.icon)).count, SettingsTab.allCases.count)
     }
 
+    /// Sau khi gộp tab (Giới thiệu/Thử nghiệm/Công cụ văn bản → Chung/Công cụ & gợi ý),
+    /// thông báo cập nhật hằng tuần và toast "chưa tải gói dịch" từng chỉ người dùng tới
+    /// tab không còn tồn tại (PR #125). Mọi chuỗi "Settings → X" (trừ System Settings)
+    /// phải chỉ tới một tab có thật, ở cả khoá tiếng Anh lẫn bản dịch tiếng Việt.
+    func testSettingsPathStringsNameCurrentTabs() throws {
+        let path = try XCTUnwrap(Bundle.main.path(forResource: "vi", ofType: "lproj"))
+        let vi = try XCTUnwrap(Bundle(path: path))
+        let table = try XCTUnwrap(vi.path(forResource: "Localizable", ofType: "strings"))
+        let dict = try XCTUnwrap(NSDictionary(contentsOfFile: table) as? [String: String])
+        let enTabs = SettingsTab.allCases.map(\.titleKey)
+        let viTabs = SettingsTab.allCases.map { vi.localizedString(forKey: $0.titleKey, value: nil, table: nil) }
+
+        let update = "Open Settings → General to install it."
+        let translate = "Translation pack not downloaded — open VietTelex Settings → Tools & suggestions."
+        XCTAssertEqual(dict[update], "Mở Cài đặt → Chung để cài bản mới.")
+        XCTAssertEqual(dict[translate], "Chưa có gói dịch này. Mở Cài đặt VietTelex → Công cụ & gợi ý để tải về.")
+
+        func tab(after marker: String, in s: String) -> Substring? {
+            s.range(of: marker).map { s[$0.upperBound...] }
+        }
+        var checked = 0
+        for (key, value) in dict where key.contains("Settings → ") && !key.contains("System Settings") {
+            checked += 1
+            let enRest = try XCTUnwrap(tab(after: "Settings → ", in: key), key)
+            XCTAssertTrue(enTabs.contains { enRest.hasPrefix($0) }, "stale tab in key: \(key)")
+            let viRest = try XCTUnwrap(tab(after: "Cài đặt VietTelex → ", in: value)
+                                       ?? tab(after: "Cài đặt → ", in: value), value)
+            XCTAssertTrue(viTabs.contains { viRest.hasPrefix($0) }, "stale tab in vi: \(value)")
+        }
+        XCTAssertGreaterThanOrEqual(checked, 2)
+        for stale in ["Giới thiệu để", "→ Công cụ văn bản", "tab Thử nghiệm", "tab Giới thiệu"] {
+            XCTAssertFalse(dict.values.contains { $0.contains(stale) }, stale)
+        }
+    }
+
     /// Mở thẳng vào bất kỳ tab nào (không còn rơi về tab đầu khi "nâng cao" tắt).
     func testModelOpensRequestedTab() {
         for tab in SettingsTab.allCases {

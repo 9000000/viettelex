@@ -9,39 +9,39 @@
 "Input style" = "Kiểu gõ";
 "Simple Telex" = "Telex đơn giản";
 "Quick Telex" = "Gõ nhanh (Quick Telex)";
-"Doubled first consonant expands: cc→ch, gg→gi, kk→kh, nn→ng, qq→qu, pp→ph, tt→th." = "Gõ đúp phụ âm đầu để ra phụ âm ghép: cc→ch, gg→gi, kk→kh, nn→ng, qq→qu, pp→ph, tt→th.";
+"Doubled first consonant expands: cc→ch, gg→gi, kk→kh, nn→ng, qq→qu, pp→ph, tt→th." = "Gõ lặp phụ âm đầu để tạo phụ âm ghép: cc→ch, gg→gi, kk→kh, nn→ng, qq→qu, pp→ph, tt→th.";
 "Language" = "Ngôn ngữ";
 "System" = "Theo hệ thống";
-"A lone “w” stays “w” (type “uw” for ư). Off = full Telex (cw→cư)." = "Chữ w đứng một mình luôn là 'w' (gõ 'uw' để ra ư). Tắt = Telex đầy đủ (cw→cư).";
-"Free tone placement" = "Bỏ dấu tự do";
-"Off = strict Telex: tones apply only next to a vowel — good for English/code (data→data). On: free placement (ama→âm)." = "Tắt = Telex nghiêm ngặt: dấu chỉ nhận khi gõ sát nguyên âm, hợp cho English/code (data→data). Bật: dấu đặt tự do (ama→âm).";
-"Modern tone placement (oà, uý)" = "Bỏ dấu kiểu mới (oà, uý)";
-"Off = old style (hòa, thủy, khỏe). On = new style (hoà, thuý, khoẻ). Only oa/oe/uy differ." = "Tắt = kiểu cũ (hòa, thủy, khỏe). Bật = kiểu mới (hoà, thuý, khoẻ). Chỉ đổi vị trí dấu ở oa/oe/uy.";
+"A lone “w” stays “w” (type “uw” for ư). Off = full Telex (cw→cư)." = "Gõ riêng “w” vẫn ra “w” (gõ “uw” để ra ư). Tắt mục này để dùng đầy đủ Telex (cw→cư).";
+"Free tone placement" = "Đặt dấu tự do";
+"Off = strict Telex: tones apply only next to a vowel — good for English/code (data→data). On: free placement (ama→âm)." = "Tắt: phím dấu chỉ có tác dụng ngay sau nguyên âm, phù hợp khi gõ tiếng Anh hoặc mã lệnh (data → data). Bật: có thể đặt dấu ở vị trí tự do (ama → âm).";
+"Modern tone placement (oà, uý)" = "Vị trí dấu kiểu mới (oà, uý)";
+"Off = old style (hòa, thủy, khỏe). On = new style (hoà, thuý, khoẻ). Only oa/oe/uy differ." = "Tắt: dùng cách viết cũ (hòa, thủy, khỏe). Bật: dùng cách viết mới (hoà, thuý, khoẻ). Chỉ khác vị trí dấu trong oa, oe và uy.";
 "Spelling" = "Chính tả";
-"Auto-restore invalid words" = "Tự khôi phục từ không hợp lệ";
+"Auto-restore invalid words" = "Tự trả lại chữ gốc khi từ không hợp lệ";
 "Live spell-check" = "Kiểm tra chính tả khi gõ";
-"Stop adding tones as soon as a word can’t be Vietnamese (google, github…) instead of waiting for word end." = "Ngừng bỏ dấu ngay khi từ không thể là tiếng Việt (google, github…) thay vì đợi hết từ.";
+"Stop adding tones as soon as a word can’t be Vietnamese (google, github…) instead of waiting for word end." = "Dừng thêm dấu ngay khi chuỗi phím không thể tạo thành từ tiếng Việt (google, github…), không cần chờ bạn gõ xong từ.";
 "App compatibility" = "Tương thích ứng dụng";
-"No apps learned yet." = "Chưa có ứng dụng nào được ghi nhớ.";
-"No in-place (tap / marked text): %@" = "Không gõ in-place được (tap khi có quyền Trợ năng, marked text khi không): %@";
-"In-place OK: %@" = "Gõ trực tiếp OK: %@";
-"Reset (re-probe)" = "Đặt lại (dò lại từ đầu)";
-"VietTelex learns the right method per app. If an app shows underlines or types wrong, tap Reset to re-probe." = "VietTelex tự học cách gõ phù hợp cho từng ứng dụng. Nếu một ứng dụng gõ bị gạch chân hoặc sai, bấm Đặt lại để dò lại.";
+"No apps learned yet." = "Chưa có ứng dụng nào được nhận diện.";
+"No in-place (tap / marked text): %@" = "Không thể gõ trực tiếp (dùng Tap khi có quyền Trợ năng, nếu không dùng chế độ Gõ có gạch chân): %@";
+"In-place OK: %@" = "Gõ trực tiếp được: %@";
+"Reset (re-probe)" = "Đặt lại và dò lại";
+"VietTelex learns the right method per app. If an app shows underlines or types wrong, tap Reset to re-probe." = "VietTelex tự tìm cách gõ phù hợp cho từng ứng dụng. Nếu chữ bị gạch chân hoặc gõ sai, chọn Đặt lại để VietTelex dò lại.";
 
 /* Advanced (terminal tap latency) */
 "Advanced" = "Nâng cao";
-"Modify key events in place" = "Sửa sự kiện phím tại chỗ";
-"In terminals, apply a one-letter tone edit (w→ư) by rewriting the real keystroke instead of posting two synthetic events — lower latency." = "Trong terminal, sửa một ký tự (w→ư) bằng cách viết lại phím thật thay vì gửi hai sự kiện tổng hợp — giảm độ trễ.";
+"Modify key events in place" = "Sửa phím ngay khi gõ";
+"In terminals, apply a one-letter tone edit (w→ư) by rewriting the real keystroke instead of posting two synthetic events — lower latency." = "Trong Terminal, khi đổi một ký tự (w → ư), VietTelex sửa ngay phím vừa gõ thay vì gửi thêm hai phím giả lập. Cách này giúp phản hồi nhanh hơn.";
 
 /* About tab */
-"Version %@ · %@" = "Version %@ ngày %@";
+"Version %@ · %@" = "Phiên bản %@ · %@";
 "Check for updates" = "Kiểm tra cập nhật";
 "Download update…" = "Tải bản mới…";
 "You’re up to date (%@)." = "Đã là bản mới nhất (%@).";
 "Update available: %@" = "Có bản mới: %@";
 "What’s new" = "Có gì mới";
 "Full changelog" = "Xem đầy đủ thay đổi";
-"Couldn’t check — %@." = "Không kiểm tra được — %@.";
+"Couldn’t check — %@." = "Chưa kiểm tra được: %@.";
 
 /* Shortcuts tab */
 "Type" = "Gõ";
@@ -50,17 +50,17 @@
 "becomes" = "thành";
 "Update" = "Cập nhật";
 "Add" = "Thêm";
-"Click a row to edit." = "Bấm một dòng để sửa.";
+"Click a row to edit." = "Chọn một dòng để sửa.";
 "Import from plist…" = "Nhập từ plist…";
 "Export to plist…" = "Xuất ra plist…";
 "Shortcut “%@” already exists" = "Gõ tắt “%@” đã tồn tại";
 "Overwrite the existing value?" = "Ghi đè giá trị hiện có?";
 "Overwrite" = "Ghi đè";
 "Cancel" = "Huỷ";
-"Couldn’t read the file" = "Không đọc được file";
-"The file must be a String → String dictionary plist (like the one Export to plist… creates)." = "File phải là plist dạng dictionary String → String (như file Xuất ra plist… tạo).";
+"Couldn’t read the file" = "Không đọc được tệp";
+"The file must be a String → String dictionary plist (like the one Export to plist… creates)." = "Tệp cần là plist gồm các cặp chuỗi → chuỗi, giống tệp được tạo bằng Xuất ra plist…";
 "Imported %lld shortcuts" = "Đã nhập %lld gõ tắt";
-"Merged into the existing table (duplicates take the new value)." = "Gộp vào bảng hiện có (mục trùng lấy giá trị mới).";
+"Merged into the existing table (duplicates take the new value)." = "Đã nhập vào danh sách hiện có. Nếu có gõ tắt trùng, nội dung mới sẽ thay nội dung cũ.";
 
 /* Window title */
 "VietTelex — Settings" = "VietTelex — Cài đặt";
@@ -69,121 +69,121 @@
 "Status: OK" = "Tình trạng: OK";
 "Status: Permission needed" = "Tình trạng: Thiếu quyền";
 "System Settings…" = "Cài đặt hệ thống…";
-"Opens Keyboard settings — set automatic input-source switching per app / document there." = "Ấn để thiết lập tự chuyển bàn phím theo app / văn bản.";
+"Opens Keyboard settings — set automatic input-source switching per app / document there." = "Mở mục Bàn phím trong Cài đặt hệ thống. Tại đây, bạn có thể bật tính năng tự đổi bộ gõ theo ứng dụng hoặc tài liệu.";
 "Settings…" = "Cài đặt…";
-"Accessibility permission needed" = "Thiếu quyền Trợ năng (Accessibility)";
-"VietTelex needs Accessibility to type Vietnamese in Terminal/iTerm and browsers.\n\nOpen System Settings → Privacy & Security → Accessibility and enable VietTelex (if it’s already there, untick then tick it again)." = "VietTelex cần quyền Trợ năng (Accessibility) để có trải nghiệm tốt nhất qua các cơ chế gõ khác - không bị gạch chân.\n\nMở System Settings → Privacy & Security → Accessibility, rồi bật VietTelex (nếu đã có thì bỏ tick và tick lại).";
+"Accessibility permission needed" = "Cần quyền Trợ năng";
+"VietTelex needs Accessibility to type Vietnamese in Terminal/iTerm and browsers.\n\nOpen System Settings → Privacy & Security → Accessibility and enable VietTelex (if it’s already there, untick then tick it again)." = "Để gõ tiếng Việt trong Terminal, iTerm và một số trình duyệt mà không bị gạch chân, VietTelex cần quyền Trợ năng.\n\nMở Cài đặt hệ thống → Quyền riêng tư & Bảo mật → Trợ năng rồi bật VietTelex. Nếu VietTelex đã có trong danh sách, hãy tắt rồi bật lại.";
 "Open Settings" = "Mở Cài đặt";
 "Close" = "Đóng";
 
 /* Experimental tab (Thử Nghiệm) */
 "VNI typing (experimental)" = "Gõ kiểu VNI (thử nghiệm)";
-"Unknown apps use the safe channel (tap/marked)" = "App lạ dùng kênh gõ an toàn (tap/marked)";
-"Apps without a rule type via backspace-retype (or underlined composition without Accessibility) instead of trying direct insertion and guessing. Turn off to restore the old probe-and-learn behavior." = "App chưa có rule sẽ gõ bằng backspace-retype (hoặc gạch chân khi thiếu quyền Trợ năng) thay vì thử gõ trực tiếp rồi tự đoán. Tắt để quay lại cơ chế dò-và-học cũ.";
-"Type diacritics with digits instead of Telex letters: 1-5 = sắc/huyền/hỏi/ngã/nặng, 6 = â/ê/ô, 7 = ơ/ư, 8 = ă, 9 = đ, 0 = clear tone. Letters stay literal. Keep Live spell-check on so numbers like “mp3” aren’t turned into tones." = "Gõ dấu bằng chữ số thay cho chữ cái Telex: 1-5 = sắc/huyền/hỏi/ngã/nặng, 6 = â/ê/ô, 7 = ơ/ư, 8 = ă, 9 = đ, 0 = bỏ dấu. Chữ cái giữ nguyên. Nên bật “Kiểm tra chính tả khi gõ” để số như “mp3” không bị biến thành dấu.";
+"Unknown apps use the safe channel (tap/marked)" = "Dùng cách gõ an toàn cho ứng dụng chưa nhận diện";
+"Apps without a rule type via backspace-retype (or underlined composition without Accessibility) instead of trying direct insertion and guessing. Turn off to restore the old probe-and-learn behavior." = "Với ứng dụng chưa có cách gõ phù hợp, VietTelex sẽ gõ lại phím (Backspace rồi nhập lại) thay vì tự đoán. Nếu chưa cấp quyền Trợ năng, chữ có thể được gạch chân khi đang gõ. Tắt mục này để quay lại cách tự dò như trước.";
+"Type diacritics with digits instead of Telex letters: 1-5 = sắc/huyền/hỏi/ngã/nặng, 6 = â/ê/ô, 7 = ơ/ư, 8 = ă, 9 = đ, 0 = clear tone. Letters stay literal. Keep Live spell-check on so numbers like “mp3” aren’t turned into tones." = "Gõ dấu bằng số thay cho chữ Telex: 1–5 = sắc/huyền/hỏi/ngã/nặng, 6 = â/ê/ô, 7 = ơ/ư, 8 = ă, 9 = đ, 0 = bỏ dấu. Chữ cái vẫn giữ nguyên. Hãy bật “Kiểm tra chính tả khi gõ” để các chuỗi như “mp3” không bị hiểu nhầm thành dấu.";
 "Context-based decision" = "Quyết định theo ngữ cảnh";
-"After an English word, an ambiguous next word whose keys spell an English word is kept English instead of Vietnamese — “he is” → “he is”, not “he í”. After a Vietnamese or unclear word it stays Vietnamese — “sao í”." = "Sau một từ tiếng Anh, từ nhập nhằng kế tiếp mà chuỗi phím tạo thành một từ tiếng Anh sẽ được giữ tiếng Anh thay vì tiếng Việt — “he is” → “he is”, không phải “he í”. Sau từ tiếng Việt hoặc không rõ thì để tiếng Việt — “sao í”.";
+"After an English word, an ambiguous next word whose keys spell an English word is kept English instead of Vietnamese — “he is” → “he is”, not “he í”. After a Vietnamese or unclear word it stays Vietnamese — “sao í”." = "Sau một từ tiếng Anh, nếu từ tiếp theo có thể được hiểu theo cả hai cách, VietTelex sẽ ưu tiên tiếng Anh (“he is” giữ nguyên, không thành “he í”). Sau từ tiếng Việt hoặc khi chưa rõ, VietTelex ưu tiên tiếng Việt (“sao í”).";
 "Safety" = "An toàn";
-"Cascade circuit breaker" = "Bộ ngắt chống tràn sự kiện";
-"Keep this ON. Stops the terminal tap if it ever floods the keyboard with synthetic events, so a bug can’t freeze typing." = "Nên để BẬT. Tự ngắt tap terminal nếu nó phát quá nhiều sự kiện phím, để lỗi không thể làm treo bàn phím.";
+"Cascade circuit breaker" = "Tự ngắt khi có lỗi";
+"Keep this ON. Stops the terminal tap if it ever floods the keyboard with synthetic events, so a bug can’t freeze typing." = "Nên bật mục này. Nếu bộ gõ gửi quá nhiều phím giả lập, VietTelex sẽ tự dừng để bàn phím không bị treo.";
 "Diagnostics" = "Chẩn đoán";
 "Record debug log" = "Ghi nhật ký gỡ lỗi";
-"Records tap health events in memory (never the text you type). Turn it on, reproduce the problem, then Copy debug log and paste it into your report — or save it as a file." = "Ghi lại các sự kiện của tap trong bộ nhớ (không ghi nội dung bạn gõ). Bật lên, tái hiện lỗi, rồi bấm Chép nhật ký và dán vào báo cáo — hoặc lưu thành file.";
+"Records tap health events in memory (never the text you type). Turn it on, reproduce the problem, then Copy debug log and paste it into your report — or save it as a file." = "Khi bật, VietTelex chỉ lưu tạm trong bộ nhớ trạng thái hoạt động của cơ chế Tap, không lưu nội dung bạn gõ. Hãy làm lại thao tác gây lỗi, rồi chọn Chép nhật ký gỡ lỗi để gửi kèm báo lỗi hoặc Lưu nhật ký gỡ lỗi… để lưu thành tệp.";
 "Copy debug log" = "Chép nhật ký gỡ lỗi";
 "Save debug log…" = "Lưu nhật ký gỡ lỗi…";
 "Clear" = "Xoá";
-"Copied — paste it into your bug report." = "Đã chép — dán vào phần báo lỗi.";
+"Copied — paste it into your bug report." = "Đã sao chép. Bạn có thể dán nhật ký vào báo lỗi.";
 "Saved to %@" = "Đã lưu vào %@";
-"Couldn’t save the file." = "Không lưu được file.";
+"Couldn’t save the file." = "Không lưu được tệp.";
 
 /* App mode override (Experimental) */
-"App mode" = "Chế độ ứng dụng";
-"Force how VietTelex types in a specific app. Auto = detect automatically. Use Tap (real keystrokes, no underline) if an app types wrong or shows underlines; Marked text is the safe fallback." = "Ép cách VietTelex gõ trong một ứng dụng cụ thể. Auto = tự nhận diện. Dùng Tap (gõ phím thật, không gạch chân) nếu app gõ sai hoặc bị gạch chân; Marked text là phương án an toàn.";
-"App bundle id (e.g. com.larksuite.larkApp)" = "Bundle id của app (vd com.larksuite.larkApp)";
-"Pin as Tap" = "Ép sang Tap";
+"App mode" = "Cách gõ theo ứng dụng";
+"Force how VietTelex types in a specific app. Auto = detect automatically. Use Tap (real keystrokes, no underline) if an app types wrong or shows underlines; Marked text is the safe fallback." = "Bạn có thể chọn cách gõ riêng cho từng ứng dụng. Chọn Tự động để VietTelex tự tìm cách phù hợp. Nếu chữ bị sai hoặc gạch chân, hãy thử Tap (dùng phím thật, không gạch chân; cần quyền Trợ năng). Gõ có gạch chân là lựa chọn an toàn.";
+"App bundle id (e.g. com.larksuite.larkApp)" = "Mã ứng dụng (bundle ID, ví dụ com.larksuite.larkApp)";
+"Pin as Tap" = "Dùng Tap cho ứng dụng này";
 "Auto" = "Tự động";
 "In-place" = "Gõ trực tiếp";
-"Marked text" = "Marked text";
+"Marked text" = "Gõ có gạch chân";
 "Tap" = "Tap";
-"No apps yet — type in one first, or add a bundle id above." = "Chưa có app nào — gõ thử trong một app, hoặc thêm bundle id ở trên.";
-"Add an app by bundle id:" = "Thêm app theo bundle id:";
-"Recently used — pick a mode to override:" = "Mở gần đây — chọn chế độ để ép:";
-"Pinned:" = "Đã ép:";
-"Recently used app" = "App mở gần đây";
-"Choose an app…" = "Chọn một app…";
-"…or enter a bundle id:" = "…hoặc nhập bundle id:";
+"No apps yet — type in one first, or add a bundle id above." = "Chưa có ứng dụng nào trong danh sách. Hãy gõ thử trong một ứng dụng hoặc thêm mã ứng dụng ở trên.";
+"Add an app by bundle id:" = "Thêm ứng dụng bằng mã ứng dụng:";
+"Recently used — pick a mode to override:" = "Ứng dụng vừa dùng — chọn cách gõ riêng:";
+"Pinned:" = "Đã chọn cách gõ riêng:";
+"Recently used app" = "Ứng dụng vừa dùng";
+"Choose an app…" = "Chọn một ứng dụng…";
+"…or enter a bundle id:" = "…hoặc nhập mã ứng dụng:";
 
 /* Mode table tab (Bảng chế độ gõ) */
 "App" = "Ứng dụng";
-"Detected" = "Đã nhận diện";
-"Manual" = "Ép tay";
-"Tap (backspace)" = "Tap (backspace)";
-"Selection-replace" = "Tap (chọn rồi ghi đè)";
+"Detected" = "Tự nhận diện";
+"Manual" = "Bạn chọn";
+"Tap (backspace)" = "Tap (Backspace)";
+"Selection-replace" = "Tap (chọn rồi nhập lại)";
 "Empty-reset" = "Tap (Excel)";
-"Per-field (AX)" = "Tự dò theo ô (AX)";
-"Passthrough" = "Passthrough (tắt IME)";
-"not detected yet" = "chưa dò";
-"Missing Accessibility permission" = "Thiếu quyền Trợ năng";
-"Add recent app" = "Thêm app mở gần đây";
-"…or a bundle id" = "…hoặc bundle id";
-"Clear & re-learn" = "Xoá & học lại từ đầu";
-"Filter by app name, bundle id, or mode" = "Lọc theo tên app, bundle id, hoặc cơ chế gõ";
-"Empty — type a few Vietnamese words in any app and it will appear here." = "Trống — gõ vài từ tiếng Việt trong app bất kỳ là app sẽ hiện ở đây.";
-"An app types wrong or shows underlines? Pick Tap — real keystrokes, no underline (needs Accessibility). Marked text always renders correctly but underlines while typing. The modes below the divider are for special cases — leave them unless you know the app needs one. Clear forgets everything learned; manual picks are kept." = "App gõ sai hoặc bị gạch chân? Chọn Tap — gõ phím thật, không gạch chân (cần quyền Trợ năng). Marked text luôn ra đúng chữ nhưng gạch chân khi đang gõ. Các chế độ dưới vạch ngăn dành cho trường hợp đặc biệt — đừng chọn trừ khi biết chắc app cần. Xoá = quên hết những gì đã học; các mục ép tay được giữ.";
+"Per-field (AX)" = "Tự chọn theo ô (Trợ năng)";
+"Passthrough" = "Chuyển nguyên phím (không xử lý)";
+"not detected yet" = "Chưa nhận diện";
+"Missing Accessibility permission" = "Cần quyền Trợ năng";
+"Add recent app" = "Thêm ứng dụng vừa dùng";
+"…or a bundle id" = "…hoặc nhập mã ứng dụng";
+"Clear & re-learn" = "Xoá dữ liệu đã học";
+"Filter by app name, bundle id, or mode" = "Lọc theo tên, mã ứng dụng hoặc cách gõ";
+"Empty — type a few Vietnamese words in any app and it will appear here." = "Danh sách đang trống. Hãy gõ tiếng Việt trong một ứng dụng, VietTelex sẽ thêm ứng dụng đó vào đây.";
+"An app types wrong or shows underlines? Pick Tap — real keystrokes, no underline (needs Accessibility). Marked text always renders correctly but underlines while typing. The modes below the divider are for special cases — leave them unless you know the app needs one. Clear forgets everything learned; manual picks are kept." = "Ứng dụng gõ sai hoặc chữ bị gạch chân? Thử chọn Tap để gõ bằng phím thật (không gạch chân; cần quyền Trợ năng). Chế độ Gõ có gạch chân hiển thị đúng chữ nhưng có thể gạch chân khi đang nhập. Các cách gõ bên dưới vạch ngăn dành cho trường hợp đặc biệt; bạn có thể giữ nguyên nếu chưa rõ ứng dụng cần gì. Xoá dữ liệu đã học để VietTelex dò lại; cách gõ bạn đã chọn riêng vẫn được giữ.";
 
-"Imported %lld app modes" = "Đã nhập %lld chế độ app";
-"Merged into the table (existing pins for the same app take the imported value). Entries with an unknown mode were skipped." = "Đã gộp vào bảng (app trùng lấy giá trị nhập vào). Mục có chế độ không hợp lệ bị bỏ qua.";
+"Imported %lld app modes" = "Đã nhập cách gõ cho %lld ứng dụng";
+"Merged into the table (existing pins for the same app take the imported value). Entries with an unknown mode were skipped." = "Đã gộp vào danh sách. Nếu ứng dụng đã có cách gõ riêng, cách gõ trong tệp nhập sẽ được dùng. Các mục có cách gõ không hợp lệ đã được bỏ qua.";
 
 /* Advanced features toggle */
 "When a word is both English and Vietnamese" = "Khi từ vừa là tiếng Anh vừa là tiếng Việt";
 "Prefer Vietnamese" = "Ưu tiên tiếng Việt";
 "Prefer English" = "Ưu tiên tiếng Anh";
-"For words like last/lát, list/lít, his/hí. Prefer Vietnamese: double the tone key to keep English (lisst → list). Prefer English: put the tone at the end for Vietnamese (lits → lít). Inside an English sentence the word stays English either way." = "Cho các từ như last/lát, list/lít, his/hí. Ưu tiên tiếng Việt: gõ đúp phím dấu để giữ tiếng Anh (lisst → list). Ưu tiên tiếng Anh: đặt dấu ở cuối từ để ra tiếng Việt (lits → lít). Trong câu tiếng Anh thì từ vẫn giữ tiếng Anh dù chọn gì.";
+"For words like last/lát, list/lít, his/hí. Prefer Vietnamese: double the tone key to keep English (lisst → list). Prefer English: put the tone at the end for Vietnamese (lits → lít). Inside an English sentence the word stays English either way." = "Dùng cho những từ có thể là cả tiếng Anh lẫn tiếng Việt, như last/lát, list/lít, his/hí. Ưu tiên tiếng Việt: gõ đúp phím dấu để giữ từ tiếng Anh (lisst → list). Ưu tiên tiếng Anh: gõ dấu ở cuối từ tiếng Việt (lits → lít). Trong câu tiếng Anh, từ vẫn được giữ nguyên.";
 
 /* UX batch 21/07 pm */
-"Missing Accessibility permission — click to open System Settings" = "Thiếu quyền Trợ năng — bấm để mở System Settings";
+"Missing Accessibility permission — click to open System Settings" = "Chưa có quyền Trợ năng — bấm để mở Cài đặt hệ thống";
 "Check weekly and notify me" = "Tự kiểm tra hàng tuần và báo khi có bản mới";
 "VietTelex %@ is available" = "Đã có VietTelex %@";
-"You can download the update from the releases page. This check ran because weekly update checks are enabled in Settings." = "Bạn có thể tải bản mới từ trang releases. Lần kiểm tra này chạy vì bạn đã bật tự kiểm tra hàng tuần trong Cài đặt.";
+"You can download the update from the releases page. This check ran because weekly update checks are enabled in Settings." = "Bạn có thể tải bản cập nhật từ trang phát hành. VietTelex đã kiểm tra vì tính năng cập nhật hằng tuần đang bật trong Cài đặt.";
 "Later" = "Để sau";
-"Forget this app (pin + learned data)" = "Quên app này (xoá ép tay + dữ liệu đã học)";
+"Forget this app (pin + learned data)" = "Xoá lựa chọn riêng và dữ liệu đã học của ứng dụng này";
 
-"Status: Permission stale — click to fix" = "⚠️ Quyền trợ năng bị kẹt — bấm để sửa";
-"Status: Tap paused — click to retry" = "⚠️ Bộ gõ tự tạm dừng — bấm để chạy lại";
+"Status: Permission stale — click to fix" = "⚠️ Quyền Trợ năng cần sửa — bấm để khắc phục";
+"Status: Tap paused — click to retry" = "⚠️ Bộ gõ đã tạm dừng để tự bảo vệ — bấm để thử lại";
 
-"Stale permission title" = "Quyền Trợ năng bị kẹt sau khi cập nhật";
+"Stale permission title" = "Cần cấp lại quyền Trợ năng";
 
-"Stale permission body" = "macOS đang liệt kê VietTelex là được phép, nhưng từ chối cấp event tap — quyền cũ đang ghim một chữ ký khác, nên cái tick đó không còn giá trị.
+"Stale permission body" = "macOS vẫn hiển thị VietTelex trong danh sách được cấp quyền nhưng không cho bộ gõ hoạt động. Có thể thông tin quyền cũ chưa được cập nhật.
 
-Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chính nó rồi xin lại quyền, bạn chỉ cần đồng ý một lần. Không cần khởi động lại máy.";
+Chọn “Sửa tự động” để VietTelex xoá mục quyền cũ của chính mình và yêu cầu cấp lại. Bạn chỉ cần cho phép một lần; không cần khởi động lại máy.";
 
-"Open Accessibility Settings" = "Mở cài đặt Trợ năng";
+"Open Accessibility Settings" = "Mở Cài đặt hệ thống → Trợ năng";
 
 "Update now" = "Cập nhật ngay";
 
-"Update now body" = "Bấm Cập nhật ngay: tải bản mới, kiểm tra chữ ký, và thay thế tự động — không cần mật khẩu. Bàn phím sẽ khởi động lại sau khi xong.";
+"Update now body" = "Chọn Cập nhật ngay để tải bản mới, kiểm tra chữ ký và cài đặt tự động. Bạn không cần nhập mật khẩu. Bộ gõ sẽ tự khởi động lại khi cập nhật xong.";
 
 "Updated to %@" = "Đã cập nhật lên %@";
 
-"Update done body" = "Bộ gõ sẽ khởi động lại ngay. Nếu app nào đang mở không gõ được, chuyển bàn phím qua ABC rồi quay lại VietTelex.";
+"Update done body" = "Bộ gõ sẽ khởi động lại. Nếu ứng dụng đang mở không gõ được, chuyển sang ABC rồi quay lại VietTelex.";
 
 "Update failed" = "Cập nhật thất bại";
 
-"Update failed body" = "Lỗi: %@\n\nBạn có thể tải bản cài từ trang releases.";
+"Update failed body" = "Lỗi: %@\n\nBạn có thể tải bộ cài từ trang phát hành.";
 
 "Restart input method" = "Khởi động lại bộ gõ";
 
-"Open releases page" = "Mở trang releases";
+"Open releases page" = "Mở trang phát hành";
 "Supported formats: plist/XML, JSON, YAML, or one key:value per line (GõNhanh, EVKey…)." = "Định dạng hỗ trợ: plist/XML, JSON, YAML, hoặc mỗi dòng một cặp key:value (Gõ Nhanh, EVKey…).";
 "Export to YAML…" = "Xuất ra YAML…";
 
 /* System Settings → Input Sources how-to (AX press failed or not allowed) */
-"Input sources howto title" = "Còn một bước nữa trong Cài đặt hệ thống";
-"Input sources howto body" = "Trong bảng Bàn phím (Keyboard) vừa mở, tìm mục “Input Sources” (Nguồn nhập) dưới phần “Text Input” rồi bấm nút “Edit…” (Sửa…) bên cạnh.";
-"Input source hotkey…" = "Cài đặt hotkey…";
-"Opens Keyboard Shortcuts → Input Sources, where the shortcut for switching between VietTelex and other input sources lives." = "Mở Phím tắt bàn phím → Nguồn nhập — nơi có phím tắt chuyển đổi giữa ViệtTelex và các nguồn nhập khác.";
-"Input source hotkey howto title" = "Còn một bước nữa trong Cài đặt hệ thống";
-"Input source hotkey howto body" = "Trong bảng Bàn phím (Keyboard) vừa mở, bấm “Keyboard Shortcuts…” (Phím tắt bàn phím…), rồi chọn “Input Sources” (Nguồn nhập) trong danh sách bên trái.";
+"Input sources howto title" = "Thêm VietTelex vào danh sách bộ gõ";
+"Input sources howto body" = "Trong mục Bàn phím vừa mở, tìm “Nguồn nhập liệu” (Input Sources) bên dưới “Nhập văn bản” (Text Input), rồi chọn “Sửa…” (Edit…).";
+"Input source hotkey…" = "Phím tắt chuyển bộ gõ…";
+"Opens Keyboard Shortcuts → Input Sources, where the shortcut for switching between VietTelex and other input sources lives." = "Mở mục Phím tắt bàn phím → Nguồn nhập liệu để xem hoặc đổi phím tắt chuyển bộ gõ.";
+"Input source hotkey howto title" = "Thiết lập phím tắt chuyển bộ gõ";
+"Input source hotkey howto body" = "Trong mục Bàn phím vừa mở, chọn “Phím tắt bàn phím…” (Keyboard Shortcuts…), rồi chọn “Nguồn nhập liệu” (Input Sources) ở danh sách bên trái.";
 "OK" = "OK";
 "Learn Telex typing" = "Học gõ Telex";
 "User guide" = "Hướng dẫn sử dụng";
@@ -191,63 +191,63 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 "Downloading and installing…" = "Đang tải và cài đặt…";
 "Add diacritics to the word before the caret (experimental)" = "Gõ thêm dấu cho từ ngay trước con trỏ (thử nghiệm)";
 "Repair automatically" = "Sửa tự động";
-"Repair started title" = "Đã xoá quyền cũ — cấp lại một lần nữa";
-"Repair started body" = "VietTelex đã tự xoá mục bị kẹt của chính nó. macOS sẽ hỏi lại quyền Trợ năng: bạn bấm đồng ý, hoặc mở cài đặt Trợ năng rồi tick VietTelex. Gõ trong Terminal/Chrome chạy lại ngay khi tick, không cần khởi động lại.";
-"Repair failed title" = "Không xoá được quyền cũ";
-"Repair failed body" = "macOS từ chối xoá mục này (thường do quyền bị tổ chức của bạn quản lý). Cách sửa tay: mở cài đặt Trợ năng, chọn VietTelex, bấm − để xoá, rồi bấm + thêm lại từ ~/Library/Input Methods.";
+"Repair started title" = "Đã đặt lại quyền — hãy cấp lại một lần";
+"Repair started body" = "VietTelex đã xoá mục quyền cũ. macOS sẽ hỏi bạn cấp lại quyền Trợ năng. Hãy chọn Cho phép, hoặc mở Cài đặt hệ thống → Trợ năng và bật VietTelex. Bạn có thể gõ lại trong Terminal và Chrome ngay sau đó; không cần khởi động lại máy.";
+"Repair failed title" = "Không thể đặt lại quyền tự động";
+"Repair failed body" = "macOS không cho xoá mục này; có thể quyền đang do tổ chức quản lý. Bạn có thể tự sửa: mở Cài đặt hệ thống → Trợ năng, chọn VietTelex, bấm − để xoá, rồi bấm + và thêm lại VietTelex từ ~/Library/Input Methods.";
 
 /* 1.4.22 — UI/UX audit: captions còn thiếu, banner Trợ năng, kênh cập nhật, nhãn VoiceOver */
-"A word that isn’t valid Vietnamese snaps back to the keys you actually typed when the word ends (retore → retore)." = "Từ không phải tiếng Việt hợp lệ sẽ tự trả về đúng phím đã gõ khi kết thúc từ (retore → retore).";
-"Type “toan”, then “s” → “toán” — no need to retype the whole word. Deleting the space after a word re-opens it: “tháy ” + ⌫ + “a” → “thấy”." = "Gõ “toan” rồi “s” → “toán”, không cần gõ lại từ. Xóa dấu cách mở lại từ vừa chốt: “tháy ” + ⌫ + “a” → “thấy”.";
-"No Accessibility permission — typing will be underlined" = "Chưa có quyền Trợ năng — sẽ bị dấu gạch chân khi gõ";
-"Tick VietTelex in Privacy & Security → Accessibility. You may need to restart your Mac for the permission to take effect." = "Vào Quyền riêng tư & Bảo mật → Trợ năng rồi tick VietTelex. Có thể bạn phải khởi động lại máy để quyền Trợ năng có tác dụng.";
+"A word that isn’t valid Vietnamese snaps back to the keys you actually typed when the word ends (retore → retore)." = "Khi kết thúc một từ không có trong tiếng Việt, VietTelex trả lại đúng những phím bạn đã gõ (retore → retore).";
+"Type “toan”, then “s” → “toán” — no need to retype the whole word. Deleting the space after a word re-opens it: “tháy ” + ⌫ + “a” → “thấy”." = "Gõ “toan”, rồi gõ “s” để thành “toán” — không cần gõ lại cả từ. Xoá dấu cách ngay sau một từ để sửa tiếp: “tháy ” + ⌫ + “a” → “thấy”.";
+"No Accessibility permission — typing will be underlined" = "Chưa có quyền Trợ năng — một số ứng dụng sẽ gạch chân chữ khi bạn gõ";
+"Tick VietTelex in Privacy & Security → Accessibility. You may need to restart your Mac for the permission to take effect." = "Mở Quyền riêng tư & Bảo mật → Trợ năng rồi bật VietTelex. Có thể bạn cần khởi động lại máy để quyền có hiệu lực.";
 "Manual check: the newest release on GitHub. Weekly check: the stable channel." = "Kiểm tra thủ công: bản mới nhất trên GitHub; kiểm tra hằng tuần: kênh ổn định.";
-"No app matches “%@”" = "Không có app nào khớp “%@”";
+"No app matches “%@”" = "Không tìm thấy ứng dụng khớp với “%@”";
 "Clear filter" = "Xoá bộ lọc";
 "Delete this shortcut" = "Xoá gõ tắt này";
-"Open Settings → About to install it." = "Mở Cài đặt → Giới thiệu để cài bản mới.";
+"Open Settings → General to install it." = "Mở Cài đặt → Chung để cài bản mới.";
 
 /* Keyboard layout (bố cục bàn phím Telex đọc) */
 "Keyboard layout" = "Bố cục bàn phím";
 "Compose on" = "Gõ theo";
 "Follow the previous input source" = "Theo nguồn nhập trước đó";
-"Which physical keyboard Telex reads. Pick Colemak, Dvorak… to type Vietnamese with that layout. Left on “follow”, the layout is inherited from whichever input source you switched from — so the same keys give different letters depending on where you came from." = "Bố cục bàn phím vật lý mà Telex đọc. Chọn Colemak, Dvorak… để gõ tiếng Việt bằng bố cục đó. Nếu để “theo nguồn nhập trước đó”, bố cục bị thừa hưởng từ nguồn nhập bạn vừa rời khỏi — cùng một phím sẽ ra chữ khác nhau tuỳ bạn chuyển từ đâu sang.";
+"Which physical keyboard Telex reads. Pick Colemak, Dvorak… to type Vietnamese with that layout. Left on “follow”, the layout is inherited from whichever input source you switched from — so the same keys give different letters depending on where you came from." = "Đây là bố cục bàn phím Telex dùng để đọc phím. Chọn Colemak, Dvorak… nếu bạn muốn gõ tiếng Việt theo bố cục đó. Nếu chọn “Theo nguồn nhập trước đó”, VietTelex dùng bố cục của nguồn nhập bạn vừa rời khỏi; vì vậy cùng một phím có thể cho ra ký tự khác nhau.";
 "FAQ" = "Câu hỏi thường gặp";
 "Bracket vowels: [ types ơ, ] types ư (experimental)" = "Phím ngoặc: [ ra ơ, ] ra ư (thử nghiệm)";
-"The UniKey habit: “th[” → “thơ”, “ng]” → “ngư” ({ and } for uppercase). Leave OFF if you type code — with it on, [ and ] belong to the word instead of ending it." = "Thói quen UniKey: “th[” → “thơ”, “ng]” → “ngư” ({ và } ra chữ hoa). Nếu bạn gõ code thì nên để TẮT — khi bật, [ và ] thuộc về từ đang gõ thay vì kết thúc từ.";
+"The UniKey habit: “th[” → “thơ”, “ng]” → “ngư” ({ and } for uppercase). Leave OFF if you type code — with it on, [ and ] belong to the word instead of ending it." = "Cách gõ quen thuộc với UniKey: “th[” → “thơ”, “ng]” → “ngư” ({ và } để gõ chữ hoa). Nếu thường gõ mã lệnh, bạn nên tắt mục này: khi bật, [ và ] được tính là một phần của từ.";
 
 /* Secure-input monitor (field report 14/08/2026 — "VietTelex tự nhiên bị mờ") */
 "Vietnamese typing is blocked (Secure Input)" = "Gõ tiếng Việt đang bị chặn (Secure Input)";
 "Vietnamese typing is blocked after sleep" = "Không gõ được tiếng Việt sau khi ngủ";
-"Vietnamese typing is blocked — keyboard lock is stuck" = "Không gõ được tiếng Việt — khoá bàn phím bị kẹt";
+"Vietnamese typing is blocked — keyboard lock is stuck" = "Không gõ được tiếng Việt — bàn phím đang bị khoá";
 "Vietnamese typing is blocked by %@" = "Không gõ được tiếng Việt — %@";
-"an app" = "một app";
+"an app" = "một ứng dụng";
 "Lock Screen now" = "Khoá màn hình ngay";
 "Lock Screen to try clearing it" = "Khóa màn hình để thử gỡ";
-"If this is Terminal/iTerm2: turn off “Secure Keyboard Entry”" = "Nếu là Terminal/iTerm2: tắt “Secure Keyboard Entry” trong menu app đó";
-"Status: Blocked by Secure Input" = "Trạng thái: Bị chặn bởi Secure Input";
-"%@ left Secure Input on — click its window then click away, or quit it" = "%@ giữ Secure Input — bấm vào cửa sổ đó rồi bấm ra, hoặc thoát app";
-"%@ is usually holding the keyboard lock after sleep — click its window then click away, or quit it" = "%@ hay giữ khoá bàn phím sau khi ngủ — bấm vào cửa sổ đó rồi bấm ra, hoặc thoát app";
-"macOS is still locking the keyboard after sleep — lock the screen (⌃⌘Q), then unlock" = "macOS đang giữ khoá bàn phím sau khi ngủ — khoá màn hình (⌃⌘Q) rồi mở lại là hết";
-"An app is holding Secure Input (a password field) — click away from that field, or quit the app named above" = "Một app đang giữ Secure Input (ô mật khẩu) — bấm ra khỏi ô đó, hoặc thoát app ghi ở trên";
-"Switch to %@ (then click away)" = "Bấm sang %@ (rồi bấm ra)";
+"If this is Terminal/iTerm2: turn off “Secure Keyboard Entry”" = "Nếu đang dùng Terminal hoặc iTerm2, hãy tắt “Secure Keyboard Entry” trong menu của ứng dụng đó";
+"Status: Blocked by Secure Input" = "Tình trạng: Tạm dừng vì macOS bảo vệ ô mật khẩu (Secure Input)";
+"%@ left Secure Input on — click its window then click away, or quit it" = "%@ vẫn đang khoá bàn phím. Hãy bấm vào cửa sổ đó rồi bấm sang nơi khác, hoặc thoát ứng dụng.";
+"%@ is usually holding the keyboard lock after sleep — click its window then click away, or quit it" = "Sau khi máy thức dậy, %@ thường vẫn giữ khoá bàn phím. Hãy bấm vào cửa sổ đó rồi bấm sang nơi khác, hoặc thoát ứng dụng.";
+"macOS is still locking the keyboard after sleep — lock the screen (⌃⌘Q), then unlock" = "macOS vẫn khoá bàn phím sau khi máy thức dậy. Hãy khoá màn hình (⌃⌘Q), rồi mở khoá lại.";
+"An app is holding Secure Input (a password field) — click away from that field, or quit the app named above" = "Một ứng dụng đang giữ Secure Input (chế độ bảo vệ ô mật khẩu). Hãy bấm sang ô khác hoặc thoát ứng dụng được nêu ở trên.";
+"Switch to %@ (then click away)" = "Chuyển sang %@, rồi bấm vào nơi khác";
 
 /* Sticky input source (field report 15/08/2026 — ô comment Word reset bộ gõ) */
-"Some apps (Word comments…) make macOS fall back to the default input source for every new field when “Automatically switch to a document's input source” is on. This switches back to VietTelex — only when the change wasn't yours (no ⌃Space, no menu click, same app)." = "Một số app (ô comment của Word…) làm macOS rơi về bộ gõ mặc định ở mỗi ô mới khi bật “Automatically switch to a document's input source”. Tính năng này tự chuyển lại VietTelex — chỉ khi thay đổi không phải do bạn (không ⌃Space, không click menu, không đổi app).";
+"Some apps (Word comments…) make macOS fall back to the default input source for every new field when “Automatically switch to a document's input source” is on. This switches back to VietTelex — only when the change wasn't yours (no ⌃Space, no menu click, same app)." = "Một số ứng dụng, chẳng hạn ô bình luận trong Word, khiến macOS tự chuyển về bộ gõ mặc định khi bạn sang ô mới nếu bật “Automatically switch to a document's input source”. Tuỳ chọn này chuyển lại VietTelex khi bạn vẫn ở cùng ứng dụng và chưa chủ động đổi bộ gõ bằng ⌃Space hoặc menu.";
 
 /* Menu bar icon picker (maintainer 17/08/2026 — cho chọn MenuIcon, chấp nhận gãy seal) */
 "Menu bar icon" = "Biểu tượng trên thanh menu";
 "Icon" = "Biểu tượng";
 "default" = "mặc định";
 "five-pointed star" = "ngôi sao 5 cánh";
-"Changing the menu icon rewrites a file inside the app, which breaks the app's code signature seal (the app keeps working and keeps its permissions). Requires a Mac restart to take effect." = "Đổi biểu tượng sẽ ghi lại một file bên trong app, làm hỏng niêm phong chữ ký của app (app vẫn hoạt động và giữ nguyên các quyền). Cần khởi động lại máy để có hiệu lực.";
-"Icon saved — restart your Mac to see it." = "Đã lưu biểu tượng — khởi động lại máy để thấy thay đổi.";
+"Changing the menu icon rewrites a file inside the app, which breaks the app's code signature seal (the app keeps working and keeps its permissions). Requires a Mac restart to take effect." = "Đổi biểu tượng sẽ sửa một tệp trong ứng dụng và làm chữ ký số không còn hợp lệ; VietTelex vẫn hoạt động và giữ các quyền đã cấp. Hãy khởi động lại máy để thấy biểu tượng mới.";
+"Icon saved — restart your Mac to see it." = "Đã lưu biểu tượng. Hãy khởi động lại máy để thấy thay đổi.";
 
 /* Switch hotkey (tiếp nối issue #54 — tổ hợp chỉ-modifier mà macOS không cho gán) */
 "Switch hotkey" = "Phím tắt chuyển bộ gõ";
 "Toggle VietTelex with" = "Chuyển VietTelex bằng";
 "Off — use the macOS shortcut" = "Tắt — dùng phím tắt của macOS";
-"Press and release the modifiers alone to toggle between VietTelex and your previous input source — the modifier-only combos macOS's own Keyboard Shortcuts can't assign. Ignored if you type a key or click while holding them. Needs Accessibility permission." = "Nhấn rồi thả riêng các phím bổ trợ để chuyển qua lại giữa VietTelex và bộ gõ trước đó — kiểu tổ hợp chỉ-modifier mà Keyboard Shortcuts của macOS không cho gán. Gõ phím hay click chuột trong lúc giữ thì không tính. Cần quyền Trợ năng.";
+"Press and release the modifiers alone to toggle between VietTelex and your previous input source — the modifier-only combos macOS's own Keyboard Shortcuts can't assign. Ignored if you type a key or click while holding them. Needs Accessibility permission." = "Nhấn rồi thả riêng các phím bổ trợ để chuyển giữa VietTelex và bộ gõ vừa dùng. macOS không cho gán kiểu phím tắt này trong mục Phím tắt bàn phím. Nếu bạn gõ phím hoặc bấm chuột trong lúc giữ, VietTelex sẽ không chuyển bộ gõ. Cần quyền Trợ năng.";
 
 /* Tốt nghiệp khỏi Thử nghiệm (17/08/2026) */
 "VNI typing" = "Gõ kiểu VNI";
@@ -258,57 +258,57 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 /* Gỡ cài đặt (tab Giới thiệu, 17/08/2026) */
 "Uninstall VietTelex…" = "Gỡ cài đặt VietTelex…";
 "Uninstall VietTelex?" = "Gỡ cài đặt VietTelex?";
-"This removes the app, every setting and all your shortcuts. It cannot be undone." = "Sẽ xoá app, toàn bộ cài đặt và gõ tắt của bạn. Không hoàn tác được.";
+"This removes the app, every setting and all your shortcuts. It cannot be undone." = "Thao tác này sẽ xoá ứng dụng, toàn bộ cài đặt và gõ tắt. Bạn không thể hoàn tác.";
 "Uninstall" = "Gỡ cài đặt";
-"VietTelex has been removed. Log out and back in to clear it from the input source list." = "Đã gỡ VietTelex. Đăng xuất rồi đăng nhập lại để nó biến mất khỏi danh sách bộ gõ.";
-"Settings were removed, but the app file could not be deleted — drag it to the Trash from ~/Library/Input Methods." = "Đã xoá cài đặt, nhưng không xoá được file app — kéo nó vào Thùng rác từ ~/Library/Input Methods.";
-"Menu bar icons are drawn in a single color that follows the menu bar (no full-color icons — macOS strips the colors). Changing the icon rewrites a file inside the app, which breaks the app's code signature seal (the app keeps working and keeps its permissions). Requires a Mac restart to take effect." = "Biểu tượng trên thanh menu chỉ hiển thị một màu theo nền menu bar (không có icon màu — macOS tự bỏ màu). Đổi biểu tượng sẽ ghi lại một file bên trong app, làm hỏng niêm phong chữ ký của app (app vẫn hoạt động và giữ nguyên các quyền). Cần khởi động lại máy để có hiệu lực.";
-"An app quit without releasing the keyboard lock — lock the screen (⌃⌘Q), then unlock; if that fails, log out and back in" = "App đã thoát nhưng macOS chưa nhả khoá bàn phím — khoá màn hình (⌃⌘Q) rồi mở lại; không được thì đăng xuất rồi đăng nhập lại";
+"VietTelex has been removed. Log out and back in to clear it from the input source list." = "Đã gỡ VietTelex. Hãy đăng xuất rồi đăng nhập lại để xoá VietTelex khỏi danh sách bộ gõ.";
+"Settings were removed, but the app file could not be deleted — drag it to the Trash from ~/Library/Input Methods." = "Đã xoá cài đặt nhưng không xoá được ứng dụng. Hãy mở ~/Library/Input Methods trong Finder rồi kéo VietTelex vào Thùng rác.";
+"Menu bar icons are drawn in a single color that follows the menu bar (no full-color icons — macOS strips the colors). Changing the icon rewrites a file inside the app, which breaks the app's code signature seal (the app keeps working and keeps its permissions). Requires a Mac restart to take effect." = "Biểu tượng trên thanh menu chỉ hiển thị một màu theo giao diện macOS. Đổi biểu tượng sẽ sửa một tệp trong ứng dụng và làm chữ ký số không còn hợp lệ; VietTelex vẫn hoạt động và giữ các quyền đã cấp. Hãy khởi động lại máy để thấy biểu tượng mới.";
+"An app quit without releasing the keyboard lock — lock the screen (⌃⌘Q), then unlock; if that fails, log out and back in" = "Một ứng dụng đã thoát nhưng chưa nhả khoá bàn phím. Hãy khoá màn hình (⌃⌘Q), rồi mở khoá lại. Nếu vẫn chưa được, hãy đăng xuất rồi đăng nhập lại.";
 
 /* Dòng "Chế độ gõ" trong menu (maintainer 19/08/2026) */
-"Typing mode" = "Cơ chế gõ";
-"Click to copy the debug info explaining this choice" = "Bấm để sao chép thông tin gỡ lỗi giải thích lựa chọn này";
+"Typing mode" = "Cách gõ";
+"Click to copy the debug info explaining this choice" = "Bấm để sao chép thông tin giúp giải thích cách gõ này";
 "Debug info copied" = "Đã sao chép thông tin gỡ lỗi";
-"Paste it into your bug report (⌘V)." = "Dán vào báo lỗi của bạn (⌘V).";
+"Paste it into your bug report (⌘V)." = "Dán thông tin này vào báo lỗi (⌘V).";
 
-"Click: open the Typing modes table + copy debug info" = "Bấm: mở Bảng cơ chế gõ + sao chép thông tin gỡ lỗi";
+"Click: open the Typing modes table + copy debug info" = "Bấm để mở bảng cách gõ (tab Ứng dụng) và sao chép thông tin chẩn đoán";
 
-"Teencode spelling" = "Chính tả teencode";
-"Accept chat spellings: w/z/k instead of qu/d/c (wá, zui zẻ, kó) and bíe, thík, gòy, ừk. Off = standard spelling only, so English words like was, war, worse, zoo stay as typed." = "Chấp nhận cách viết khi chat: w/z/k thay cho qu/d/c (wá, zui zẻ, kó) và bíe, thík, gòy, ừk. Tắt = chỉ chính tả chuẩn, nên từ tiếng Anh như was, war, worse, zoo giữ nguyên.";
+"Teencode spelling" = "Chính tả khi nhắn tin";
+"Accept chat spellings: w/z/k instead of qu/d/c (wá, zui zẻ, kó) and bíe, thík, gòy, ừk. Off = standard spelling only, so English words like was, war, worse, zoo stay as typed." = "Chấp nhận cách viết khi nhắn tin: dùng w/z/k thay cho qu/d/c (wá, zui zẻ, kó), cùng các cách viết như bíe, thík, gòy, ừk. Tắt mục này để chỉ dùng chính tả chuẩn; các từ tiếng Anh như was, war, worse, zoo sẽ được giữ nguyên.";
 
 "%@ is on a password field" = "%@ đang ở ô mật khẩu";
 "macOS pauses every input method in password fields — normal. Click another field to type Vietnamese again" = "macOS tạm tắt mọi bộ gõ trong ô mật khẩu — bình thường. Bấm sang ô khác là gõ tiếng Việt lại được";
 
-"A shortcut key can’t contain spaces (max 64 characters)." = "Chữ tắt không được chứa khoảng trắng (tối đa 64 ký tự).";
-"Click a row to edit. Keys may be symbols or digits (->, √√, k2) — they expand on space/Enter. Case follows your typing: ko → không, Ko → Không, KO → KHÔNG. ⌥↩ adds a line break. ⌫ right after an expansion restores what you typed." = "Bấm một dòng để sửa. Chữ tắt có thể là ký hiệu/số (->, √√, k2) — nở khi gõ dấu cách/Enter. Hoa thường theo cách gõ: ko → không, Ko → Không, KO → KHÔNG. ⌥↩ để xuống dòng trong nội dung. ⌫ ngay sau khi nở trả lại chữ đã gõ.";
+"A shortcut key can’t contain spaces (max 64 characters)." = "Phím gõ tắt không được chứa dấu cách (tối đa 64 ký tự).";
+"Click a row to edit. Keys may be symbols or digits (->, √√, k2) — they expand on space/Enter. Case follows your typing: ko → không, Ko → Không, KO → KHÔNG. ⌥↩ adds a line break. ⌫ right after an expansion restores what you typed." = "Chọn một dòng để sửa. Bạn có thể dùng ký hiệu hoặc số làm từ gõ tắt (ví dụ: ->, √√, k2). Từ gõ tắt sẽ được thay thế khi bạn nhấn phím cách hoặc Enter. Chữ hoa, chữ thường được giữ theo cách bạn gõ: ko → không, Ko → Không, KO → KHÔNG. Nhấn ⌥↩ để xuống dòng; nhấn ⌫ ngay sau khi thay thế để khôi phục nội dung vừa gõ.";
 /* Công cụ văn bản + đồng bộ iCloud */
 "Add tones to selection" = "Thêm dấu cho vùng chọn";
-"UPPERCASE" = "HOA";
-"lowercase" = "thường";
-"Title Case" = "Hoa Đầu Từ";
-"Sentence case" = "Hoa đầu câu";
+"UPPERCASE" = "VIẾT HOA";
+"lowercase" = "viết thường";
+"Title Case" = "Viết Hoa Từng Từ";
+"Sentence case" = "Viết hoa đầu câu";
 "Remove tones" = "Xoá dấu";
 "Translate" = "Dịch";
 "Translate ↔ %@" = "Dịch ↔ %@";
 "Translating…" = "Đang dịch…";
-"Translation pack not downloaded — open VietTelex Settings → Text tools." = "Chưa tải gói dịch — mở Cài đặt VietTelex → Công cụ văn bản.";
+"Translation pack not downloaded — open VietTelex Settings → Tools & suggestions." = "Chưa có gói dịch này. Mở Cài đặt VietTelex → Công cụ & gợi ý để tải về.";
 "This Mac can’t translate this language pair." = "Máy Mac này không dịch được cặp ngôn ngữ này.";
 "Translate to" = "Dịch sang";
 "Vietnamese ↔ %@" = "Tiếng Việt ↔ %@";
 "Download" = "Tải về";
 "Downloaded" = "Đã tải";
 "Not downloaded" = "Chưa tải";
-"Not supported on this Mac" = "Máy không hỗ trợ";
-"Couldn’t download the translation pack — try again later." = "Chưa tải được gói dịch — thử lại sau.";
-"Tools… → Translate translates the selection into this language; text already in this language is translated back to Vietnamese. Runs entirely on this Mac with Apple’s translation packs — your text is never sent anywhere." = "Công cụ… → Dịch dịch vùng chọn sang ngôn ngữ này; chữ vốn đã là ngôn ngữ này thì dịch về tiếng Việt. Dịch hoàn toàn trên máy bằng gói dịch của Apple — chữ của bạn không gửi đi đâu.";
+"Not supported on this Mac" = "Mac này không hỗ trợ";
+"Couldn’t download the translation pack — try again later." = "Không tải được gói dịch. Hãy thử lại sau.";
+"Tools… → Translate translates the selection into this language; text already in this language is translated back to Vietnamese. Runs entirely on this Mac with Apple’s translation packs — your text is never sent anywhere." = "Trong Công cụ… → Dịch, văn bản đã chọn sẽ được dịch sang ngôn ngữ này; nếu văn bản đã ở ngôn ngữ đó, VietTelex sẽ dịch về tiếng Việt. Bản dịch chạy ngay trên máy Mac bằng gói dịch của Apple; nội dung bạn chọn không được gửi đi nơi khác.";
 "Text tools" = "Công cụ văn bản";
 "Tools…" = "Công cụ…";
 "Show text tools in the VietTelex menu" = "Hiện công cụ văn bản trong menu VietTelex";
 "Show maths results" = "Hiện kết quả phép tính";
 "Type a calculation followed by “=” (12*3=, 200+10%=) — the result shows next to the cursor; press Tab or Enter to insert it." = "Gõ phép tính rồi “=” (12*3=, 200+10%=) — kết quả hiện cạnh con trỏ, bấm Tab hoặc Enter để chèn.";
-"Number chips" = "Chip số";
-"Type an amount with k/tr/tỷ (50k, 1tr2, 2 tỷ) and a space — the money format (1.200.000 ₫) shows next to the cursor; press Tab to replace it." = "Gõ số tiền có k/tr/tỷ (50k, 1tr2, 2 tỷ) rồi dấu cách — dạng tiền (1.200.000 ₫) hiện cạnh con trỏ, bấm Tab để thay.";
-"Suggest typo fixes" = "Gợi ý sửa lỗi gõ sai";
+"Number chips" = "Gợi ý số tiền";
+"Type an amount with k/tr/tỷ (50k, 1tr2, 2 tỷ) and a space — the money format (1.200.000 ₫) shows next to the cursor; press Tab to replace it." = "Gõ số tiền như 50k, 1tr2 hoặc 2 tỷ rồi nhấn dấu cách. VietTelex sẽ gợi ý cách viết đầy đủ cạnh con trỏ; nhấn Tab để thay thế.";
+"Suggest typo fixes" = "Gợi ý sửa từ gõ nhầm";
 "After a word that isn’t Vietnamese or English (tpoi, nayd, spellnig), a likely fix (tôi, này, spelling) shows next to the cursor; press Tab to replace it. Esc stops suggesting that word." = "Sau một từ không phải tiếng Việt hay tiếng Anh (tpoi, nayd, spellnig), từ nhiều khả năng đúng (tôi, này, spelling) hiện cạnh con trỏ, bấm Tab để thay. Esc: thôi gợi ý từ đó.";
 "Filter sensitive words" = "Lọc từ nhạy cảm";
 "Word suggestions and typo fixes never offer swear words — typing them yourself works as usual." = "Gợi ý từ và sửa lỗi gõ không chủ động đưa từ tục — gõ tay vẫn bình thường.";
@@ -318,22 +318,22 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 "Clear learned words?" = "Xoá từ đã học?";
 "Word suggestions forget every word and word pair learned from your typing on this Mac. It cannot be undone." = "Gợi ý từ sẽ quên mọi từ và cặp từ đã học từ những gì bạn gõ trên máy Mac này. Không hoàn tác được.";
 "Suggest tones for unaccented sentences" = "Gợi ý thêm dấu cho câu không dấu";
-"After 3+ unaccented syllables (toi di hoc), when you type . ! ? or pause after a space, the toned text (tôi đi học) shows next to the cursor; press Tab to replace it." = "Sau từ 3 âm tiết không dấu trở lên (toi di hoc), khi gõ . ! ? hoặc dừng tay sau dấu cách, câu có dấu (tôi đi học) hiện cạnh con trỏ, bấm Tab để thay.";
+"After 3+ unaccented syllables (toi di hoc), when you type . ! ? or pause after a space, the toned text (tôi đi học) shows next to the cursor; press Tab to replace it." = "Sau khi gõ ít nhất ba âm tiết không dấu (toi di hoc), VietTelex sẽ gợi ý câu có dấu khi bạn gõ . ! ? hoặc dừng sau dấu cách. Nhấn Tab để thay câu.";
 "Suggest dates and times" = "Gợi ý ngày giờ";
-"Type “hôm nay”, “ngày mai”, “hôm qua” or “bây giờ” (after an English word: today, tomorrow, yesterday, now) and a space — the date (28/09/2026) or time (21:35) shows next to the cursor; press Tab to replace the words with it." = "Gõ “hôm nay”, “ngày mai”, “hôm qua” hoặc “bây giờ” (sau một từ tiếng Anh: today, tomorrow, yesterday, now) rồi dấu cách — ngày (28/09/2026) hoặc giờ (21:35) hiện cạnh con trỏ, bấm Tab để thay cụm đó bằng ngày giờ.";
-"Add-tones hotkey" = "Phím tắt Thêm dấu";
+"Type “hôm nay”, “ngày mai”, “hôm qua” or “bây giờ” (after an English word: today, tomorrow, yesterday, now) and a space — the date (28/09/2026) or time (21:35) shows next to the cursor; press Tab to replace the words with it." = "Gõ “hôm nay”, “ngày mai”, “hôm qua” hoặc “bây giờ” (hoặc today, tomorrow, yesterday, now sau một từ tiếng Anh), rồi nhấn dấu cách. VietTelex sẽ gợi ý ngày hoặc giờ cạnh con trỏ; nhấn Tab để thay cụm từ.";
+"Add-tones hotkey" = "Phím tắt thêm dấu";
 "Off" = "Tắt";
-"Works in any app, even when another input source is active. Needs Accessibility permission (copies the selection, then pastes the result — your clipboard is restored)." = "Dùng được ở mọi app, kể cả khi đang dùng bộ gõ khác. Cần quyền Trợ năng (copy vùng chọn rồi dán kết quả — clipboard của bạn được trả lại).";
+"Works in any app, even when another input source is active. Needs Accessibility permission (copies the selection, then pastes the result — your clipboard is restored)." = "Dùng được trong mọi ứng dụng, kể cả khi đang dùng bộ gõ khác. Cần quyền Trợ năng. VietTelex tạm sao chép phần văn bản đã chọn, dán kết quả rồi khôi phục nội dung bảng nhớ tạm.";
 "iCloud sync" = "Đồng bộ iCloud";
 "Sync typing settings and shortcuts with iPhone/iPad" = "Đồng bộ cài đặt gõ và gõ tắt với iPhone/iPad";
-"Same Apple ID as the VietTelex iOS app. Syncs Telex options and the shortcut table (not sentence templates or learned words). On first sync, values already in iCloud win." = "Cùng Apple ID với app VietTelex trên iOS. Đồng bộ tuỳ chọn Telex và bảng gõ tắt (không gồm mẫu câu, từ đã học). Lần đồng bộ đầu, giá trị đã có trên iCloud được giữ.";
+"Same Apple ID as the VietTelex iOS app. Syncs Telex options and the shortcut table (not sentence templates or learned words). On first sync, values already in iCloud win." = "Đăng nhập cùng Apple ID với VietTelex trên iPhone hoặc iPad để đồng bộ tuỳ chọn Telex và danh sách gõ tắt. Mẫu câu và từ đã học sẽ không được đồng bộ. Lần đầu, các giá trị đã có trên iCloud được giữ lại.";
 "Not available in this build (it isn’t signed with iCloud)." = "Bản này chưa hỗ trợ (chưa được ký kèm iCloud).";
 "This Mac isn’t signed in to iCloud." = "Máy Mac này chưa đăng nhập iCloud.";
 "%@ is still holding Secure Input after the password field" = "%@ vẫn giữ Secure Input sau ô mật khẩu";
-"The browser kept the keyboard lock after signing in (usually clears by itself in a few seconds). To clear it now: switch to another app and back (⌘Tab twice), or reload the page" = "Trình duyệt vẫn giữ khoá bàn phím sau khi đăng nhập (thường tự hết sau vài giây). Muốn gỡ ngay: chuyển sang app khác rồi quay lại (⌘Tab hai lần), hoặc tải lại trang";
-"Also in macOS Text Replacements:" = "Trùng với Thay thế văn bản của macOS:";
-"Chrome, Edge and Electron apps (Lark, Slack…) apply macOS Text Replacements too, so VietTelex leaves these keys to macOS there to avoid a double expansion. A short macOS replacement (like “h”) can still break Vietnamese words in those apps — delete it from macOS: VietTelex’s shortcut works in every app." = "Chrome, Edge và các app Electron (Lark, Slack…) cũng tự áp Thay thế văn bản của macOS, nên ở đó VietTelex nhường các khoá này cho macOS để không bị nở hai lần. Khoá ngắn bên macOS (như “h”) vẫn có thể làm hỏng chữ Việt trong các app đó — nên xoá nó khỏi macOS: gõ tắt VietTelex chạy ở mọi app.";
-"Open Keyboard Settings…" = "Mở Cài đặt Bàn phím…";
+"The browser kept the keyboard lock after signing in (usually clears by itself in a few seconds). To clear it now: switch to another app and back (⌘Tab twice), or reload the page" = "Trình duyệt vẫn đang khoá bàn phím sau khi bạn đăng nhập. Thường trạng thái này tự hết sau vài giây. Để xử lý ngay, hãy chuyển sang ứng dụng khác rồi quay lại (⌘Tab hai lần), hoặc tải lại trang.";
+"Also in macOS Text Replacements:" = "Cũng có trong mục Thay thế văn bản của macOS:";
+"Chrome, Edge and Electron apps (Lark, Slack…) apply macOS Text Replacements too, so VietTelex leaves these keys to macOS there to avoid a double expansion. A short macOS replacement (like “h”) can still break Vietnamese words in those apps — delete it from macOS: VietTelex’s shortcut works in every app." = "Chrome, Edge và các ứng dụng Electron như Lark, Slack cũng áp dụng mục Thay thế văn bản của macOS. Để tránh mở rộng gõ tắt hai lần, VietTelex nhường các phím trùng cho macOS. Nếu một phím tắt ngắn (ví dụ “h”) làm sai chữ tiếng Việt, hãy xoá mục đó trong cài đặt Thay thế văn bản của macOS. Gõ tắt VietTelex vẫn dùng được trong các ứng dụng này.";
+"Open Keyboard Settings…" = "Mở Cài đặt bàn phím…";
 "Check again" = "Kiểm tra lại";
 
 /* Settings reorganized (14/10/2026): 5 tabs, Tools panel hotkey, menu order */
@@ -343,9 +343,9 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 "General" = "Chung";
 "Updates" = "Cập nhật";
 "Suggestions next to the cursor" = "Gợi ý cạnh con trỏ";
-"Tools panel hotkey" = "Phím tắt mở Công cụ";
-"Opens Tools… next to the cursor from any app, even when another input source is active. Press it again to close." = "Mở Công cụ… cạnh con trỏ ở app bất kỳ, kể cả khi đang dùng bộ gõ khác. Bấm lại để đóng.";
-"Select text in any app, then open Tools… (VietTelex menu or the hotkey below) and pick a tool or press its number 1–6: add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones." = "Bôi đen chữ ở app bất kỳ rồi mở Công cụ… (menu VietTelex hoặc phím tắt bên dưới) và chọn, hoặc bấm số 1–6: thêm dấu cho đoạn không dấu (toi di hoc → tôi đi học), HOA, thường, Hoa Đầu Từ, Hoa đầu câu, xoá dấu.";
-"Select text in any app, then open Tools… (VietTelex menu or the hotkey below) and pick a tool or press its number 1–7: add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones, translate." = "Bôi đen chữ ở app bất kỳ rồi mở Công cụ… (menu VietTelex hoặc phím tắt bên dưới) và chọn, hoặc bấm số 1–7: thêm dấu cho đoạn không dấu (toi di hoc → tôi đi học), HOA, thường, Hoa Đầu Từ, Hoa đầu câu, xoá dấu, dịch.";
+"Tools panel hotkey" = "Phím tắt mở bảng Công cụ";
+"Opens Tools… next to the cursor from any app, even when another input source is active. Press it again to close." = "Mở bảng Công cụ cạnh con trỏ trong bất kỳ ứng dụng nào, kể cả khi đang dùng bộ gõ khác. Bấm phím tắt lần nữa để đóng.";
+"Select text in any app, then open Tools… (VietTelex menu or the hotkey below) and pick a tool or press its number 1–6: add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones." = "Chọn văn bản trong ứng dụng bất kỳ, rồi mở Công cụ… từ menu VietTelex hoặc bằng phím tắt bên dưới. Chọn một công cụ hoặc bấm số 1–6: thêm dấu (toi di hoc → tôi đi học), viết HOA, viết thường, Viết Hoa Từng Từ, viết hoa đầu câu hoặc xoá dấu.";
+"Select text in any app, then open Tools… (VietTelex menu or the hotkey below) and pick a tool or press its number 1–7: add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones, translate." = "Chọn văn bản trong ứng dụng bất kỳ, rồi mở Công cụ… từ menu VietTelex hoặc bằng phím tắt bên dưới. Chọn một công cụ hoặc bấm số 1–7: thêm dấu (toi di hoc → tôi đi học), viết HOA, viết thường, Viết Hoa Từng Từ, viết hoa đầu câu, xoá dấu hoặc dịch.";
 "Keep VietTelex when macOS auto-switches the input source" = "Giữ VietTelex khi macOS tự đổi bộ gõ";
 "Input Sources…" = "Nguồn nhập liệu…";
