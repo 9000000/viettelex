@@ -142,8 +142,12 @@ class KeyLayoutTest {
             }
             assertEquals(tag, expectPunct, punct)
             val si = bottom.indexOfFirst { it.kind == KeyKind.SPACE }
-            if (kind == InputKind.NORMAL) {
-                // [?123][😊][space][,(.)][↵]: không phím nào bên trái space ngoài ?123 / 😊.
+            if (kind == InputKind.NORMAL && sh.tablet) {
+                // Tablet: [?123][😊][,][space][.][↵][ẩn] — dấu câu hai bên space.
+                assertEquals(tag, listOf(KeyKind.PLANE, KeyKind.EMOJI, KeyKind.PUNCT), bottom.take(si).map { it.kind })
+                assertEquals(tag, ".", bottom[si + 1].insert)
+            } else if (kind == InputKind.NORMAL) {
+                // [?123][😊][space][,][↵]: không phím nào bên trái space ngoài ?123 / 😊.
                 assertEquals(tag, listOf(KeyKind.PLANE, KeyKind.EMOJI), bottom.take(si).map { it.kind })
                 assertEquals(tag, ",", bottom[si + 1].insert)
             } else {
@@ -175,8 +179,8 @@ class KeyLayoutTest {
     @Test fun globeAndTabletDismiss() {
         val k = build(Plane.LETTERS, globe = true, tablet = true)
         val kinds = k.filter { it.top > 3 * H / 4 - 1 }.map { it.kind }
-        assertEquals(listOf(KeyKind.PLANE, KeyKind.GLOBE, KeyKind.EMOJI, KeyKind.SPACE,
-            KeyKind.PUNCT, KeyKind.PUNCT, KeyKind.RETURN, KeyKind.DISMISS), kinds)
+        assertEquals(listOf(KeyKind.PLANE, KeyKind.GLOBE, KeyKind.EMOJI, KeyKind.PUNCT, KeyKind.SPACE,
+            KeyKind.PUNCT, KeyKind.RETURN, KeyKind.DISMISS), kinds)
         // Ô URL / email: "/" "@" vẫn bên trái như cũ.
         val url = build(Plane.LETTERS, InputKind.URL).filter { it.top > 3 * H / 4 - 1 }.map { it.kind }
         assertEquals(listOf(KeyKind.PLANE, KeyKind.PUNCT, KeyKind.EMOJI, KeyKind.SPACE, KeyKind.PUNCT, KeyKind.RETURN), url)
@@ -448,9 +452,11 @@ class KeyLayoutTest {
         assertEquals(listOf(P, E, S, ".", R), kinds(cfg(SpaceSideKey.PERIOD, one = OneHandSide.LEFT)))
         assertEquals(listOf(P, E, S, R), kinds(cfg(SpaceSideKey.OFF, one = OneHandSide.RIGHT)))
         assertTrue(KeyLayout.build(cfg(SpaceSideKey.OFF, plane = Plane.EMOJI_SEARCH)).none { it.kind == KeyKind.PUNCT })
-        // Không áp: URL / email / tablet / plane số, ký hiệu, mẫu câu — giống hệt mặc định.
+        // Không áp: URL / email (cả tablet) / plane số, ký hiệu, mẫu câu — giống hệt mặc định.
         for (side in SpaceSideKey.entries) {
-            for (c in listOf(cfg(side, kind = InputKind.URL), cfg(side, kind = InputKind.EMAIL), cfg(side, tablet = true),
+            for (c in listOf(cfg(side, kind = InputKind.URL), cfg(side, kind = InputKind.EMAIL),
+                    cfg(side, kind = InputKind.URL, tablet = true), cfg(side, kind = InputKind.EMAIL, tablet = true),
+                    cfg(side, plane = Plane.NUMBERS, tablet = true),
                     cfg(side, plane = Plane.NUMBERS), cfg(side, plane = Plane.SYMBOLS), cfg(side, plane = Plane.TEMPLATES),
                     cfg(side, plane = Plane.NUMBERS, kind = InputKind.EMAIL))) {
                 assertEquals("$side ${c.plane} ${c.kind} tablet=${c.tablet}",
@@ -459,6 +465,64 @@ class KeyLayoutTest {
                 assertNull(KeyLayout.sideKey(c))
             }
             assertEquals(side, KeyLayout.sideKey(cfg(side)))
+            // Tablet: không phải "phím hẹp" (popup "." của Dấu chấm chỉ điện thoại).
+            assertNull(KeyLayout.sideKey(cfg(side, tablet = true)))
+        }
+    }
+
+    /**
+     * Tablet bàn chữ ô thường (16/10/2026): space ĐÚNG GIỮA hàng và rộng; Dấu phẩy = Dấu chấm (cả
+     * "," lẫn "." hai bên); Tắt ⇒ không dấu câu, space rộng hơn, vẫn giữa. Có / không 🌐, dọc / ngang.
+     */
+    @Test fun tabletBottomRowCentred() {
+        data class Shape(val w: Float, val h: Float)
+        for (sh in listOf(Shape(800f, 256f), Shape(1280f, 300f), Shape(600f, 256f)))
+        for (globe in listOf(false, true)) for (side in SpaceSideKey.entries) {
+            val c = LayoutConfig(Plane.LETTERS, sh.w, sh.h, d, needsGlobe = globe, tablet = true, spaceSideKey = side)
+            val keys = KeyLayout.build(c)
+            val bottom = keys.filter { it.top > 3 * sh.h / 4 - 1 }.sortedBy { it.left }
+            val tag = "${sh.w} globe=$globe $side"
+            val space = bottom.single { it.kind == KeyKind.SPACE }
+            val leftGap = space.left; val rightGap = sh.w - space.right
+            assertTrue("$tag lệch ${leftGap - rightGap}", kotlin.math.abs(leftGap - rightGap) < 0.01f * sh.w)
+            near(space.centerX, sh.w / 2, 0.5f)
+            val punct = bottom.filter { it.kind == KeyKind.PUNCT }.map { it.insert }
+            val P = KeyKind.PLANE; val G = KeyKind.GLOBE; val E = KeyKind.EMOJI; val S = KeyKind.SPACE
+            val U = KeyKind.PUNCT; val R = KeyKind.RETURN; val X = KeyKind.DISMISS
+            val head = if (globe) listOf(P, G, E) else listOf(P, E)
+            if (side == SpaceSideKey.OFF) {
+                assertEquals(tag, emptyList<String>(), punct)
+                assertEquals(tag, head + listOf(S, R, X), bottom.map { it.kind })
+                assertTrue(tag, space.width > (if (globe) 0.48f else 0.58f) * sh.w)
+            } else {
+                assertEquals(tag, listOf(",", "."), punct)
+                assertEquals(tag, head + listOf(U, S, U, R, X), bottom.map { it.kind })
+                assertTrue(tag, space.width > (if (globe) 0.28f else 0.38f) * sh.w)
+                // "," "." rộng đúng một phím chữ, kề sát space.
+                val q = keys.first { it.label == "q" }
+                for (p in bottom.filter { it.kind == KeyKind.PUNCT }) near(p.width, q.width, 0.05f)
+                val si = bottom.indexOf(space)
+                near(space.left - bottom[si - 1].right, KeyLayout.KEY_SPACING)
+                near(bottom[si + 1].left - space.right, KeyLayout.KEY_SPACING)
+            }
+            // Dấu chấm ≡ Dấu phẩy trên tablet.
+            if (side == SpaceSideKey.PERIOD) assertEquals(tag,
+                KeyLayout.build(c.copy(spaceSideKey = SpaceSideKey.COMMA)).map { it.toString() }, keys.map { it.toString() })
+            // Space là phím rộng nhất; khít hai mép; không chồng nhau; ↵ ở mép phải trước ẩn.
+            assertTrue(tag, bottom.all { it === space || it.width < space.width })
+            near(bottom.first().left, KeyLayout.ROW_MARGIN_H, 0.05f)
+            near(bottom.last().right, sh.w - KeyLayout.ROW_MARGIN_H, 0.05f)
+            for (i in 1 until bottom.size) near(bottom[i].left - bottom[i - 1].right, KeyLayout.KEY_SPACING, 0.05f)
+            assertEquals(tag, KeyKind.RETURN, bottom[bottom.size - 2].kind)
+            // Mép phím thẳng cột với hàng q…p: mép trái space trùng mép một nửa / cả phím hàng 1.
+            val row1 = keys.filter { it.kind == KeyKind.LETTER && it.label in "qwertyuiop" }
+            val pitch = row1[1].left - row1[0].left
+            val units = (space.left - KeyLayout.ROW_MARGIN_H) / pitch
+            near(units * 4, Math.round(units * 4).toFloat(), 0.01f)
+            // Ô tìm emoji (plane chữ bên dưới) cùng bố cục.
+            assertEquals(tag, bottom.map { it.kind },
+                KeyLayout.build(c.copy(plane = Plane.EMOJI_SEARCH)).filter { it.top > 0.8f * sh.h - 1 }
+                    .sortedBy { it.left }.map { it.kind })
         }
     }
 }

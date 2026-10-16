@@ -65,15 +65,31 @@ class HitBiasTest {
         for ((x, since, want) in table) assertSame("x=$x since=$since", want, hit(keys, x, y, since))
     }
 
-    @Test fun tabletPeriodAfterCommaNotStolen() {
-        // Tablet giữ "." sau ",": "." không kề space ⇒ không bị space lấn; "," vẫn có dải.
+    @Test fun tabletCommaAndPeriodBothSidesOfSpace() {
+        // Tablet (16/10/2026): [?123][😊][,][space][.][↵][ẩn] — "," TRÁI, "." PHẢI space, cả hai
+        // nhường dải mép cho space; tâm vẫn là của nó; 😊 / ↵ không nhường ai.
         val keys = build(tablet = true)
         val space = keys.first { it.kind == KeyKind.SPACE }
         val comma = keys.first { it.kind == KeyKind.PUNCT && it.label == "," }
         val dot = keys.first { it.kind == KeyKind.PUNCT && it.label == "." }
-        assertTrue(dot.left > comma.right)
-        assertSame(dot, hit(keys, dot.left + 1f, dot.centerY, 50L))
-        assertSame(space, hit(keys, comma.left + 0.2f * comma.width, comma.centerY))
+        val emoji = keys.first { it.kind == KeyKind.EMOJI }
+        val ret = keys.first { it.kind == KeyKind.RETURN }
+        assertTrue(comma.right < space.left && dot.left > space.right)
+        val y = space.centerY
+        assertSame(space, hit(keys, comma.right - 0.2f * comma.width, y))
+        assertSame(comma, hit(keys, comma.right - 0.35f * comma.width, y))
+        assertSame(space, hit(keys, comma.right - 0.35f * comma.width, y, 50L))   // gõ cuộn
+        assertSame(comma, hit(keys, comma.centerX, y, 50L))
+        assertSame(comma, hit(keys, comma.left + 1f, y, 50L))                    // mép 😊 không phải space
+        assertSame(emoji, hit(keys, emoji.right - 1f, y, 50L))
+        assertSame(space, hit(keys, dot.left + 0.2f * dot.width, y))
+        assertSame(dot, hit(keys, dot.left + 0.35f * dot.width, y))
+        assertSame(dot, hit(keys, dot.centerX, y, 50L))
+        assertSame(dot, hit(keys, dot.right - 1f, y, 50L))
+        assertSame(ret, hit(keys, ret.left + 1f, y, 50L))
+        // Khe ","↔space, space↔"." ⇒ space.
+        assertSame(space, hit(keys, (comma.right + space.left) / 2, y))
+        assertSame(space, hit(keys, (space.right + dot.left) / 2, y))
     }
 
     @Test fun spaceWinsOverPeriodLeftOrRight() {

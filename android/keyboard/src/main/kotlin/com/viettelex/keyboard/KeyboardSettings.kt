@@ -98,7 +98,7 @@ data class KeyboardSettings(
     var longPressNumbers: Boolean = true,
     /** Giữ a–l, z–m ra ký hiệu — mặc định TẮT. Giống iOS. */
     var longPressSymbols: Boolean = false,
-    /** Phím cạnh dấu cách (bàn chữ điện thoại, ô thường) — mặc định "," ([SpaceSideKey]). */
+    /** Phím cạnh dấu cách (bàn chữ ô thường; tablet: có / không "," "." hai bên space) — mặc định "," ([SpaceSideKey]). */
     var spaceSideKey: SpaceSideKey = SpaceSideKey.DEFAULT,
     /** Chế độ một tay: "off" | "left" | "right" — mặc định tắt (tablet bỏ qua). */
     var oneHandMode: String = "off",
