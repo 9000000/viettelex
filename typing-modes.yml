@@ -75,6 +75,9 @@ com.apple.ScreenContinuity: inPlace
 com.apple.TextEdit: inPlace
 com.apple.Preview: inPlace
 com.apple.Passwords: inPlace
+# Muse (Meta) — issue #126 16/10/2026: tap backspace-retype ra "haã viêế" (app chèn
+# thêm thay vì xoá ký tự cũ); maintainer field-test: gõ trực tiếp đúng.
+com.meta.endo: inPlace
 # Little Snitch Agent (cửa sổ cảnh báo kết nối / tìm rule) — field 22/09/2026: app
 # lạ → tap backspace-retype → LS từ chối "Simulated Input Ignored" (bảo mật, cùng
 # lớp SecurityAgent). Cocoa thuần, in-place sạch.

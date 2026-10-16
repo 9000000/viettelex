@@ -56,6 +56,7 @@ final class AppStateRoutingTests: XCTestCase {
         // Representative entries of every other mode class.
         XCTAssertTrue(AppState.builtInInPlaceApps.contains("com.apple.Notes"))
         XCTAssertTrue(AppState.builtInInPlaceApps.contains("at.obdev.littlesnitch.agent"))   // LS từ chối synthetic input
+        XCTAssertTrue(AppState.builtInInPlaceApps.contains("com.meta.endo"))   // Muse #126: tap ra "haã"
         XCTAssertTrue(AppState.builtInSpecialApps.contains("com.apple.Safari"))       // axDetect
         XCTAssertTrue(AppState.builtInSpecialApps.contains("com.microsoft.Excel"))    // emptyReset
         XCTAssertTrue(AppState.builtInPassthroughApps.contains("com.apple.ScreenSharing"))
