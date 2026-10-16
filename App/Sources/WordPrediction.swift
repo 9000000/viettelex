@@ -1,0 +1,265 @@
+// WordPrediction.swift — GỢI Ý TỪ trong ô gợi ý cạnh con trỏ (CaretHint, MathHint.swift) cho
+// macOS (maintainer 16/10/2026). Hai trường hợp:
+//   a) HOÀN THÀNH từ đang gõ ("đư" → được / đường / đưa; tiếng Anh khi ngữ cảnh là tiếng Anh
+//      hoặc không âm tiết Việt nào khớp: "keyb" → keyboard);
+//   b) TỪ KẾ TIẾP ngay sau dấu cách ("cảm ␣" → ơn).
+// Cùng luật với mọi gợi ý cạnh con trỏ: chỉ áp dụng bằng Tab (hoặc click ứng viên), Esc tắt,
+// không bao giờ tự thay, ĐỌC LẠI màn hình trước khi thay, không ở ô mật khẩu / Secure Input.
+// Tối đa 3 ứng viên; Tab = ứng viên đầu. Gợi ý khác (sửa lỗi gõ, thêm dấu, ngày giờ, phép tính,
+// chip số) đang hiện ⇒ không hiện gợi ý từ (chúng thắng); chúng tới sau thì thay gợi ý từ.
+//
+// CÔNG TẮC: theo đúng cài đặt hệ thống "Show inline predictive text" (System Settings →
+// Keyboard → Text Input) — khoá NSGlobalDomain `NSAutomaticInlinePredictionEnabled` (không có
+// khoá ⇒ mặc định của macOS: BẬT). Không có công tắc riêng trong VietTelex. Đọc một lần khi
+// controller activate (đổi ô / đổi app) — không bao giờ đọc mỗi phím.
+//
+// DỮ LIỆU — dùng CHUNG với thanh gợi ý iOS (iOS/docs/IOS-SUGGESTIONS.md), không mô hình mới:
+// VNSuggest (vnlexicon.bin, tầng 1) + SuggestRank.rankInline / nextFill (SuggestionSupport,
+// tầng 2/7) + SyllableLM (vnlm.bin, mmap) + đếm seed SeedData.unigrams (tầng 3) + DisplayCase
+// + SensitiveWords (lọc bật) + EnglishLite (enlexicon.bin mmap). Các file iOS được biên dịch
+// thẳng vào target macOS (project.yml) — không có dữ liệu mới trong .app.
+// KHÔNG HỌC từ người dùng trên macOS (chưa): xem `PredictionModel`.
+//
+// HIỆU NĂNG (ưu tiên số 1): công tắc tắt ⇒ không nạp gì, mỗi phím một lần đọc Bool dưới khoá.
+// Bật: phím chỉ hẹn giờ (`idleDelay`, huỷ khi có phím mới); hết giờ mà không có phím mới mới
+// đọc màn hình (một lần) → tính ứng viên trên hàng đợi nền của CaretHint → hiện nếu vẫn chưa có
+// phím nào mới (thế hệ phím). Gõ liền mạch ⇒ không đọc màn hình, không tính gì.
+import Foundation
+import TelexCore
+
+// MARK: - Cài đặt hệ thống
+
+/// "Show inline predictive text" của macOS. Tự chứa (không phụ thuộc bộ đọc cài đặt hệ thống
+/// khác) — bộ nhớ đệm dưới khoá, làm mới khi controller activate.
+enum SystemInlinePrediction {
+    /// Khoá NSGlobalDomain (đo trên máy dev 16/10/2026: `defaults read -g` có
+    /// `NSAutomaticInlinePredictionEnabled = 1`; tắt trong System Settings ⇒ 0).
+    static let key = "NSAutomaticInlinePredictionEnabled"
+    /// Không có khoá (chưa từng đổi) ⇒ mặc định của macOS 14+: BẬT.
+    static let defaultValue = true
+
+    /// Giá trị thô trong NSGlobalDomain → bật/tắt.
+    static func resolve(_ value: Any?) -> Bool {
+        if let b = value as? Bool { return b }
+        if let n = value as? NSNumber { return n.boolValue }
+        if let s = value as? String { return (s as NSString).boolValue }
+        return defaultValue
+    }
+
+    private static let lock = NSLock()
+    private static var cached: Bool?          // guarded by lock
+    private static var lastReadNs: UInt64 = 0 // guarded by lock
+    /// Override cho test (nil = đọc hệ thống).
+    private static var forced: Bool?          // guarded by lock
+
+    /// Bất kỳ thread. Giá trị đã đệm (lần đầu: đọc một lần).
+    static var isOn: Bool {
+        if let v = lock.withLock({ forced ?? cached }) { return v }
+        return refresh(force: true)
+    }
+
+    /// Đọc lại từ NSGlobalDomain (CFPreferences — trong process, đồng bộ cache với cfprefsd).
+    /// Gọi ở activateServer: tối đa một lần / `minInterval` (đổi ô liên tục không đọc lại).
+    @discardableResult
+    static func refresh(force: Bool = false, minInterval: UInt64 = 2_000_000_000) -> Bool {
+        let now = DispatchTime.now().uptimeNanoseconds
+        if !force, let c = lock.withLock({ () -> Bool? in
+            guard let c = cached, now &- lastReadNs < minInterval else { return nil }
+            return c
+        }) { return c }
+        CFPreferencesAppSynchronize(kCFPreferencesAnyApplication)
+        let v = resolve(CFPreferencesCopyAppValue(key as CFString, kCFPreferencesAnyApplication))
+        lock.withLock { cached = v; lastReadNs = now }
+        return lock.withLock { forced ?? v }
+    }
+
+    static func setForTesting(_ v: Bool?) { lock.withLock { forced = v } }
+}
+
+// MARK: - Logic thuần
+
+enum PredictionLogic {
+    /// Dừng gõ bấy nhiêu giây mới đọc màn hình + hiện (gõ liền mạch ⇒ không làm gì).
+    static let idleDelay: TimeInterval = 0.3
+    static let maxCandidates = 3
+    /// Hoàn thành từ chỉ khi đã gõ ít nhất bấy nhiêu chữ (1 chữ: quá nhiễu cho ô nổi).
+    static let minTyped = 2
+    /// Cửa sổ đọc màn hình (UTF-16) — đủ cho 2 từ ngữ cảnh.
+    static let window = 64
+
+    /// Ngữ cảnh một lượt gợi ý (dựng từ văn bản trước con trỏ — nguồn sự thật, không phải
+    /// trạng thái tự dõi theo).
+    struct Request: Equatable {
+        /// Từ đang gõ (đang soạn) — "" = gợi ý từ kế tiếp.
+        var typed: String
+        /// 1–2 từ trước trong CÙNG câu (chữ thường); nil = không có / bị dấu câu cắt.
+        var prev: String?
+        var prev2: String?
+        /// Ngữ cảnh tiếng Anh (engine: từ trước là tiếng Anh).
+        var english: Bool
+    }
+
+    /// Có nên lên lịch gợi ý cho phím này không. `settingOn` = cài đặt hệ thống,
+    /// `canReplace` = app đã chứng minh thay được chữ đã chốt (in-place, không marked),
+    /// `secure` = ô mật khẩu / Secure Input, `otherHint` = gợi ý khác đang hiện.
+    /// `canReplace` chỉ được tính khi cài đặt bật (autoclosure — tắt thì không tốn gì thêm).
+    static func shouldSchedule(settingOn: Bool, canReplace: @autoclosure () -> Bool,
+                               secure: Bool = false, otherHint: Bool = false) -> Bool {
+        settingOn && !secure && !otherHint && canReplace()
+    }
+
+    private static func isWordChar(_ c: Character) -> Bool { c.isLetter }
+
+    /// Văn bản trước con trỏ (`before`, kết thúc tại con trỏ) + từ đang soạn `typed` → lượt gợi
+    /// ý, nil khi không nên gợi ý:
+    ///  • đang gõ: `before` phải kết thúc đúng bằng `typed`, từ đứng riêng (đầu văn bản / sau
+    ///    khoảng trắng), `typed` toàn chữ cái, ≥ `minTyped`;
+    ///  • từ kế tiếp: `before` kết thúc bằng MỘT dấu cách ngay sau một từ toàn chữ cái.
+    /// Ngữ cảnh: tối đa 2 từ trước, cách nhau đúng một dấu cách, toàn chữ cái — dấu câu / xuống
+    /// dòng / ký tự khác cắt ngữ cảnh (như iOS: ngữ cảnh xoá ở dấu câu).
+    static func request(before: String, typed: String, english: Bool) -> Request? {
+        let b = before.precomposedStringWithCanonicalMapping
+        let t = typed.precomposedStringWithCanonicalMapping
+        var head: Substring
+        if !t.isEmpty {
+            guard t.count >= minTyped, t.allSatisfy(isWordChar), b.hasSuffix(t) else { return nil }
+            head = b.dropLast(t.count)
+            if let l = head.last, !(l == " " || l == "\t" || l == "\u{00A0}" || l.isNewline) { return nil }
+        } else {
+            guard b.hasSuffix(" ") else { return nil }
+            head = b.dropLast()
+            guard let l = head.last, isWordChar(l) else { return nil }   // hai dấu cách / sau dấu câu
+        }
+        // Lấy ngược ≤ 2 từ ngữ cảnh.
+        var words: [String] = []
+        var rest = head
+        while words.count < 2 {
+            if words.isEmpty, !t.isEmpty {
+                // trước từ đang gõ: đúng một dấu cách (hoặc đầu văn bản ⇒ không ngữ cảnh)
+                guard rest.last == " " else { break }
+                rest = rest.dropLast()
+            } else if !words.isEmpty {
+                guard rest.last == " " else { break }
+                rest = rest.dropLast()
+            }
+            var w = Substring()
+            var i = rest.endIndex
+            while i > rest.startIndex {
+                let j = rest.index(before: i)
+                guard isWordChar(rest[j]) else { break }
+                i = j
+            }
+            w = rest[i...]
+            guard !w.isEmpty, w.count <= 24 else { break }
+            // chữ ngay trước từ phải là khoảng trắng / đầu văn bản ("a.b" không phải từ)
+            if i > rest.startIndex {
+                let c = rest[rest.index(before: i)]
+                guard c == " " || c == "\t" || c == "\u{00A0}" || c.isNewline else {
+                    break
+                }
+            }
+            words.append(String(w).lowercased())
+            rest = rest[..<i]
+            if let c = rest.last, c.isNewline { break }
+        }
+        if t.isEmpty, words.isEmpty { return nil }
+        return Request(typed: t, prev: words.first, prev2: words.count > 1 ? words[1] : nil, english: english)
+    }
+
+    /// Hoàn thành tiếng Anh khi: ngữ cảnh tiếng Anh, hoặc không âm tiết Việt nào khớp.
+    static func wantsEnglish(_ r: Request, vietnameseHits: Int) -> Bool {
+        r.english || vietnameseHits == 0
+    }
+
+    /// Ứng viên hoàn thành (đã xếp hạng) → tối đa `maxCandidates`, chỉ từ DÀI HƠN chữ đã gõ
+    /// (hoàn thành thật — biến thể chỉ khác dấu thì người gõ Telex tự gõ tiếp), bỏ trùng.
+    static func completions(_ ranked: [String], typed: String) -> [String] {
+        let n = typed.count
+        var seen = Set<String>(), out: [String] = []
+        for w in ranked where w.count > n {
+            if seen.insert(w.lowercased()).inserted { out.append(w) }
+            if out.count >= maxCandidates { break }
+        }
+        return out
+    }
+
+    /// Ứng viên → gợi ý cạnh con trỏ: thay đúng từ đang gõ (`typed` — "" = chỉ chèn) bằng
+    /// ứng viên + dấu cách; ứng viên 2–3 là `alternates` (click).
+    static func suggestion(_ words: [String], typed: String) -> CaretSuggestion? {
+        let words = Array(words.prefix(maxCandidates))
+        guard let first = words.first else { return nil }
+        func make(_ w: String) -> CaretSuggestion {
+            CaretSuggestion(kind: .predict, display: w, replace: typed, insert: w + " ")
+        }
+        var s = make(first)
+        s.alternates = words.dropFirst().map(make)
+        return s
+    }
+
+    /// Esc trên gợi ý hoàn thành: không gợi ý lại khi từ đang gõ vẫn bắt đầu bằng chữ đã từ
+    /// chối (tới từ kế tiếp).
+    static func muted(typed: String, declined: String?) -> Bool {
+        guard let d = declined, !d.isEmpty, !typed.isEmpty else { return false }
+        return typed.lowercased().hasPrefix(d.lowercased())
+    }
+}
+
+// MARK: - Mô hình (dữ liệu dùng chung với iOS)
+
+/// Xếp hạng y như thanh gợi ý iOS (SuggestRank — cùng trọng số/lọc/hoa-thường), với tầng CÁ
+/// NHÂN chỉ còn phần unigram của seed (SeedData.unigrams — đã có trong binary cho sửa lỗi gõ):
+///  • hoàn thành: `count` = đếm seed (từ chat "nhé", "ok"… như người dùng iOS mới), `ctx` rỗng;
+///  • từ kế tiếp: `personal` rỗng ⇒ nextFill lấy thẳng trigram/bigram tĩnh vnlm.bin.
+/// Bỏ UserLangModel + seed bigram (đo 16/10/2026: +~95 KB mỗi kiến trúc trong binary Release —
+/// phần lưu file/di trú/codec không dùng được trên Mac vẫn bị liên kết); iOS đo seed/bigram cá
+/// nhân đoán KÉM trigram tĩnh (docs tầng 7) nên mất rất ít.
+/// CHỈ dùng trên hàng đợi nền của CaretHint (`work`, nối tiếp).
+///
+/// KHÔNG HỌC trên macOS (quyết định 16/10/2026): học cần nhận đúng từ đã chốt ở cả hai đường
+/// (IMK + tap), loại ô mật khẩu/terminal/app tắt, lưu file + đồng bộ — rủi ro riêng tư/độ đúng
+/// lớn hơn lợi ích ở bản đầu.
+final class PredictionModel {
+    static let shared = PredictionModel()
+
+    private var seedStorage: [String: Int]?
+    private var seed: [String: Int] {
+        if let s = seedStorage { return s }
+        let s = SeedData.unigrams
+        seedStorage = s
+        return s
+    }
+
+    var isLoaded: Bool { seedStorage != nil }
+
+    /// Cài đặt hệ thống tắt ⇒ bỏ bảng seed (lexicon/LM là mmap — trang sạch, hệ thống tự thu).
+    func unload() { seedStorage = nil }
+
+    private func count(_ w: String) -> Int { seed[w] ?? seed[w.lowercased()] ?? 0 }
+
+    /// Ứng viên (đã chỉnh hoa/thường) cho lượt `r`; `raw` = phím thô của từ đang gõ.
+    func candidates(_ r: PredictionLogic.Request, raw: String) -> [String] {
+        let filterOn = true   // macOS không có công tắc lọc — như mặc định iOS (BẬT)
+        if r.typed.isEmpty {
+            guard !r.english, let prev = r.prev, VNSuggest.lexiconId(of: prev) != nil else { return [] }
+            let next = SuggestRank.nextFill(prev, prev2: r.prev2, personal: [], triCount: { _ in 0 },
+                                            filter: { SensitiveWords.filter($0, enabled: filterOn) })
+            return Array(next.prefix(PredictionLogic.maxCandidates)).map { DisplayCase.apply($0, after: prev) }
+        }
+        let typed = r.typed
+        let pool = r.english ? [] : VNSuggest.matches(typed, poolLimit: 24, excluding: typed.lowercased())
+        if !PredictionLogic.wantsEnglish(r, vietnameseHits: pool.count) {
+            let pmi = SuggestRank.inlinePmi(pool, prev: r.prev, prev2: r.prev2)
+            let ranked = SensitiveWords.filter(
+                SuggestRank.rankInline(pool, pmi: pmi, typedLen: typed.count, count: count, ctx: []),
+                enabled: filterOn)
+            return PredictionLogic.completions(ranked, typed: typed).map {
+                SuggestionCase.display(DisplayCase.apply($0, after: r.prev), shift: .off, typed: typed)
+            }
+        }
+        // Tiếng Anh: phím thô (a–z) — "this" có thể đang hiện "thí" sau Telex.
+        let key = raw.isEmpty ? typed : raw
+        let src = key.count >= PredictionLogic.minTyped ? key : typed
+        let en = SensitiveWords.filter(EnglishLite.completions(src, limit: 24).map(\.word), enabled: filterOn)
+        return PredictionLogic.completions(en, typed: typed.count >= src.count ? typed : src)
+    }
+}

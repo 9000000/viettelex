@@ -50,12 +50,25 @@ enum MathHintLogic {
 /// Một gợi ý đang chờ: `replace` = đuôi văn bản trước con trỏ sẽ bị thay (rỗng = chỉ
 /// chèn thêm — kết quả phép tính), `insert` = chữ chèn vào.
 struct CaretSuggestion: Equatable {
-    /// math/number: MathHint.swift; typo/tones/date: CaretSuggestions.swift.
-    enum Kind: Equatable { case math, number, typo, tones, date }
+    /// math/number: MathHint.swift; typo/tones/date: CaretSuggestions.swift;
+    /// predict: gợi ý từ (WordPrediction.swift).
+    enum Kind: Equatable { case math, number, typo, tones, date, predict }
     let kind: Kind
     let display: String
     let replace: String
     let insert: String
+    /// Ứng viên phụ (gợi ý từ: ứng viên 2–3) — chỉ chọn bằng click; Tab luôn là ứng viên chính.
+    var alternates: [CaretSuggestion] = []
+
+    /// Mọi ứng viên theo thứ tự hiện (chính trước).
+    var all: [CaretSuggestion] { [self] + alternates }
+
+    /// Ứng viên có chữ hiện `display` (click), nil nếu không có.
+    func choosing(_ display: String) -> CaretSuggestion? {
+        all.first { $0.display == display }.map {
+            CaretSuggestion(kind: $0.kind, display: $0.display, replace: $0.replace, insert: $0.insert)
+        }
+    }
 }
 
 /// Logic THUẦN của gợi ý cạnh con trỏ (test được, không AppKit sống).
@@ -309,6 +322,12 @@ final class CaretHint {
     private let rejectedTypos = AutoCorrect.Rejected()      // guarded by lock
     private var declinedTones: String?                      // guarded by lock
     private var fruitlessTones = ToneRunLogic.FruitlessMemo()   // guarded by lock
+    /// Gợi ý từ: chữ đang gõ đã Esc (không gợi ý lại khi từ vẫn bắt đầu bằng nó).
+    private var declinedPrediction: String?                 // guarded by lock
+    /// Gợi ý từ: hẹn giờ dừng-gõ đang chờ (MAIN).
+    private var predictWork: DispatchWorkItem?
+    /// Click ô nổi (gợi ý từ, đường IMK) → controller áp dụng (MAIN).
+    private weak var pickController: TelexInputController?
     private let work = DispatchQueue(label: "com.viettelex.caretsuggest", qos: .userInitiated)
     /// Cờ bật/tắt: GHI trên main (reloadSetting), ĐỌC nhiều lần mỗi phím ở TAP-thread lẫn
     /// main — trước là var trơn (data race giữa hai thread). Giờ là một snapshot dưới khoá
@@ -534,6 +553,7 @@ final class CaretHint {
             switch p.kind {
             case .typo: rejectedTypos.add(String(p.replace.dropLast(1)))   // bỏ ký tự ranh giới
             case .tones: declinedTones = p.replace
+            case .predict: declinedPrediction = p.replace.isEmpty ? nil : p.replace
             default: break
             }
         }
@@ -563,7 +583,69 @@ final class CaretHint {
     }
 
     /// Chuỗi hiện trong ô ứng viên (IMKInputController.candidates(_:)).
-    var candidateStrings: [String] { lock.withLock { pending.map { [$0.display] } ?? [] } }
+    var candidateStrings: [String] { lock.withLock { pending.map { $0.all.map(\.display) } ?? [] } }
+
+    /// Bất kỳ thread. Lấy ứng viên được click (chữ hiện `display`) và tắt ô; chữ không khớp
+    /// ứng viên nào ⇒ ứng viên chính (hành vi cũ của ô một ứng viên).
+    func take(choosing display: String?) -> CaretSuggestion? {
+        guard let s = take() else { return nil }
+        guard let d = display, let c = s.choosing(d) else { return s }
+        return c
+    }
+
+    // MARK: Gợi ý từ (WordPrediction.swift)
+
+    /// MAIN (đường IMK, sau khi phím đã xử lý xong). Hẹn giờ dừng-gõ; có phím mới trước khi hết
+    /// giờ ⇒ không làm gì (thế hệ phím). `typed` = từ đang soạn ("" = vừa gõ dấu cách),
+    /// `raw` = phím thô, `english` = ngữ cảnh tiếng Anh. Chỉ gọi khi
+    /// SystemInlinePrediction.isOn và app thay được chữ đã chốt.
+    func schedulePrediction(typed: String, raw: String, english: Bool,
+                            client: IMKTextInput, controller: TelexInputController) {
+        predictWork?.cancel()
+        let gen = keyGeneration
+        let busy = lock.withLock { () -> Bool in
+            if typed.isEmpty { declinedPrediction = nil }       // từ mới: bỏ lời từ chối cũ
+            return pending != nil || PredictionLogic.muted(typed: typed, declined: declinedPrediction)
+        }
+        guard !busy else { return }
+        let w = DispatchWorkItem { [weak self, weak controller] in
+            guard let self, let controller else { return }
+            self.runPrediction(gen, typed: typed, raw: raw, english: english, client: client, controller: controller)
+        }
+        predictWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + PredictionLogic.idleDelay, execute: w)
+    }
+
+    /// MAIN, đã dừng gõ `idleDelay`: đọc màn hình MỘT lần → tính nền → hiện nếu vẫn hiện hành.
+    private func runPrediction(_ gen: UInt64, typed: String, raw: String, english: Bool,
+                               client: IMKTextInput, controller: TelexInputController) {
+        guard keyGeneration == gen, !isShowing, !IsSecureEventInputEnabled(), !SecureFieldDetector.isSecure,
+              SystemInlinePrediction.isOn,
+              let before = Self.textBeforeCaret(client: client, window: PredictionLogic.window),
+              let req = PredictionLogic.request(before: before, typed: typed, english: english)
+        else { return }
+        work.async { [weak self] in
+            guard let self, self.keyGeneration == gen else { return }
+            let t0 = DispatchTime.now().uptimeNanoseconds
+            let words = PredictionModel.shared.candidates(req, raw: raw)
+            let us = (DispatchTime.now().uptimeNanoseconds - t0) / 1000
+            guard let s = PredictionLogic.suggestion(words, typed: req.typed) else { return }
+            DispatchQueue.main.async { [weak self, weak controller] in
+                guard let self, let controller, self.keyGeneration == gen, !self.isShowing,
+                      !IsSecureEventInputEnabled() else { return }
+                if AppState.shared.debugLogging {
+                    DebugLog.log("predict: \(req.typed.isEmpty ? "next" : "complete") n=\(s.all.count) \(us)µs")
+                }
+                self.present(s, before: before, client: client, controller: controller)
+            }
+        }
+    }
+
+    /// Cài đặt hệ thống vừa tắt: huỷ hẹn giờ, bỏ bảng seed (trên hàng đợi nền của nó).
+    func predictionDisabled() {
+        predictWork?.cancel(); predictWork = nil
+        work.async { if PredictionModel.shared.isLoaded { PredictionModel.shared.unload() } }
+    }
 
     private func hideUI() {
         if Thread.isMainThread { hideWindows() } else { DispatchQueue.main.async { self.hideWindows() } }
@@ -589,7 +671,10 @@ final class CaretHint {
 
     private func present(_ s: CaretSuggestion, before: String, client: IMKTextInput?,
                          controller: TelexInputController?) {
+        // Gợi ý từ nhường mọi gợi ý khác đang hiện (sửa lỗi gõ, thêm dấu, ngày giờ…).
+        if s.kind == .predict, lock.withLock({ pending.map { $0.kind != .predict } ?? false }) { return }
         hideWindows()
+        pickController = s.kind == .predict ? controller : nil
         let screens = NSScreen.screens.map(\.frame)
         // Client IMK cho vị trí: đường IMK dùng chính client; đường tap mượn client của
         // controller đang active NẾU cùng app đang trước (firstRect thường đúng hơn AX).
@@ -687,7 +772,7 @@ final class CaretHint {
     }
 
     private func showCandidates(_ c: IMKCandidates, _ s: CaretSuggestion, caret: NSRect) {
-        c.setCandidateData([s.display])
+        c.setCandidateData(s.all.map(\.display))
         c.show(kIMKLocateCandidatesBelowHint)
         // Hệ thống tự đặt theo client; đặt lại theo rect đã kiểm (cùng nguồn firstRect)
         // để không bao giờ lệch khỏi con trỏ, và lật lên trên khi sát đáy màn hình.
@@ -703,12 +788,23 @@ final class CaretHint {
     @discardableResult
     private func showPanel<Note>(_ s: CaretSuggestion,
                                  place: (NSSize) -> (origin: NSPoint, basis: Note)?) -> Note? {
-        let label = NSTextField(labelWithString: s.display)
-        label.font = .monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
+        // Gợi ý từ (≤ 3 ứng viên): ứng viên chính đậm (Tab), ứng viên phụ thường; đường IMK thì
+        // click được từng ứng viên (như ô ứng viên hệ thống). Loại khác: một nhãn như cũ.
+        let clickable = s.kind == .predict && pickController != nil
+        var views: [NSView] = s.all.enumerated().map { i, c in
+            let label = HintLabel(labelWithString: c.display)
+            label.font = .monospacedDigitSystemFont(ofSize: 14, weight: i == 0 ? .semibold : .regular)
+            if i > 0 { label.textColor = .secondaryLabelColor }
+            if clickable {
+                label.onClick = { [weak self] in self?.pick(c.display) }
+            }
+            return label
+        }
         let hint = NSTextField(labelWithString: "⇥ Tab")
         hint.font = .systemFont(ofSize: 11, weight: .medium)
         hint.textColor = .secondaryLabelColor
-        let stack = NSStackView(views: [label, hint])
+        views.append(hint)
+        let stack = NSStackView(views: views)
         stack.orientation = .horizontal
         stack.spacing = 10
         stack.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
@@ -731,12 +827,25 @@ final class CaretHint {
         w.hasShadow = true
         w.level = .popUpMenu
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
-        w.ignoresMouseEvents = true
+        w.ignoresMouseEvents = !clickable
         w.contentView = fx
         w.setFrameOrigin(placed.origin)
         w.orderFrontRegardless()
         window = w
+        if clickable {
+            // click TRONG ô không được tắt ô (dismissForClick của tap) trước khi tới nhãn
+            let f = w.frame
+            let primaryH = NSScreen.screens.first?.frame.height ?? 0
+            let cg = CGRect(x: f.minX, y: primaryH - f.maxY, width: f.width, height: f.height)
+            lock.withLock { shownFrameCG = cg }
+        }
         return placed.basis
+    }
+
+    /// MAIN. Click một ứng viên trên ô nổi (gợi ý từ, đường IMK) ⇒ controller áp dụng như Tab.
+    private func pick(_ display: String) {
+        guard let c = pickController else { dismiss(); return }
+        c.applyCaretHintChoice(display)
     }
 
     private func hideWindows() {
@@ -744,6 +853,16 @@ final class CaretHint {
         window?.orderOut(nil)
         window = nil
         if let c = Self.candidateWindow, c.isVisible() { c.hide() }
+    }
+}
+
+/// Nhãn click được trên ô nổi không-key (click đầu tiên vẫn tới — acceptsFirstMouse).
+private final class HintLabel: NSTextField {
+    var onClick: (() -> Void)?
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { onClick == nil ? nil : super.hitTest(point) }
+    override func mouseDown(with event: NSEvent) {
+        if let onClick { onClick() } else { super.mouseDown(with: event) }
     }
 }
 

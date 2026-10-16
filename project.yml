@@ -72,6 +72,12 @@ targets:
       - path: iOS/Keyboard/AutoCorrect.swift
       - path: iOS/Keyboard/AdjacentKeyFixer.swift
       - path: iOS/Keyboard/SeedData.swift
+      #  • gợi ý từ cạnh con trỏ (WordPrediction.swift) — cùng xếp hạng thanh gợi ý iOS
+      #    (SuggestRank inline/từ kế tiếp, DisplayCase, lọc nhạy cảm); dữ liệu là
+      #    vnlexicon.bin / vnlm.bin / enlexicon.bin + SeedData đã có sẵn.
+      - path: iOS/Keyboard/SuggestionSupport.swift
+      - path: iOS/Keyboard/DisplayCase.swift
+      - path: iOS/Keyboard/SensitiveWords.swift
       - path: iOS/Keyboard/Resources/vnlexicon.bin
         buildPhase: resources
       - path: iOS/Keyboard/Resources/vnlm.bin
