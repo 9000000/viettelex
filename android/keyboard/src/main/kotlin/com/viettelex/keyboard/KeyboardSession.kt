@@ -59,6 +59,12 @@ data class FieldTraits(
     /** Ô email (TYPE_TEXT_VARIATION_(WEB_)EMAIL_ADDRESS): thanh gợi ý chỉ hiện chip đuôi mail ([EmailDomains]). */
     val emailField: Boolean = false,
     /**
+     * Ô email gõ Telex có bảo vệ địa chỉ ([EmailTokenGuard]; FieldMapping: email không FORCE_ASCII /
+     * mật khẩu / TYPE_NULL). [passthrough] vẫn true ở ô này cho các tính năng khác (gõ tắt, tự sửa,
+     * vuốt, phép tính, tự thêm dấu cách: vẫn TẮT) — chỉ engine bỏ literal. Song sinh iOS emailCompose.
+     */
+    val emailCompose: Boolean = false,
+    /**
      * Ô CHỮ (không mật khẩu, không TYPE_NULL, không bàn số) — được hiện thanh công cụ
      * (☰/con trỏ/📋/⌄ + lời mời Dán) dù cấm gợi ý chữ (NO_SUGGESTIONS: Messenger chat với
      * Trang, #113). FieldMapping.map tính; mặc định false = như cũ (dải trống).
@@ -122,9 +128,8 @@ enum class StripMode {
          * thường (Phil 05/10: ô chat Messenger là nơi gõ nhiều nhất); ô nhạy cảm (mật khẩu, OTP, số)
          * không bao giờ thành appNoSuggestions và đã không học ở tầng khác; ẩn danh thì không học.
          */
-        @Suppress("UNUSED_PARAMETER")
         fun learns(learnWords: Boolean, field: FieldTraits, incognito: Boolean): Boolean =
-            learnWords && !incognito
+            learnWords && !incognito && !field.emailCompose   // ô email: không học tên/địa chỉ
     }
 }
 
@@ -406,8 +411,10 @@ class KeyboardSession(
         lastResetAt = settings.userlmResetAt
         TouchLog.session("android")
         bridge = EngineBridge(settings)
-        bridge.passthrough = field.passthrough
-        bridge.shortcutsAllowed = !field.urlField
+        // Ô email: Telex BẬT + bảo vệ địa chỉ; không gõ tắt (app đổi chữ thành chip người nhận).
+        bridge.passthrough = field.passthrough && !field.emailCompose
+        bridge.emailField = field.emailCompose
+        bridge.shortcutsAllowed = !field.urlField && !field.emailCompose
         traits = field
         lastKeyWasEmailTrigger = false
         clearUndo()
@@ -1119,7 +1126,8 @@ class KeyboardSession(
     private fun acceptEmailChip(label: String, proxy: TextProxy) {
         val before = proxy.contextBeforeInput() ?: return
         val chip = EmailDomains.chips(before, EmailDomains.providers.size).firstOrNull { it.label == label } ?: return
-        proxy.insertText(chip.insert)
+        // Qua bridge: ô email đang soạn ("dduc") ⇒ trả về phím thô trước khi chèn "@gmail.com".
+        bridge.boundary(chip.insert, proxy, expand = false)
         bridge.reset()
         lastWord = null; lastWord2 = null
     }

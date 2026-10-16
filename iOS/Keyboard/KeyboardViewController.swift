@@ -585,16 +585,19 @@ final class KeyboardViewController: UIInputViewController {
         guard force || FieldTraits.needsReconfigure(old: old, new: t) else { return }
         fieldTraits = t
         if !force { TouchLog.traits(t.logDescription); pasteOnce.ended() }   // đổi ô
-        // Ô email/URL/username/OTP: gõ literal. KHÔNG dựa vào autocorrect == .no —
+        // Ô URL/username/OTP: gõ literal. KHÔNG dựa vào autocorrect == .no —
         // Safari/Chrome/Spotlight tắt autocorrect ở ô tìm kiếm (xem FieldPolicy).
+        // Ô email: Telex BẬT (tìm người nhận theo tên) + bảo vệ địa chỉ (EmailTokenGuard).
         // Đổi chế độ giữa từ → bỏ từ đang gõ (engine không còn khớp cách chèn).
-        if bridge.passthrough != t.passthrough {
+        if bridge.passthrough != t.telexLiteral || bridge.emailField != t.emailCompose {
             bridge.reset()
-            bridge.passthrough = t.passthrough
+            bridge.passthrough = t.telexLiteral
+            bridge.emailField = t.emailCompose
         }
-        // Omnibox (inline autocomplete tự viết lại chữ): không với lại từ đã chốt.
-        bridge.reachBackAllowed = t.keyboardType != .webSearch
-        bridge.shortcutsAllowed = t.keyboardType != .webSearch   // omnibox: không gõ tắt
+        // Omnibox (inline autocomplete tự viết lại chữ) / ô email (app đổi chữ thành chip người
+        // nhận): không với lại từ đã chốt, không gõ tắt.
+        bridge.reachBackAllowed = t.keyboardType != .webSearch && !t.emailCompose
+        bridge.shortcutsAllowed = t.keyboardType != .webSearch && !t.emailCompose
         // Tự sửa: công tắc + loại ô (mật khẩu/email/URL/số/omnibox/ô tên ⇒ không).
         let ac = autoCorrectSetting && AutoCorrect.fieldAllows(t)
         if force || ac != autoCorrectActive {
@@ -1967,7 +1970,8 @@ extension KeyboardViewController {
             TouchLog.write("failsafe: email chip context mismatch → skip")
             return
         }
-        textDocumentProxy.insertText(c.insert)
+        // Qua bridge: ô email đang soạn ("dduc") ⇒ trả về phím thô trước khi chèn "@gmail.com".
+        _ = bridge.boundary(c.insert, proxy: Proxy(p: textDocumentProxy))
         bridge.reset()
         lastWord = nil; lastWord2 = nil
     }

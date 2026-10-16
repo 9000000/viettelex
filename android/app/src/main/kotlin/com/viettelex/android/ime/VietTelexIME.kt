@@ -459,7 +459,8 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             initialCaps = info.initialCapsMode != 0, noLearning = field.noLearning,
             packageName = info.packageName, urlField = proxy.uriField,
             emailField = field.kind == InputKind.EMAIL, stripTools = field.stripTools,
-            lowercaseSuggestions = field.lowercaseSuggestions, appNoSuggestions = field.appNoSuggestions))
+            lowercaseSuggestions = field.lowercaseSuggestions, appNoSuggestions = field.appNoSuggestions,
+            emailCompose = field.emailCompose))
         // Ngôn ngữ (vuốt phím cách) lưu riêng: ghi không đụng prefs cài đặt (listener/theme).
         session.restoreLanguage(stateStore().getString(Keys.KEYBOARD_LANGUAGE, null), proxy)
         hwSetting = settings.hardwareTelex
@@ -697,7 +698,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     private fun onHardwareKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (!hwSetting || currentInputConnection == null) return false
         if (!fieldReady) configureField(currentInputEditorInfo ?: return false, settings())
-        if (!hwSetting || field.isSecure || field.passthrough || field.rawKeys) return false
+        if (!hwSetting || field.isSecure || (field.passthrough && !field.emailCompose) || field.rawKeys) return false
         val meta = event.metaState
         val k = HardwareKeys.classify(keyCode, meta, event.getUnicodeChar(meta))
         when (k) {

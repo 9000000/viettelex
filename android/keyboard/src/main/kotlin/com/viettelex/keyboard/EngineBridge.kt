@@ -14,6 +14,18 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
     /** Ô không autocorrect (mã/username): gõ LITERAL, bỏ engine. */
     var passthrough = false
 
+    /**
+     * Ô email (FieldTraits.emailCompose): Telex/VNI BẬT để tìm người nhận theo tên ("Sown" →
+     * "Sơn"), nhưng token có "@"/"." được trả về đúng phím thô và gõ thô tới hết token
+     * ([EmailTokenGuard]). Không gõ tắt / không với lại từ đã chốt (không viết lại chữ app chèn).
+     */
+    var emailField = false
+        set(v) { field = v; email.invalidate() }
+    private val email = EmailTokenGuard()
+    private val emailActive: Boolean get() = emailField && !englishMode
+    /** Với lại từ đã chốt (⌫ mở lại, phím dấu nạp lại từ trước con trỏ): không ở ô email. */
+    private val reEdit: Boolean get() = settings.reEditWords && !emailField
+
     /** Cho phép gõ tắt ở ô này (session TẮT ở ô URL/omnibox). Mật khẩu/email đã passthrough. */
     var shortcutsAllowed = true
 
@@ -82,6 +94,7 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
         engine.reset(); engine.forgetLastCommit()
         // phím kế là đầu từ MỚI của ngôn ngữ kia — không nạp lại / nối vào từ vừa chốt
         enWord = ""; undo.valid = false; afterOwnBoundary = true
+        email.invalidate()
         return final
     }
 
@@ -185,6 +198,15 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
             recordUndo(TelexAction.Passthrough, "", ch.toString())
             return
         }
+        if (emailActive) {
+            if (!email.synced) email.sync(proxy.contextBeforeInput())
+            if (email.literal) {                     // token địa chỉ: phím thô, ⌫ thường
+                proxy.insertText(ch.toString())
+                email.appended(ch.toString(), ch.toString())
+                afterOwnBoundary = false
+                return
+            }
+        }
         if (englishMode) {
             checkpoint(afterOwnBoundary)
             afterOwnBoundary = false
@@ -194,7 +216,7 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
             return
         }
         val ownBoundary = afterOwnBoundary
-        val seedable = settings.reEditWords && engine.isEmpty && !afterOwnBoundary && ReEdit.isTransformKey(ch, settings.vniMode)
+        val seedable = reEdit && engine.isEmpty && !afterOwnBoundary && ReEdit.isTransformKey(ch, settings.vniMode)
         afterOwnBoundary = false
         checkpoint(ownBoundary)
         if (seedable && trySeed(ch, proxy)) return
@@ -225,8 +247,9 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
      */
     fun vniDigit(ch: Char, proxy: TextProxy): Boolean {
         if (!settings.vniMode || englishMode || ch !in '0'..'9' || proxy.isSecure || passthrough) return false
+        if (emailActive && email.literal) return false  // token địa chỉ: số là số
         if (!engine.isEmpty) { letter(ch, proxy); return true }
-        if (!settings.reEditWords || afterOwnBoundary || !ReEdit.isTransformKey(ch, true)) return false
+        if (!reEdit || afterOwnBoundary || !ReEdit.isTransformKey(ch, true)) return false
         undo.valid = false
         checkpoint(false)
         return trySeed(ch, proxy)
@@ -245,6 +268,7 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
         expandedAtLastBoundary = false
         if (proxy.isSecure || passthrough) { put(text); return "" }
         afterOwnBoundary = text.isNotEmpty() && !Character.isLetterOrDigit(text.codePointBefore(text.length))
+        if (emailActive) return emailBoundary(text, proxy, ::put)
         // Gõ tắt TRƯỚC tự khôi phục tiếng Anh.
         if (expand) tryExpandShortcut(text, proxy, ::put)?.let { return it }
         if (englishMode) {
@@ -314,7 +338,8 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
             return false
         }
         if (engine.isEmpty) {
-            val reopened = settings.reEditWords && engine.canReopenLastCommit && tryReopen(proxy)
+            if (emailActive) email.deletedOne()
+            val reopened = reEdit && engine.canReopenLastCommit && tryReopen(proxy)
             if (!reopened) { engine.forgetLastCommit(); proxy.deleteBackward() }
             return reopened
         }
@@ -355,7 +380,67 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
     fun forgetLastCommit() { engine.forgetLastCommit(); expansionUndo = null }
 
     /** Đổi ô / con trỏ dời / ẩn bàn phím → quên từ + ngữ cảnh tiếng Anh. */
-    fun reset() { engine.reset(); engine.resetContext(); afterOwnBoundary = false; undo.valid = false; expansionUndo = null; enWord = "" }
+    fun reset() {
+        engine.reset(); engine.resetContext(); afterOwnBoundary = false; undo.valid = false; expansionUndo = null; enWord = ""
+        email.invalidate()
+    }
+
+    // MARK: ô email ([EmailTokenGuard]) — port iOS EngineBridge.emailBoundary
+
+    /**
+     * Ranh giới ở ô email. Token chưa là địa chỉ + phím không phải "@"/"." ⇒ chốt như thường
+     * (auto-restore). Phím "@"/"." ⇒ phần token mình gõ + từ đang soạn trả về ĐÚNG phím thô
+     * (fail-safe confirmTail: chỉ khi chữ trước con trỏ đúng là nó; không thì chỉ từ đang soạn;
+     * không nữa thì không sửa gì), chèn ranh giới, gõ thô tới hết token. Không gõ tắt / tự sửa.
+     */
+    private fun emailBoundary(text: String, proxy: TextProxy, put: (String) -> Unit): String {
+        if (!email.synced) email.sync(proxy.contextBeforeInput())
+        if (!email.needsRestore(text)) {
+            val before = engine.composed
+            val raw = engine.rawKeystrokes
+            val action = engine.commitBoundary(settings.autoRestore)
+            if (action is TelexAction.Replace && action.backspaces > 0 && !proxy.confirmTail(before)) {
+                TouchLog.write("tail mismatch (email boundary) → reset")
+                reset()
+                put(text)
+                return ""
+            }
+            var final = before
+            if (action is TelexAction.Replace) final = Cp.dropLast(before, action.backspaces) + action.insert
+            apply(action, "", proxy)
+            put(text)
+            email.appended(final, raw, text)
+            return final
+        }
+        val composed = engine.composed
+        val composedRaw = engine.rawKeystrokes
+        engine.reset()
+        engine.forgetLastCommit()
+        val plan = email.restorePlan(composed, composedRaw)
+        when {
+            plan == null -> { put(text); email.appended(composed, composedRaw, text) }
+            proxy.confirmTail(plan.first) -> {
+                TouchLog.write("email: restore raw -${Cp.count(plan.first)} +${Cp.count(plan.second)}")
+                proxy.deleteCodePoints(Cp.count(plan.first))
+                proxy.insertText(plan.second)
+                put(text)
+                email.restored(plan.second, text)
+            }
+            composed != composedRaw && proxy.confirmTail(composed) -> {
+                TouchLog.write("email: restore word only -${Cp.count(composed)} +${Cp.count(composedRaw)}")
+                proxy.deleteCodePoints(Cp.count(composed))
+                proxy.insertText(composedRaw)
+                put(text)
+                email.appended(composedRaw, composedRaw, text)
+            }
+            else -> {
+                TouchLog.write("email: screen disagrees → no rewrite")
+                put(text)
+                email.appended(composed, composedRaw, text)
+            }
+        }
+        return ""
+    }
 
     // MARK: gõ tắt (port iOS EngineBridge.tryExpandShortcut)
 
@@ -464,7 +549,7 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
     /** Nội dung sẽ bung nếu gõ ranh giới ngay bây giờ (thanh gợi ý). Chỉ khoá chữ. */
     val shortcutPreview: String?
         get() {
-            if (!settings.shortcutsEnabled || !shortcutsAllowed || passthrough || typedEmpty || settings.shortcuts.isEmpty) return null
+            if (!settings.shortcutsEnabled || !shortcutsAllowed || passthrough || emailField || typedEmpty || settings.shortcuts.isEmpty) return null
             return settings.shortcuts.wordExpansion(typedWord, typedRaw)
         }
 

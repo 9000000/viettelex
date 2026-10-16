@@ -183,6 +183,13 @@ final class EngineBridge {
     /// thì diacritic lại DÍNH, ngược ý.) Set theo field ở viewWillAppear.
     var passthrough = false
 
+    /// Ô email (FieldTraits.emailCompose): Telex/VNI BẬT để tìm người nhận theo tên ("Sown" →
+    /// "Sơn"), nhưng token có "@"/"." được trả về đúng phím thô và gõ thô tới hết token
+    /// (EmailTokenGuard). Không gõ tắt / không với lại từ đã chốt (không viết lại chữ app chèn).
+    var emailField = false { didSet { email.invalidate() } }
+    private var email = EmailTokenGuard()
+    private var emailActive: Bool { emailField && !englishMode }
+
     /// Cho phép "với" lại từ đã chốt trước con trỏ: ⌫ mở lại từ vừa chốt, và phím
     /// dấu/mũ nạp lại từ ngay trước con trỏ (seed). Controller TẮT ở omnibox
     /// (keyboardType .webSearch): inline autocomplete tự sửa chữ bên dưới mình.
@@ -297,6 +304,15 @@ final class EngineBridge {
                                     ownBoundary: lastWasOwnBoundary)
             return
         }
+        if emailActive {
+            if !email.synced { email.sync(context: proxy.contextBeforeInput) }
+            if email.literal {                        // token địa chỉ: phím thô, ⌫ thường
+                proxy.insertText(String(ch))
+                email.appended(shown: String(ch), raw: String(ch))
+                lastWasOwnBoundary = false
+                return
+            }
+        }
         if swipeOpen != nil {
             letterAfterSwipe(ch, proxy: proxy)
             return
@@ -315,6 +331,7 @@ final class EngineBridge {
         engine.reset(); engine.forgetLastCommit()
         // phím kế là đầu từ MỚI của ngôn ngữ kia — không nạp lại / nối vào từ vừa chốt
         enWord = ""; letterUndo = nil; swipeOpen = nil; lastWasOwnBoundary = true
+        email.invalidate()
         return final
     }
 
@@ -327,6 +344,7 @@ final class EngineBridge {
     /// false = ngoài từ ⇒ caller chèn số như ký hiệu (boundary) — "2026" vẫn là số.
     func vniDigit(_ ch: Character, proxy: TextProxyLike) -> Bool {
         guard settings.vniMode, !englishMode, ch.isASCII, ch.isNumber, !proxy.isSecure, !passthrough else { return false }
+        if emailActive, email.literal { return false }  // token địa chỉ: số là số
         if let open = swipeOpen {
             // Từ vuốt đang mở: số chỉ SỬA từ (dấu) — không sửa được ⇒ ranh giới (chốt từ +
             // số liền sau, không chèn dấu cách treo như phím chữ).
@@ -353,7 +371,7 @@ final class EngineBridge {
             letter(ch, proxy: proxy)
             return true
         }
-        guard !lastWasOwnBoundary, settings.reEditWord, reachBackAllowed, isReEditKey(ch) else {
+        guard !lastWasOwnBoundary, settings.reEditWord, canReachBack, isReEditKey(ch) else {
             return false
         }
         letterUndo = nil
@@ -492,7 +510,7 @@ final class EngineBridge {
             proxy.insertText(String(ch))
             return
         }
-        if engine.isEmpty, !ownBoundary, settings.reEditWord, reachBackAllowed {
+        if engine.isEmpty, !ownBoundary, settings.reEditWord, canReachBack {
             if isReEditKey(ch), seedWordBeforeCaret(then: ch, proxy: proxy) {
                 return                                // sửa từ trên màn hình: không huỷ được
             }
@@ -561,6 +579,7 @@ final class EngineBridge {
             lastWasOwnBoundary = text.last.map { !$0.isLetter } ?? false
             return literal
         }
+        if emailActive { return emailBoundary(text, proxy: proxy) }
         if englishMode {
             if expand, !wasSwipe, let expanded = tryExpandShortcut(text, proxy: proxy) { return expanded }
             let word = enWord
@@ -630,6 +649,7 @@ final class EngineBridge {
             return false
         }
         guard !engine.isEmpty else {
+            if emailActive { email.deletedOne() }
             if engine.canReopenLastCommit { return reopenLastCommit(proxy: proxy) }
             proxy.deleteBackward()
             return false
@@ -649,6 +669,68 @@ final class EngineBridge {
             proxy.deleteBackward()
         }
         return false
+    }
+
+    /// Với lại từ đã chốt (⌫ mở lại, phím dấu nạp lại từ trước con trỏ): không ở ô email.
+    private var canReachBack: Bool { reachBackAllowed && !emailField }
+
+    // MARK: - Ô email (EmailTokenGuard)
+
+    /// Ranh giới ở ô email. Token chưa là địa chỉ + phím không phải "@"/"." ⇒ chốt như thường
+    /// (auto-restore). Phím "@"/"." ⇒ phần token mình gõ + từ đang soạn trả về ĐÚNG phím thô
+    /// (fail-safe: chỉ khi chữ trước con trỏ đúng là nó; không thì chỉ từ đang soạn; không nữa thì
+    /// không sửa gì), chèn ranh giới, gõ thô tới hết token. Không gõ tắt / tự sửa ở ô email.
+    private func emailBoundary(_ text: String, proxy: TextProxyLike) -> String {
+        if !email.synced { email.sync(context: proxy.contextBeforeInput) }
+        lastWasOwnBoundary = text.last.map { !$0.isLetter } ?? false
+        guard email.needsRestore(text) else {
+            let before = engine.composed, raw = engine.rawKeystrokes
+            let action = engine.commitBoundary(autoRestore: settings.autoRestore)
+            guard safeToApply(action, expected: before, proxy: proxy) else {
+                // Lệch: không sửa chữ trên màn hình; token đọc lại ở phím kế.
+                reset()
+                if !text.isEmpty { proxy.insertText(text) }
+                lastWasOwnBoundary = text.last.map { !$0.isLetter } ?? false
+                return before
+            }
+            var final = before
+            if case let .replace(bs, insert) = action { final = String(before.dropLast(bs)) + insert }
+            apply(action, literal: "", proxy: proxy)
+            if !text.isEmpty { proxy.insertText(text) }
+            email.appended(shown: final, raw: raw, text: text)
+            return final
+        }
+        let composed = engine.composed, composedRaw = engine.rawKeystrokes
+        engine.reset()
+        engine.forgetLastCommit()
+        if let plan = email.restorePlan(composed: composed, composedRaw: composedRaw) {
+            if CompositionSync.canDelete(plan.shown.count, expected: plan.shown,
+                                         context: { proxy.contextBeforeInput }, threshold: 1) {
+                TouchLog.write("email: restore raw -\(plan.shown.count) +\(plan.raw.count)")
+                for _ in 0..<plan.shown.count { proxy.deleteBackward() }
+                proxy.insertText(plan.raw)
+                if !text.isEmpty { proxy.insertText(text) }
+                email.restored(to: plan.raw, text: text)
+                return ""
+            }
+            if composed != composedRaw,
+               CompositionSync.canDelete(composed.count, expected: composed,
+                                         context: { proxy.contextBeforeInput }, threshold: 1) {
+                TouchLog.write("email: restore word only -\(composed.count) +\(composedRaw.count)")
+                for _ in 0..<composed.count { proxy.deleteBackward() }
+                proxy.insertText(composedRaw)
+                if !text.isEmpty { proxy.insertText(text) }
+                email.appended(shown: composedRaw, raw: composedRaw, text: text)
+                return ""
+            }
+            TouchLog.write("email: context lệch → không sửa")
+            if !text.isEmpty { proxy.insertText(text) }
+            email.appended(shown: composed, raw: composedRaw, text: text)
+            return ""
+        }
+        if !text.isEmpty { proxy.insertText(text) }
+        email.appended(shown: composed, raw: composedRaw, text: text)
+        return ""
     }
 
     // MARK: - Gõ tắt
@@ -758,7 +840,7 @@ final class EngineBridge {
 
     /// Nội dung sẽ bung nếu gõ ranh giới ngay bây giờ (thanh gợi ý hiện trước). Chỉ khoá chữ.
     var shortcutPreview: String? {
-        guard settings.shortcutsEnabled, shortcutsAllowed, !passthrough, swipeOpen == nil,
+        guard settings.shortcutsEnabled, shortcutsAllowed, !passthrough, !emailField, swipeOpen == nil,
               !typedEmpty, !shortcutTable.isEmpty else { return nil }
         return shortcutTable.wordExpansion(composed: typedWord, raw: typedRaw)
     }
@@ -778,7 +860,7 @@ final class EngineBridge {
     /// auto-restore ("google") engine không capture → không bao giờ tới đây, nên luồng
     /// backspace-undo (restoreUndo) của controller giữ nguyên.
     private func reopenLastCommit(proxy: TextProxyLike) -> Bool {
-        guard settings.reEditWord, reachBackAllowed, !proxy.hasSelection,
+        guard settings.reEditWord, canReachBack, !proxy.hasSelection,
               let ctx = proxy.contextBeforeInput,
               let boundaryChar = ctx.last, !boundaryChar.isLetter else {
             engine.forgetLastCommit()
@@ -897,6 +979,7 @@ final class EngineBridge {
     func reset() {
         engine.reset(); engine.resetContext(); lastWasOwnBoundary = false; letterUndo = nil
         swipeOpen = nil; expansionUndo = nil; enWord = ""
+        email.invalidate()
     }
 
     var isComposing: Bool { !engine.isEmpty || swipeOpen?.literal != nil || !enWord.isEmpty }

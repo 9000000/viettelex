@@ -46,6 +46,26 @@ class FieldMappingTest {
         assertFalse(m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_PERSON_NAME).passthrough)
     }
 
+    /** Ô email (người nhận Gmail/Outlook — cũng tìm danh bạ theo tên): Telex BẬT + bảo vệ địa chỉ. */
+    @Test fun emailFieldsComposeWithAddressGuard() {
+        for (v in listOf(TYPE_TEXT_VARIATION_EMAIL_ADDRESS, TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS)) {
+            val f = m(TYPE_CLASS_TEXT or v)
+            assertTrue(f.emailCompose)
+            assertTrue(f.passthrough)                 // gõ tắt/tự sửa/vuốt/phép tính vẫn tắt
+            assertEquals(InputKind.EMAIL, f.kind)     // bàn email (@ .) giữ nguyên
+            assertFalse(f.capSentences)
+        }
+        // FORCE_ASCII / mật khẩu / ô thường / URL / TYPE_NULL: không đổi.
+        assertFalse(m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_EMAIL_ADDRESS, EditorInfo.IME_FLAG_FORCE_ASCII).emailCompose)
+        assertFalse(m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_PASSWORD).emailCompose)
+        assertFalse(m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_VISIBLE_PASSWORD).emailCompose)
+        assertFalse(m(TYPE_CLASS_TEXT).emailCompose)
+        assertFalse(m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_URI).emailCompose)
+        assertFalse(m(TYPE_NULL).emailCompose)
+        assertFalse(m(TYPE_CLASS_NUMBER).emailCompose)
+        assertFalse(StripMode.learns(true, FieldTraits(emailField = true, emailCompose = true), false))
+    }
+
     @Test fun kinds() {
         assertEquals(InputKind.EMAIL, m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_EMAIL_ADDRESS).kind)
         assertEquals(InputKind.URL, m(TYPE_CLASS_TEXT or TYPE_TEXT_VARIATION_URI).kind)

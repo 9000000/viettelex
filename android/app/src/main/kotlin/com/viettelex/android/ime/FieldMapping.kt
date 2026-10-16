@@ -11,7 +11,10 @@ data class FieldConfig(
     val kind: InputKind,
     /** Ô mật khẩu: literal, bỏ engine. */
     val isSecure: Boolean,
-    /** Ô email / visible-password (không nhiều dòng) / FORCE_ASCII / số / TYPE_NULL: literal. */
+    /**
+     * Ô email / visible-password (không nhiều dòng) / FORCE_ASCII / số / TYPE_NULL: không gõ tắt, tự
+     * sửa, vuốt… Engine literal, TRỪ ô email [emailCompose].
+     */
     val passthrough: Boolean,
     val capSentences: Boolean,
     /** Bar gợi ý được phép hiện (ẩn ở mật khẩu, passthrough, NO_SUGGESTIONS). */
@@ -50,6 +53,12 @@ data class FieldConfig(
      * không học). [suggestionsAllowed] vẫn false ⇒ AutoCorrect.fieldAllows giữ tắt.
      */
     val appNoSuggestions: Boolean = false,
+    /**
+     * Ô email (người nhận Gmail/Outlook — cũng là ô tìm danh bạ theo tên "Sơn"): Telex/VNI BẬT, địa
+     * chỉ được bảo vệ (EmailTokenGuard: token có "@"/"." trả về phím thô). Không ở FORCE_ASCII /
+     * mật khẩu / TYPE_NULL. Song sinh iOS FieldPolicy.emailCompose.
+     */
+    val emailCompose: Boolean = false,
 )
 
 object FieldMapping {
@@ -146,7 +155,8 @@ object FieldMapping {
             holdNewline = allowsHoldNewline(multiLine, secure, rawKeys),
             stripTools = text && !secure,
             lowercaseSuggestions = isAddressOrSearch(inputType, imeOptions, multiLine, secure),
-            appNoSuggestions = noSuggest && !secure && !passthrough)
+            appNoSuggestions = noSuggest && !secure && !passthrough,
+            emailCompose = email && !forceAscii && !secure && !rawKeys)
     }
 
     /**

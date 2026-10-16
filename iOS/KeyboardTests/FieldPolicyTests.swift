@@ -200,3 +200,107 @@ final class AutoShiftTests: XCTestCase {
         XCTAssertFalse(FieldTraits(keyboardType: .URL).inputKind.isFreeText)
     }
 }
+
+/// Ô email (người nhận Gmail/Outlook — cũng là ô tìm danh bạ theo tên): Telex BẬT + bảo vệ địa chỉ.
+/// Song sinh Android EmailTokenGuardTest.
+final class EmailFieldPolicyTests: XCTestCase {
+    func testEmailFieldsCompose() {
+        XCTAssertTrue(FieldPolicy.emailCompose(keyboardType: .emailAddress, contentType: nil))
+        XCTAssertTrue(FieldPolicy.emailCompose(keyboardType: .emailAddress, contentType: .emailAddress))
+        XCTAssertTrue(FieldPolicy.emailCompose(keyboardType: .default, contentType: .emailAddress))
+        let t = FieldTraits(keyboardType: .emailAddress, autocorrection: .no)
+        XCTAssertTrue(t.emailCompose)
+        XCTAssertFalse(t.telexLiteral)
+        XCTAssertTrue(t.passthrough)          // tính năng khác (gõ tắt, tự sửa, vuốt…) vẫn tắt
+        XCTAssertFalse(t.allowsAutoSpace)
+        XCTAssertFalse(t.allowsMathResults)
+        XCTAssertFalse(AutoCorrect.fieldAllows(t))
+        XCTAssertEqual(t.inputKind, .email)   // bàn phím email (@ .) giữ nguyên
+        XCTAssertFalse(StripMode.learns(learnWords: true, traits: t, incognito: false))
+    }
+
+    func testOtherLiteralFieldsUnchanged() {
+        // Ô đăng nhập / mật khẩu / OTP / URL dùng bàn email: vẫn literal.
+        for c: UITextContentType in [.username, .password, .newPassword, .oneTimeCode, .URL] {
+            XCTAssertFalse(FieldPolicy.emailCompose(keyboardType: .emailAddress, contentType: c), c.rawValue)
+            XCTAssertTrue(FieldTraits(keyboardType: .emailAddress, contentType: c).telexLiteral, c.rawValue)
+        }
+        XCTAssertFalse(FieldPolicy.emailCompose(keyboardType: .URL, contentType: .emailAddress))
+        XCTAssertFalse(FieldTraits(keyboardType: .emailAddress, secure: true).emailCompose)
+        XCTAssertTrue(FieldTraits(keyboardType: .URL).telexLiteral)
+        XCTAssertTrue(FieldTraits(contentType: .username).telexLiteral)
+        XCTAssertTrue(FieldTraits(keyboardType: .numberPad, contentType: .oneTimeCode).telexLiteral)
+        XCTAssertFalse(FieldTraits().telexLiteral)
+        XCTAssertFalse(FieldTraits().emailCompose)
+        XCTAssertTrue(StripMode.learns(learnWords: true, traits: FieldTraits(), incognito: false))
+    }
+}
+
+/// Quyết định thuần của EmailTokenGuard.
+final class EmailTokenGuardTests: XCTestCase {
+    func testTokenTailAndMarks() {
+        XCTAssertEqual(EmailTokenGuard.tokenTail("Sơn, phuc@gm"), "phuc@gm")
+        XCTAssertEqual(EmailTokenGuard.tokenTail("a;b"), "b")
+        XCTAssertEqual(EmailTokenGuard.tokenTail("abc "), "")
+        XCTAssertEqual(EmailTokenGuard.tokenTail("abc"), "abc")
+        XCTAssertTrue(EmailTokenGuard.hasMark("a.b"))
+        XCTAssertTrue(EmailTokenGuard.hasMark("@"))
+        XCTAssertFalse(EmailTokenGuard.hasMark("tuan_anh-1+2"))
+    }
+
+    func testSyncReadsExistingToken() {
+        var g = EmailTokenGuard()
+        XCTAssertFalse(g.synced)
+        g.sync(context: "Sơn, an@x")
+        XCTAssertTrue(g.synced); XCTAssertTrue(g.literal)
+        g.sync(context: "an@x.com, ")
+        XCTAssertFalse(g.literal)
+        g.sync(context: nil)
+        XCTAssertTrue(g.synced); XCTAssertFalse(g.literal)
+    }
+
+    func testRestorePlanCoversCommittedPiecesAndOpenWord() {
+        var g = EmailTokenGuard()
+        g.sync(context: "")
+        XCTAssertFalse(g.needsRestore("_"))
+        XCTAssertTrue(g.needsRestore("@"))
+        XCTAssertTrue(g.needsRestore("."))
+        g.appended(shown: "tuấn", raw: "tuaans", text: "_")
+        XCTAssertFalse(g.literal)
+        let plan = g.restorePlan(composed: "ạnh", composedRaw: "anhj")
+        XCTAssertEqual(plan?.shown, "tuấn_ạnh")
+        XCTAssertEqual(plan?.raw, "tuaans_anhj")
+        g.restored(to: "tuaans_anhj", text: "@")
+        XCTAssertTrue(g.literal)
+        XCTAssertFalse(g.needsRestore("."))
+        // dấu phẩy ⇒ token mới
+        g.appended(shown: "", raw: "", text: ", ")
+        XCTAssertFalse(g.literal)
+        XCTAssertEqual(g.shown, "")
+    }
+
+    func testNoPlanWhenAlreadyRaw() {
+        var g = EmailTokenGuard()
+        g.sync(context: "")
+        g.appended(shown: "phuc", raw: "phuc", text: "")
+        XCTAssertNil(g.restorePlan(composed: "", composedRaw: ""))
+        XCTAssertNil(g.restorePlan(composed: "nguyen", composedRaw: "nguyen"))
+    }
+
+    func testBackspaceTracking() {
+        var g = EmailTokenGuard()
+        g.sync(context: "")
+        g.restored(to: "an", text: "@")
+        XCTAssertTrue(g.literal)
+        g.deletedOne()                         // xoá "@" ⇒ token lại là chữ
+        XCTAssertFalse(g.literal)
+        XCTAssertEqual(g.shown, "an")
+        g = EmailTokenGuard(); g.sync(context: "")
+        g.appended(shown: "tuấn", raw: "tuaans", text: "")
+        g.deletedOne()                         // "n" ≠ "s": phần còn lại thành chữ có sẵn
+        XCTAssertEqual(g.shown, "")
+        XCTAssertNil(g.restorePlan(composed: "", composedRaw: ""))
+        g.deletedOne()                         // xoá vào chữ có sẵn ⇒ đọc lại context
+        XCTAssertFalse(g.synced)
+    }
+}

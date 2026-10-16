@@ -329,3 +329,131 @@ final class SeedOrderTests: XCTestCase {
         XCTAssertEqual(m.topWords(limit: 3), ["em", "anh", "tôi"])
     }
 }
+
+/// Ô email (người nhận Gmail/Outlook, iOS 1.2.15): gõ tên tiếng Việt để tìm danh bạ, nhưng địa chỉ
+/// phải đúng phím thô. Phím đi như controller: chữ → letter, số (VNI) → vniDigit rồi boundary,
+/// ký hiệu/"@"/"." → boundary, "⌫" → backspace, "␣" → dấu cách. Song sinh Android EmailFieldTest.
+final class EmailFieldBridgeTests: XCTestCase {
+    private func bridge(email: Bool = true, passthrough: Bool = false,
+                        settings: KeyboardSettings = KeyboardSettings()) -> EngineBridge {
+        let b = EngineBridge(settings: settings)
+        b.passthrough = passthrough
+        b.emailField = email
+        b.reachBackAllowed = !email
+        b.shortcutsAllowed = !email
+        return b
+    }
+
+    private func feed(_ keys: String, _ b: EngineBridge, _ p: MockProxy) {
+        for ch in keys {
+            switch ch {
+            case "⌫": b.backspace(proxy: p)
+            case "␣": b.boundary(" ", proxy: p)
+            default:
+                if ch.isLetter { b.letter(ch, proxy: p) }
+                else if ch.isNumber, b.vniDigit(ch, proxy: p) {}
+                else { b.boundary(String(ch), proxy: p) }
+            }
+        }
+    }
+
+    private func type(_ keys: String, email: Bool = true, passthrough: Bool = false,
+                      settings: KeyboardSettings = KeyboardSettings()) -> String {
+        let p = MockProxy()
+        feed(keys, bridge(email: email, passthrough: passthrough, settings: settings), p)
+        return p.text
+    }
+
+    func testVietnameseNameComposes() {
+        XCTAssertEqual(type("Sown"), "Sơn")
+        XCTAssertEqual(type("Nguyeenx␣Sown"), "Nguyễn Sơn")
+        XCTAssertEqual(type("Sown,"), "Sơn,")
+    }
+
+    func testAddressesStayRaw() {
+        XCTAssertEqual(type("phuc.nguyen@gmail.com"), "phuc.nguyen@gmail.com")
+        XCTAssertEqual(type("dduc@vn.com"), "dduc@vn.com")
+        XCTAssertEqual(type("tuan.anh@"), "tuan.anh@")
+        XCTAssertEqual(type("nguyeenx@"), "nguyeenx@")           // quy tắc: đúng phím thô
+        XCTAssertEqual(type("Sown.nguyeenx@gmail.com"), "Sown.nguyeenx@gmail.com")
+        XCTAssertEqual(type("tuaans_anh1@vn.vn"), "tuaans_anh1@vn.vn")
+        XCTAssertEqual(type("ddax-ddi+1@x.com"), "ddax-ddi+1@x.com")
+        XCTAssertEqual(type("viet.nam"), "viet.nam")             // "." cũng khoá token
+        XCTAssertEqual(type("hoaf@ddaif.vn"), "hoaf@ddaif.vn")
+    }
+
+    func testDigitsAndSymbolsComposeUntilMark() {
+        XCTAssertEqual(type("tuaans_anh"), "tuấn_anh")           // chưa có @ / . ⇒ vẫn soạn
+        XCTAssertEqual(type("tuaans_anh␣"), "tuấn_anh ")
+    }
+
+    func testTokenAfterSeparatorComposesAgain() {
+        XCTAssertEqual(type("an@x.com,␣Sown"), "an@x.com, Sơn")
+        XCTAssertEqual(type("an@x.com;Sown"), "an@x.com;Sơn")
+        XCTAssertEqual(type("an@x.com␣Sown"), "an@x.com Sơn")
+    }
+
+    func testBackspaceInsideAddressAndAcrossMark() {
+        XCTAssertEqual(type("ddu@⌫c"), "dduc")                  // xoá "@" ⇒ token lại là chữ
+        XCTAssertEqual(type("ddu@⌫c@"), "dduc@")
+        XCTAssertEqual(type("phuc@gmx⌫ail.com"), "phuc@gmail.com")
+    }
+
+    func testPasswordAndLiteralFieldsUnchanged() {
+        XCTAssertEqual(type("Sown", passthrough: true), "Sown")          // ô URL/username: literal
+        let p = MockProxy(); p.isSecure = true
+        feed("Sown@", bridge(), p)
+        XCTAssertEqual(p.text, "Sown@")                                    // mật khẩu
+        XCTAssertEqual(type("Sown@", email: false), "Sơn@")               // ô thường: như cũ
+    }
+
+    func testNeverRewritesTextTheAppInserted() {
+        // Gmail biến người nhận thành chip / chèn chữ: bridge reset, chữ có sẵn không bị viết lại.
+        let p = MockProxy()
+        let b = bridge()
+        p.text = "Đức"                      // app chèn (không phải phím của mình)
+        b.reset()
+        feed("@vn.com", b, p)
+        XCTAssertEqual(p.text, "Đức@vn.com")
+        // host gán lại chữ trong lúc đang soạn (không báo): fail-safe, không xoá mù
+        let q = MockProxy()
+        let c = bridge()
+        feed("dduc", c, q)
+        q.text = "Đức Nguyễn <"
+        feed("@", c, q)
+        XCTAssertEqual(q.text, "Đức Nguyễn <@")
+    }
+
+    func testExistingAddressTokenStaysRawAfterReset() {
+        let p = MockProxy()
+        let b = bridge()
+        p.text = "phuc@gmail.co"
+        b.reset()                             // con trỏ dời tới cuối địa chỉ có sẵn
+        feed("om", b, p)
+        XCTAssertEqual(p.text, "phuc@gmail.coom")
+    }
+
+    func testVNIDigitsInAddress() {
+        var s = KeyboardSettings(); s.vniMode = true
+        XCTAssertEqual(type("So7n", settings: s), "Sơn")
+        XCTAssertEqual(type("d9uc1@vn.com", settings: s), "d9uc1@vn.com")
+        XCTAssertEqual(type("an@x2.com", settings: s), "an@x2.com")
+    }
+
+    func testEmailChipInsertionRestoresFirst() {
+        // acceptEmailChip đi qua boundary(chip.insert)
+        let p = MockProxy()
+        let b = bridge()
+        feed("dduc", b, p)
+        b.boundary("@gmail.com", proxy: p)
+        XCTAssertEqual(p.text, "dduc@gmail.com")
+    }
+
+    func testNoShortcutPreviewAndNothingToLearnAtMark() {
+        let p = MockProxy()
+        let b = bridge()
+        feed("an", b, p)
+        XCTAssertNil(b.shortcutPreview)
+        XCTAssertEqual(b.boundary("@", proxy: p), "")
+    }
+}
