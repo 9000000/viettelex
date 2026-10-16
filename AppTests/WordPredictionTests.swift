@@ -1,7 +1,8 @@
 // WordPredictionTests — gợi ý từ cạnh con trỏ (WordPrediction.swift): công tắc theo cài đặt
 // hệ thống "Show inline predictive text", dựng ngữ cảnh từ văn bản trước con trỏ, xếp hạng
 // (dùng chung thanh gợi ý iOS), từ kế tiếp chỉ theo trigram 2 từ, thay đúng từ đang soạn, MỘT
-// ứng viên trên CaretHint, đo đạc.
+// ứng viên trên CaretHint, đo đạc; seed từ kế tiếp (một từ ngữ cảnh), tiếng Anh giữa câu Việt,
+// công tắc "Lọc từ nhạy cảm".
 import XCTest
 @testable import VietTelex
 
@@ -87,25 +88,108 @@ final class WordPredictionTests: XCTestCase {
         XCTAssertEqual(candidates("zzqx zzqy "), [], "từ lạ: không gợi ý")
     }
 
-    /// Hồi quy (Phil 16/10/2026): "Tên ␣" → "gọi" là đoán mò từ bigram một từ. Từ kế tiếp chỉ
-    /// khi có đủ HAI từ ngữ cảnh VÀ vnlm.bin có dòng trigram cho cặp đó — không lùi bigram.
-    func testNextWordNeedsTwoWordTrigram() {
-        XCTAssertEqual(candidates("Tên "), [], "một từ ngữ cảnh: không gợi ý")
-        XCTAssertEqual(candidates("cảm "), [])
-        XCTAssertEqual(candidates("xin "), [])
+    /// Hồi quy (Phil 16/10/2026): "Tên ␣" → "gọi" là đoán mò từ bigram một từ. Từ kế tiếp từ LM
+    /// tĩnh chỉ khi có đủ HAI từ ngữ cảnh VÀ vnlm.bin có dòng trigram — không lùi bigram. Một từ
+    /// ngữ cảnh chỉ ra gợi ý khi có cặp SEED curated của iOS ("cảm" → ơn, "xin" → lỗi).
+    func testNextWordNeedsTwoWordTrigramOrSeed() {
+        XCTAssertEqual(candidates("Tên "), [], "một từ ngữ cảnh, không seed: không gợi ý")
         XCTAssertEqual(candidates("xong, tên "), [], "dấu phẩy cắt ngữ cảnh ⇒ chỉ một từ")
+        XCTAssertEqual(candidates("zzqx tên "), [], "bigram tĩnh có nhưng không trigram, không seed")
         XCTAssertFalse(L.wantsNextWord(.init(typed: "", prev: "tên", prev2: nil, english: false)))
         XCTAssertTrue(L.wantsNextWord(.init(typed: "", prev: "ơn", prev2: "cảm", english: false)))
         XCTAssertFalse(L.wantsNextWord(.init(typed: "", prev: "ơn", prev2: "cảm", english: true)))
-        // Hai từ có dòng trigram ⇒ có gợi ý, và chính là hàng đầu của dòng trigram.
+        XCTAssertTrue(L.wantsSeedNext(.init(typed: "", prev: "cảm", prev2: nil, english: false)))
+        XCTAssertFalse(L.wantsSeedNext(.init(typed: "c", prev: "cảm", prev2: nil, english: false)))
+        // Hai từ có dòng trigram ⇒ hạng 1 = hàng đầu dòng trigram (iOS nextFill: trigram trước seed).
         let top = SuggestRank.topNext("ơn", prev2: "cảm", limit: 6)
         XCTAssertEqual(top?.trigram, true)
         XCTAssertEqual(candidates("cảm ơn ").first?.lowercased(),
                        SensitiveWords.filter(top?.words ?? [], enabled: true).first?.lowercased())
-        // Cặp không có dòng trigram (bigram có) ⇒ không gợi ý.
-        for before in ["zzqx tên ", "zzqx cảm "] {
-            XCTAssertEqual(candidates(before), [], before)
+    }
+
+    /// Seed iOS (SeedNextData = UserLangModel.nextWords của người dùng mới): một từ ngữ cảnh.
+    func testSeedNextWord() {
+        XCTAssertEqual(candidates("cảm ").first, "ơn")
+        XCTAssertEqual(candidates("Cảm ").first, "ơn")
+        XCTAssertEqual(candidates("xin ").first, "lỗi", "\(candidates("xin "))")
+        XCTAssertTrue(candidates("xin ").contains("chào"))
+        XCTAssertEqual(candidates("hôm ").first, "nay")
+        XCTAssertEqual(candidates("zzqx cảm ").first, "ơn", "không trigram ⇒ seed")
+        XCTAssertEqual(candidates("nguyễn ").first, "Văn", "chuỗi tên: DisplayCase")
+        XCTAssertEqual(candidates("good ", english: true).first, "morning", "tiếng Anh: chỉ từ tiếng Anh")
+        XCTAssertEqual(candidates("anh ", english: true), [], "ngữ cảnh Anh: từ kế tiếp Việt bị bỏ")
+        // Bảng: dòng hợp lệ, NFC, chữ thường; cảm → ơn đứng đầu (seed iOS).
+        let t = SeedNextData.table()
+        XCTAssertGreaterThan(t.count, 200)
+        XCTAssertEqual(t["cảm"]?.first, "ơn")
+        for (k, v) in t {
+            XCTAssertFalse(v.isEmpty, k)
+            XCTAssertEqual(k, k.lowercased().precomposedStringWithCanonicalMapping)
+            XCTAssertLessThanOrEqual(v.count, 24)
         }
+    }
+
+    /// Công tắc "Lọc từ nhạy cảm": bật (mặc định) ⇒ không bao giờ đưa từ tục; tắt ⇒ như iOS,
+    /// seed/LM được hiện nguyên ("ngon ␣" → vl là cặp seed iOS).
+    func testSensitiveFilterToggle() {
+        func c(_ before: String, _ typed: String = "", _ raw: String = "", on: Bool) -> [String] {
+            guard let r = L.request(before: before, typed: typed, english: false) else { return [] }
+            return PredictionModel.shared.candidates(r, raw: raw, filterSensitive: on)
+        }
+        XCTAssertEqual(c("vãi ", on: true).first, "cả")
+        XCTAssertEqual(c("vãi ", on: false).first, "lồn")
+        XCTAssertEqual(c("ngon ", on: true), [], "seed chỉ có từ nhạy cảm ⇒ bật lọc: không gì")
+        XCTAssertEqual(c("ngon ", on: false).first, "vl")
+        XCTAssertFalse(c("đị", "đị", "ddij", on: true).contains("địt"))
+        XCTAssertEqual(AppState.shared.defaults.object(forKey: "filterSensitive") as? Bool ?? true,
+                       AppState.shared.filterSensitive)
+        XCTAssertTrue(MacSyncStore.settings.contains { $0.canonical == "filterSensitive" }, "đồng bộ như iOS")
+    }
+
+    /// Tiếng Anh giữa câu Việt: chỉ khi phím thô là tiền tố tiếng Anh rõ ràng hơn mọi cách đọc
+    /// tiếng Việt (prefersEnglish) — "pers" hiện "pé" → person; KHÔNG BAO GIỜ khi chữ đang gõ là
+    /// âm tiết Việt trọn vẹn phổ biến (toi, duoc, cam, thẻ, thin, chan).
+    func testEnglishInVietnameseContext() {
+        XCTAssertEqual(candidates("tôi gặp pé", typed: "pé", raw: "pers").first, "person")
+        XCTAssertEqual(candidates("ưởn", typed: "ưởn", raw: "wron").first, "wrong")
+        XCTAssertEqual(candidates("bạn tech", typed: "tech", raw: "tech").first, "technology")
+        for (typed, raw) in [("toi", "toi"), ("duoc", "duoc"), ("cam", "cam"), ("thẻ", "ther"),
+                             ("thin", "thin"), ("chan", "chan"), ("thanh", "thanh"), ("khô", "khoo")] {
+            let c = candidates("anh " + typed, typed: typed, raw: raw)
+            XCTAssertFalse(c.contains { EnglishLite.contains($0.lowercased()) && !VNSuggest.contains($0) },
+                           "\(raw) → \(c)")
+        }
+    }
+
+    /// Bảo thủ: mọi tiền tố ≥ 4 phím (Telex, hai kiểu đặt dấu) và dạng không dấu của âm tiết
+    /// trong câu heldout ⇒ prefersEnglish KHÔNG BAO GIỜ bật (đo 16/10/2026: 0 / ~36k).
+    func testEnglishOverrideNeverFiresOnVietnamese() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("iOS/KeyboardTests/Fixtures/bigram-heldout.txt")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let syllables = Set(text.split(separator: "\n").filter { !$0.hasPrefix("#") }
+            .flatMap { $0.split(separator: " ").map(String.init) })
+        let compose = TypoFixLogic.composer(AppState.EngineFlags())
+        var checked = 0, fired: [String] = []
+        for s in syllables {
+            var raws = TelexKeys.variants(s).filter { $0.count >= 4 }.flatMap { v in (4...v.count).map { String(v.prefix($0)) } }
+            let t = TelexKeys.toneless(s)
+            if t.count >= 4 { raws.append(t) }
+            for raw in raws {
+                let typed = compose(raw)
+                let pool = VNSuggest.matches(typed, poolLimit: 24, excluding: typed.lowercased())
+                guard !pool.isEmpty else { continue }   // không khớp gì: đường tiếng Anh cũ
+                checked += 1
+                if L.prefersEnglish(raw: raw, typed: typed, pool: pool.map { ($0.word, $0.freq) },
+                                    typedFreq: VNSuggest.frequency(of: typed),
+                                    englishTop: EnglishLite.completions(raw, limit: 1).first?.freq) {
+                    fired.append("\(raw)/\(typed)")
+                }
+            }
+        }
+        print("PREDICT EN-OVERRIDE vietnamese prefixes checked \(checked), fired \(fired.count): \(fired.prefix(10))")
+        XCTAssertGreaterThan(checked, 1000)
+        XCTAssertEqual(fired, [])
     }
 
     func testNextWordDisplayCase() {
@@ -303,5 +387,40 @@ final class WordPredictionMemoryTests: XCTestCase {
             guard let r = PredictionLogic.request(before: c.0, typed: c.1, english: c.3) else { continue }
             print("PREDICT SAMPLE '\(c.0)' → \(PredictionModel.shared.candidates(r, raw: c.2))")
         }
+    }
+}
+
+/// Chuỗi phím Telex của một âm tiết (dấu thanh cuối / trước phụ âm cuối) + dạng không dấu —
+/// cho các bài đo bảo thủ (bản rút gọn TypoFixEvalTests.variants).
+enum TelexKeys {
+    static func variants(_ syllable: String) -> [String] {
+        var chars: [String] = []
+        var tone: Character?
+        for u in syllable.lowercased().decomposedStringWithCanonicalMapping.unicodeScalars {
+            switch u.value {
+            case 0x302: guard let k = chars.last else { return [] }; chars[chars.count - 1] = k + k
+            case 0x306, 0x31B: guard let k = chars.last else { return [] }; chars[chars.count - 1] = k + "w"
+            case 0x301: tone = "s"
+            case 0x300: tone = "f"
+            case 0x309: tone = "r"
+            case 0x303: tone = "x"
+            case 0x323: tone = "j"
+            case 0x111: chars.append("dd")
+            case 0x61...0x7A: chars.append(String(Character(u)))
+            default: return []
+            }
+        }
+        guard !chars.isEmpty else { return [] }
+        let all = chars.joined()
+        guard let t = tone else { return [all] }
+        var lastVowel = -1
+        for (i, c) in chars.enumerated() where "aeiouy".contains(c.first!) { lastVowel = i }
+        guard lastVowel >= 0, lastVowel < chars.count - 1 else { return [all + String(t)] }
+        return [all + String(t), chars[0...lastVowel].joined() + String(t) + chars[(lastVowel + 1)...].joined()]
+    }
+
+    static func toneless(_ s: String) -> String {
+        String(String.UnicodeScalarView(s.lowercased().replacingOccurrences(of: "đ", with: "d")
+            .decomposedStringWithCanonicalMapping.unicodeScalars.filter { $0.value < 0x300 || $0.value > 0x36F }))
     }
 }

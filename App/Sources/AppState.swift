@@ -1226,6 +1226,14 @@ final class AppState: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "typoHints"); CaretHint.shared.reloadSetting() }
     }
 
+    /// "Lọc từ nhạy cảm" (như iOS/Android, cùng khoá "filterSensitive", mặc định BẬT, đồng bộ
+    /// iCloud): gợi ý cạnh con trỏ (gợi ý từ, từ kế tiếp seed, tiếng Anh, sửa lỗi gõ) không chủ
+    /// động đưa từ tục (SensitiveWords.set). Gõ tay vẫn bình thường.
+    var filterSensitive: Bool {
+        get { defaults.object(forKey: "filterSensitive") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "filterSensitive"); CaretHint.shared.reloadSetting() }
+    }
+
     /// Gợi ý thêm dấu cho cụm ≥3 âm tiết không dấu (". ! ?" hoặc dừng gõ sau dấu cách).
     /// Mặc định TẮT.
     var toneHints: Bool {
@@ -1270,6 +1278,7 @@ final class AppState: @unchecked Sendable {
         case Key.teencode: return teencode
         case Key.autoRestore: return autoRestore
         case Key.liveSpellCheck: return liveSpellCheck
+        case "filterSensitive": return filterSensitive
         default: return nil
         }
     }
@@ -1284,6 +1293,7 @@ final class AppState: @unchecked Sendable {
         case Key.teencode: teencode = v
         case Key.autoRestore: autoRestore = v
         case Key.liveSpellCheck: liveSpellCheck = v
+        case "filterSensitive": filterSensitive = v
         default: break
         }
     }

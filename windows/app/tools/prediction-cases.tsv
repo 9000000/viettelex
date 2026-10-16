@@ -84,3 +84,45 @@ zzqx tên 			0
 đi học 			0
 anh ấy 			0
 cảm ơn bạn 			0
+# Seed next words (iOS SeedData via SeedNextData): one context word is enough for a curated pair
+cảm 			0
+Cảm 			0
+xin 			0
+hôm 			0
+chúc 			0
+tạm 			0
+nguyễn 			0
+zzqx cảm 			0
+buổi 			0
+ngủ 			0
+good 			1
+anh 			1
+thank 			1
+# Nothing: no seed and no trigram row
+Tên 			0
+zzqx tên 			0
+bàn 			0
+# Sensitive-word filter ("Lọc từ nhạy cảm") on/off
+vãi 			0	1
+vãi 			0	0
+ngon 			0	1
+ngon 			0	0
+đị	đị	ddij	0	0
+con 			0	0
+# Completion with the seed next words of the previous word as context (+4)
+đi ch	ch	ch	0
+chúc ng	ng	ng	0
+hôm na	na	na	0
+# English completion in a Vietnamese context (prefersEnglish) - and where it must not fire
+tôi gặp pé	pé	pers	0
+ưởn	ưởn	wron	0
+bạn tech	tech	tech	0
+ắn	ắn	answ	0
+anh toi	toi	toi	0
+duoc	duoc	duoc	0
+cam	cam	cam	0
+thẻ	thẻ	ther	0
+thin	thin	thin	0
+chan	chan	chan	0
+thanh	thanh	thanh	0
+trie	trie	trie	0

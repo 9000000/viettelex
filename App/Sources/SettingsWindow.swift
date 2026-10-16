@@ -165,6 +165,7 @@ final class SettingsModel: ObservableObject {
     @Published var typoHints: Bool { didSet { AppState.shared.typoHints = typoHints } }
     @Published var toneHints: Bool { didSet { AppState.shared.toneHints = toneHints } }
     @Published var dateHints: Bool { didSet { AppState.shared.dateHints = dateHints } }
+    @Published var filterSensitive: Bool { didSet { AppState.shared.filterSensitive = filterSensitive } }
     @Published var addTonesHotkey: String {
         didSet {
             AppState.shared.addTonesHotkey = addTonesHotkey
@@ -248,6 +249,7 @@ final class SettingsModel: ObservableObject {
         typoHints = AppState.shared.typoHints
         toneHints = AppState.shared.toneHints
         dateHints = AppState.shared.dateHints
+        filterSensitive = AppState.shared.filterSensitive
         addTonesHotkey = AppState.shared.addTonesHotkey
         // Giá trị lạ (không thuộc danh sách) ⇒ "off", để Picker luôn có tag khớp.
         let tools = AppState.shared.toolsPanelHotkey
@@ -843,13 +845,16 @@ struct ToolsTab: View {
                 Text(model.loc("Type an amount with k/tr/tỷ (50k, 1tr2, 2 tỷ) and a space — the money format (1.200.000 ₫) shows next to the cursor; press Tab to replace it."))
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle(model.loc("Suggest typo fixes"), isOn: $model.typoHints)
-                Text(model.loc("After a word that isn’t Vietnamese or English (tpoi, nayd), a likely fix (tôi, này) shows next to the cursor; press Tab to replace it. Esc stops suggesting that word."))
+                Text(model.loc("After a word that isn’t Vietnamese or English (tpoi, nayd, spellnig), a likely fix (tôi, này, spelling) shows next to the cursor; press Tab to replace it. Esc stops suggesting that word."))
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle(model.loc("Suggest tones for unaccented sentences"), isOn: $model.toneHints)
                 Text(model.loc("After 3+ unaccented syllables (toi di hoc), when you type . ! ? or pause after a space, the toned text (tôi đi học) shows next to the cursor; press Tab to replace it."))
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle(model.loc("Suggest dates and times"), isOn: $model.dateHints)
                 Text(model.loc("Type “hôm nay”, “ngày mai”, “hôm qua” or “bây giờ” (after an English word: today, tomorrow, yesterday, now) and a space — the date (28/09/2026) or time (21:35) shows next to the cursor; press Tab to replace the words with it."))
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle(model.loc("Filter sensitive words"), isOn: $model.filterSensitive)
+                Text(model.loc("Word suggestions and typo fixes never offer swear words — typing them yourself works as usual."))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

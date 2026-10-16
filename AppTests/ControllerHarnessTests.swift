@@ -122,6 +122,25 @@ final class ControllerHarness {
     }
 
     func type(_ s: String, gap: TimeInterval = 0.15) { for c in s { key(c, gap: gap) } }
+
+    /// Phím không có ký tự in được (Tab = 48, Esc = 53…).
+    @discardableResult
+    func keyCode(_ code: UInt16, chars: String = "", gap: TimeInterval = 0.15) -> Bool {
+        ts += gap
+        let ev = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ts,
+                                  windowNumber: 0, context: nil, characters: chars,
+                                  charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code)!
+        let handled = controller.handle(ev, client: client)
+        if !handled, !chars.isEmpty { client.typeNatively(chars) }
+        return handled
+    }
+
+    /// Gõ `raw`, cho gợi ý từ `word` hiện (như hết idleDelay), rồi Tab nhận.
+    func acceptPrediction(typing raw: String, typed: String, word: String) {
+        type(raw)
+        CaretHint.shared.setPendingForTesting(PredictionLogic.suggestion([word], typed: typed))
+        keyCode(48, chars: "\t")
+    }
 }
 
 /// Đầu-cuối qua handle(): cài đặt Nhập văn bản của macOS (SystemAutoText) trên app
@@ -249,6 +268,69 @@ final class ControllerHarnessTests: XCTestCase {
         let h = ControllerHarness(bundleID: "com.apple.TextEdit", text: "a ")
         h.type("word --")
         XCTAssertEqual(h.client.string, "a word —", dump(h))
+    }
+
+    // MARK: Dấu câu ngay sau khi nhận gợi ý từ (dấu cách tự thêm)
+
+    func testPeriodAfterAcceptedPredictionAttachesAndCapitalizes() {
+        let h = ControllerHarness(bundleID: "com.apple.TextEdit", text: "a ")
+        h.acceptPrediction(typing: "dduw", typed: "đư", word: "được")
+        XCTAssertEqual(h.client.string, "a được ", dump(h))
+        h.key(".")
+        XCTAssertEqual(h.client.string, "a được. ", "dấu chấm dính vào từ, dấu cách dời ra sau: " + dump(h))
+        h.type("ban")
+        XCTAssertEqual(h.client.string, "a được. Ban", "chữ đầu câu mới viết hoa: " + dump(h))
+    }
+
+    func testCommaAfterAcceptedPredictionThenSpaceIsSwallowed() {
+        let h = ControllerHarness(bundleID: "com.apple.TextEdit", text: "a ")
+        h.acceptPrediction(typing: "dduw", typed: "đư", word: "được")
+        h.key(",")
+        XCTAssertEqual(h.client.string, "a được, ", dump(h))
+        h.key(" ")
+        XCTAssertEqual(h.client.string, "a được, ", "dấu cách kế bị nuốt (không thành hai): " + dump(h))
+        h.type("ok")
+        XCTAssertEqual(h.client.string, "a được, ok", dump(h))
+    }
+
+    func testOtherKeysAfterAcceptedPredictionAreUntouched() {
+        let h = ControllerHarness(bundleID: "com.apple.TextEdit", text: "a ")
+        h.acceptPrediction(typing: "dduw", typed: "đư", word: "được")
+        h.type("ban")
+        XCTAssertEqual(h.client.string, "a được ban", dump(h))
+        h.key(".")
+        XCTAssertEqual(h.client.string, "a được ban.", "chỉ phím NGAY SAU: " + dump(h))
+        // "/" chỉ gỡ dấu cách; dấu cách thứ hai = chấm câu nhấn đúp như thường.
+        let h2 = ControllerHarness(bundleID: "com.apple.TextEdit", text: "a ")
+        h2.acceptPrediction(typing: "dduw", typed: "đư", word: "được")
+        h2.key("/")
+        XCTAssertEqual(h2.client.string, "a được/", dump(h2))
+        let h3 = ControllerHarness(bundleID: "com.apple.TextEdit", text: "a ")
+        h3.acceptPrediction(typing: "dduw", typed: "đư", word: "được")
+        h3.key(" ", gap: 0.12)
+        XCTAssertEqual(h3.client.string, "a được. ", "dấu cách kế = chấm câu nhấn đúp: " + dump(h3))
+        // Nháy thẳng: thường là nháy MỞ của từ kế — không gỡ.
+        let h4 = ControllerHarness(bundleID: "com.apple.TextEdit", text: "a ")
+        h4.acceptPrediction(typing: "dduw", typed: "đư", word: "được")
+        XCTAssertFalse(PredictionLogic.acceptSpaceReaction("\"") != .keep)
+    }
+
+    func testAcceptedSpaceReReadsScreen() {
+        let h = ControllerHarness(bundleID: "com.apple.TextEdit", text: "a ")
+        h.acceptPrediction(typing: "dduw", typed: "đư", word: "được")
+        h.client.text.append("x")            // app đổi chữ (tự động hoàn thành, dán…)
+        h.client.caret = h.client.text.length
+        h.key(".")
+        XCTAssertEqual(h.client.string, "a được x.", "màn hình lệch ⇒ không đụng gì: " + dump(h))
+    }
+
+    func testAcceptSpaceReactionTable() {
+        typealias L = PredictionLogic
+        for p in [".", ",", "?", "!", ";", ":", ")", "]", "}", "\u{201D}", "\u{2019}", "»"] {
+            XCTAssertEqual(L.acceptSpaceReplacement(p), p + " ", p)
+        }
+        XCTAssertEqual(L.acceptSpaceReplacement("/"), "/")
+        for p in ["a", " ", "\"", "'", "(", "-", "1", "ab"] { XCTAssertNil(L.acceptSpaceReplacement(p), p) }
     }
 
     // MARK: Viết hoa đầu câu

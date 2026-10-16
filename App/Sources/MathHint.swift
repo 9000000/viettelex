@@ -336,10 +336,12 @@ final class CaretHint {
     /// mỗi lần đọc một lần lock không tranh chấp (~tens of ns), không đụng UserDefaults.
     struct Flags: Equatable {
         var math = false, number = false, typo = false, tones = false, date = false
+        /// "Lọc từ nhạy cảm" (AppState.filterSensitive) — gợi ý từ + sửa lỗi gõ.
+        var filterSensitive = true
         static func current() -> Flags {
             Flags(math: AppState.shared.mathResults, number: AppState.shared.numberChips,
                   typo: AppState.shared.typoHints, tones: AppState.shared.toneHints,
-                  date: AppState.shared.dateHints)
+                  date: AppState.shared.dateHints, filterSensitive: AppState.shared.filterSensitive)
         }
     }
     private let flagsLock = NSLock()
@@ -460,7 +462,8 @@ final class CaretHint {
             let flags = AppState.shared.engineFlags()
             let stream = ev.typoStream
             work.async { [weak self] in
-                guard let fix = TypoFixLogic.lexiconCorrection(raw: ev.raw, flags: flags) else { return }
+                guard let fix = TypoFixLogic.lexiconCorrection(raw: ev.raw, flags: flags,
+                                                              filterSensitive: f.filterSensitive) else { return }
                 DispatchQueue.main.async {
                     self?.showIfCurrent(gen, client: client, controller: controller, keyStream: stream) { before in
                         TypoFixLogic.suggestion(before: before, word: ev.run, boundary: ev.boundary, raw: ev.raw, fix: fix)
@@ -624,7 +627,7 @@ final class CaretHint {
         work.async { [weak self] in
             guard let self, self.keyGeneration == gen else { return }
             let t0 = DispatchTime.now().uptimeNanoseconds
-            let words = PredictionModel.shared.candidates(req, raw: raw)
+            let words = PredictionModel.shared.candidates(req, raw: raw, filterSensitive: self.flagsSnapshot.filterSensitive)
             let us = (DispatchTime.now().uptimeNanoseconds - t0) / 1000
             guard let s = PredictionLogic.suggestion(words, typed: req.typed) else { return }
             DispatchQueue.main.async { [weak self, weak controller] in
