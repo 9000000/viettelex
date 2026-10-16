@@ -92,9 +92,9 @@ AUTO_TEXT_SWITCHES = (
     ("smart_punctuation", N_("Ngoặc kép cong và gạch dài"),
      N_("\" ' → ngoặc cong theo ngữ cảnh (don't → don’t); -- → — (gõ thêm - thì thành ---).")),
     ("word_prediction", N_("Gợi ý từ"),
-     N_("Dừng gõ một chút → tối đa 3 từ trong ô gợi ý của bộ gõ: hoàn thành từ đang gõ hoặc từ kế "
-        "tiếp. Tab chọn từ đầu, bấm chuột chọn từ bất kỳ, Esc bỏ; không bao giờ tự thay. Cần gói "
-        "viettelex-text-tools.")),
+     N_("Dừng gõ một chút → một từ gợi ý trong ô gợi ý của bộ gõ: hoàn thành từ đang gõ, hoặc từ kế "
+        "tiếp khi đã có hai từ trước đó. Tab hoặc bấm chuột để chọn, Esc bỏ; không bao giờ tự thay. "
+        "Cần gói viettelex-text-tools.")),
 )
 QUOTE_STYLE_CHOICES = (
     ("curly", N_("“ ” ‘ ’ (mặc định)")),

@@ -1,6 +1,7 @@
 // WordPredictionTests — gợi ý từ cạnh con trỏ (WordPrediction.swift): công tắc theo cài đặt
 // hệ thống "Show inline predictive text", dựng ngữ cảnh từ văn bản trước con trỏ, xếp hạng
-// (dùng chung thanh gợi ý iOS), thay đúng từ đang soạn, nhiều ứng viên trên CaretHint, đo đạc.
+// (dùng chung thanh gợi ý iOS), từ kế tiếp chỉ theo trigram 2 từ, thay đúng từ đang soạn, MỘT
+// ứng viên trên CaretHint, đo đạc.
 import XCTest
 @testable import VietTelex
 
@@ -79,24 +80,45 @@ final class WordPredictionTests: XCTestCase {
     }
 
     func testNextWordRanking() {
-        XCTAssertEqual(candidates("cảm ").first, "ơn")
-        XCTAssertTrue(candidates("xin ").contains("chào"), "\(candidates("xin "))")
-        XCTAssertTrue(candidates("hôm ").contains("nay"), "\(candidates("hôm "))")
-        XCTAssertLessThanOrEqual(candidates("đi ").count, L.maxCandidates)
-        XCTAssertEqual(candidates("hello ", english: true), [], "tiếng Anh: không có dữ liệu từ kế tiếp")
-        XCTAssertEqual(candidates("zzqx "), [], "từ lạ: không gợi ý")
+        XCTAssertFalse(candidates("cảm ơn ").isEmpty, "hai từ ngữ cảnh có dòng trigram ⇒ có gợi ý")
+        XCTAssertFalse(candidates("xin chào ").isEmpty, "\(candidates("xin chào "))")
+        XCTAssertEqual(candidates("hôm nay ").count <= L.rankDepth, true)
+        XCTAssertEqual(candidates("hello world ", english: true), [], "tiếng Anh: không có dữ liệu từ kế tiếp")
+        XCTAssertEqual(candidates("zzqx zzqy "), [], "từ lạ: không gợi ý")
+    }
+
+    /// Hồi quy (Phil 16/10/2026): "Tên ␣" → "gọi" là đoán mò từ bigram một từ. Từ kế tiếp chỉ
+    /// khi có đủ HAI từ ngữ cảnh VÀ vnlm.bin có dòng trigram cho cặp đó — không lùi bigram.
+    func testNextWordNeedsTwoWordTrigram() {
+        XCTAssertEqual(candidates("Tên "), [], "một từ ngữ cảnh: không gợi ý")
+        XCTAssertEqual(candidates("cảm "), [])
+        XCTAssertEqual(candidates("xin "), [])
+        XCTAssertEqual(candidates("xong, tên "), [], "dấu phẩy cắt ngữ cảnh ⇒ chỉ một từ")
+        XCTAssertFalse(L.wantsNextWord(.init(typed: "", prev: "tên", prev2: nil, english: false)))
+        XCTAssertTrue(L.wantsNextWord(.init(typed: "", prev: "ơn", prev2: "cảm", english: false)))
+        XCTAssertFalse(L.wantsNextWord(.init(typed: "", prev: "ơn", prev2: "cảm", english: true)))
+        // Hai từ có dòng trigram ⇒ có gợi ý, và chính là hàng đầu của dòng trigram.
+        let top = SuggestRank.topNext("ơn", prev2: "cảm", limit: 6)
+        XCTAssertEqual(top?.trigram, true)
+        XCTAssertEqual(candidates("cảm ơn ").first?.lowercased(),
+                       SensitiveWords.filter(top?.words ?? [], enabled: true).first?.lowercased())
+        // Cặp không có dòng trigram (bigram có) ⇒ không gợi ý.
+        for before in ["zzqx tên ", "zzqx cảm "] {
+            XCTAssertEqual(candidates(before), [], before)
+        }
     }
 
     func testNextWordDisplayCase() {
-        let c = candidates("hồ ")
+        let c = candidates("thành phố hồ ")
         XCTAssertFalse(c.contains("chí"), "\(c)")
+        XCTAssertEqual(c.first, "Chí", "\(c)")
         if c.contains(where: { $0.lowercased() == "chí" }) { XCTAssertTrue(c.contains("Chí")) }
     }
 
     func testCompletionRanking() {
         let c = candidates("tôi đư", typed: "đư", raw: "dduw")
         XCTAssertTrue(c.contains("được"), "\(c)")
-        XCTAssertLessThanOrEqual(c.count, L.maxCandidates)
+        XCTAssertLessThanOrEqual(c.count, L.rankDepth)
         for w in c { XCTAssertGreaterThan(w.count, 2, "chỉ hoàn thành thật: \(w)") }
         // chữ hoa theo chữ đã gõ
         let up = candidates("Đư", typed: "Đư", raw: "Dduw")
@@ -141,8 +163,9 @@ final class WordPredictionTests: XCTestCase {
         XCTAssertEqual(s.kind, .predict)
         XCTAssertEqual(s.replace, "đư", "thay đúng từ đang soạn (đã nằm trên màn hình — in-place)")
         XCTAssertEqual(s.insert, "được ")
-        XCTAssertEqual(s.all.map(\.display), ["được", "đường", "đưa"], "tối đa 3")
-        XCTAssertEqual(s.alternates[1].insert, "đưa ")
+        XCTAssertEqual(s, CaretSuggestion(kind: .predict, display: "được", replace: "đư", insert: "được "),
+                       "chỉ hạng 1 — không danh sách")
+        XCTAssertEqual(L.maxCandidates, 1)
         // bước áp dụng kiểm lại màn hình: từ phải đứng riêng ngay trước con trỏ
         XCTAssertTrue(CaretHintLogic.standsAlone(before: "anh đư", token: s.replace))
         XCTAssertFalse(CaretHintLogic.standsAlone(before: "anhđư", token: s.replace))
@@ -157,22 +180,20 @@ final class WordPredictionTests: XCTestCase {
         XCTAssertEqual(next.insert, "ơn ")
     }
 
-    func testMultipleCandidatesKeysAndClick() {
+    func testSingleCandidateKeysAndClick() {
         let hint = CaretHint.shared
         let s = L.suggestion(["được", "đường", "đưa"], typed: "đư")!
         hint.setPendingForTesting(s)
-        XCTAssertEqual(hint.candidateStrings, ["được", "đường", "đưa"])
+        XCTAssertEqual(hint.candidateStrings, ["được"], "một ứng viên")
         XCTAssertEqual(CaretHintLogic.action(kind: .predict, keyCode: CaretHintLogic.kTab, plain: true), .accept)
         XCTAssertEqual(CaretHintLogic.action(kind: .predict, keyCode: CaretHintLogic.kReturn, plain: true), .dismissPass,
                        "Enter không bao giờ chọn gợi ý từ")
         XCTAssertEqual(CaretHintLogic.action(kind: .predict, keyCode: 125 /* ↓ */, plain: true), .dismissPass)
         XCTAssertEqual(CaretHintLogic.action(kind: .predict, keyCode: CaretHintLogic.kEscape, plain: true), .dismissConsume)
-        XCTAssertEqual(hint.take(choosing: "đường")?.insert, "đường ", "click ứng viên phụ")
+        // phím số không chọn (không có số thứ tự)
+        XCTAssertEqual(CaretHintLogic.action(kind: .predict, keyCode: 18 /* "1" */, plain: true), .dismissPass)
+        XCTAssertEqual(hint.take()?.insert, "được ", "Tab / click = ứng viên duy nhất")
         XCTAssertFalse(hint.isShowing)
-        hint.setPendingForTesting(s)
-        XCTAssertEqual(hint.take(choosing: nil)?.insert, "được ", "Tab = ứng viên chính")
-        hint.setPendingForTesting(s)
-        XCTAssertEqual(hint.take(choosing: "lạ")?.insert, "được ")
     }
 
     func testOtherHintsWinOverPrediction() {
@@ -181,7 +202,7 @@ final class WordPredictionTests: XCTestCase {
         let typo = CaretSuggestion(kind: .typo, display: "the", replace: "teh ", insert: "the ")
         CaretHint.shared.setPendingForTesting(typo)
         XCTAssertTrue(CaretHint.shared.isShowing)
-        XCTAssertEqual(CaretHint.shared.candidateStrings, ["the"], "một ứng viên như cũ")
+        XCTAssertEqual(CaretHint.shared.candidateStrings, ["the"])
     }
 
     func testEscMutesUntilNextWord() {
@@ -200,9 +221,10 @@ final class WordPredictionTests: XCTestCase {
 
     /// Thời gian tính một lượt (nền) — đã nạp. In "PREDICT" để đọc số.
     func testPerfPerBoundaryAndPerKey() {
-        _ = candidates("cảm ")                       // nạp
+        _ = candidates("cảm ơn ")                    // nạp
         _ = candidates("tôi đư", typed: "đư", raw: "dduw")
-        let next = ["cảm ", "xin ", "tôi đang ", "hôm ", "đi ", "không ", "anh ", "chúng ta ", "của ", "và "]
+        let next = ["cảm ơn ", "xin chào ", "tôi đang ", "hôm nay ", "đi học ", "không có ", "anh ấy ",
+                    "chúng ta ", "nhà của ", "tôi và "]
         let comp: [(String, String, String)] = [("tôi đư", "đư", "dduw"), ("xin ch", "ch", "ch"),
                                                 ("ng", "ng", "ng"), ("anh th", "th", "th"),
                                                 ("my keyb", "keyb", "keyb"), ("khô", "khô", "khoo")]
@@ -252,12 +274,12 @@ final class WordPredictionMemoryTests: XCTestCase {
         _ = SyllableLM.shared?.bigram(0)                                    // vnlm.bin mmap
         _ = EnglishLite.completions("keyb")                                 // enlexicon.bin mmap + bảng offset
         let m2 = sample()
-        let r = PredictionLogic.request(before: "cảm ", typed: "", english: false)!
+        let r = PredictionLogic.request(before: "cảm ơn ", typed: "", english: false)!
         _ = PredictionModel.shared.candidates(r, raw: "")                   // đếm seed
         let r2 = PredictionLogic.request(before: "tôi đư", typed: "đư", english: false)!
         _ = PredictionModel.shared.candidates(r2, raw: "dduw")
         let m3 = sample()
-        for before in ["xin ", "tôi đang ", "hôm ", "anh ", "của ", "và ", "không "] {
+        for before in ["xin chào ", "tôi đang ", "hôm nay ", "anh ấy ", "nhà của ", "tôi và ", "không có "] {
             if let r = PredictionLogic.request(before: before, typed: "", english: false) {
                 _ = PredictionModel.shared.candidates(r, raw: "")
             }
@@ -273,8 +295,8 @@ final class WordPredictionMemoryTests: XCTestCase {
     /// In vài lượt mẫu (grep "PREDICT SAMPLE") — đọc bằng mắt, không assert.
     func testPrintSamples() {
         let cases: [(String, String, String, Bool)] = [
-            ("cảm ", "", "", false), ("xin ", "", "", false), ("tôi đang ", "", "", false),
-            ("hôm ", "", "", false), ("anh ", "", "", false), ("hồ ", "", "", false),
+            ("cảm ơn ", "", "", false), ("xin chào ", "", "", false), ("tôi đang ", "", "", false),
+            ("hôm nay ", "", "", false), ("Tên ", "", "", false), ("thành phố hồ ", "", "", false),
             ("tôi đư", "đư", "dduw", false), ("xin ch", "ch", "ch", false), ("khô", "khô", "khoo", false),
             ("my keyb", "keyb", "keyb", false), ("this is beca", "beca", "beca", true)]
         for c in cases {

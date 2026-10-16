@@ -67,15 +67,11 @@ public:
     // Caret suggestion (caret_hints.h) next to the caret — Fcitx5 aux text / IBus auxiliary
     // text, drawn by the candidate popup at the caret; never part of the preedit.
     virtual void showHint(const std::string &label) { (void)label; }
-    // Word prediction (CaretSuggestion::Kind::Predict): up to 3 candidates in the framework's
-    // candidate window (Fcitx5 candidate list / IBusLookupTable), the first one highlighted —
-    // Tab takes it, a click takes any (Session::chooseHint). `aux` = the key hint ("Tab").
-    // Default: one line of aux text like other caret suggestions.
-    virtual void showCandidates(const std::vector<std::string> &words, const std::string &aux) {
-        std::string l;
-        for (size_t i = 0; i < words.size(); ++i) l += (i ? "  ·  " : "") + words[i];
-        showHint(l + "   " + aux);
-    }
+    // Word prediction (CaretSuggestion::Kind::Predict): ONE word as the single, unlabelled
+    // entry of the framework's candidate window (Fcitx5 candidate list / IBusLookupTable) so a
+    // click can take it (Session::chooseHint); Tab takes it too, Esc dismisses. `aux` = the
+    // key hint ("Tab"). Default: aux text like other caret suggestions.
+    virtual void showPrediction(const std::string &word, const std::string &aux) { showHint(word + "   " + aux); }
     // Hides the hint AND the candidate list.
     virtual void hideHint() {}
 };
@@ -166,9 +162,9 @@ public:
     // Text typed since the caret last moved, as sent to the helper (a leading newline /
     // U+FFFC = line start / unknown text before it). For tests.
     std::string typedBefore() const;
-    // A click on candidate `index` of the word-prediction list (Fcitx5 CandidateWord::select,
-    // IBus candidate_clicked). False when no prediction is shown / the text moved on.
-    bool chooseHint(size_t index, InputContext &ic);
+    // A click on the shown word prediction (Fcitx5 CandidateWord::select, IBus
+    // candidate_clicked) = Tab. False when no prediction is shown / the text moved on.
+    bool chooseHint(InputContext &ic);
 
     // MARK: auto text (auto_text.h) — double-space period, sentence capitals, smart quotes and
     // dashes, word prediction. Settings switches (applySettings), plus per field:

@@ -62,7 +62,7 @@ void popChars(std::string &s, int n) {
 
 struct Mock : InputContext {
     std::string doc, pre, shown, aux;
-    std::vector<std::string> cands;
+    std::string pred;  // the word prediction shown (showPrediction)
     bool surrounding = true, selection = false;
     int hides = 0;
     void setPreedit(const std::string &s, bool) override { pre = s; }
@@ -75,13 +75,13 @@ struct Mock : InputContext {
     }
     bool hasSelection() override { return selection; }
     void showHint(const std::string &l) override { shown = l; }
-    void showCandidates(const std::vector<std::string> &w, const std::string &a) override {
-        cands = w;
+    void showPrediction(const std::string &w, const std::string &a) override {
+        pred = w;
         aux = a;
     }
     void hideHint() override {
         shown.clear();
-        cands.clear();
+        pred.clear();
         aux.clear();
         ++hides;
     }
@@ -154,13 +154,12 @@ Settings with(bool period, bool cap, bool smart, bool predict) {
 
 std::string req(std::vector<std::string> f) { return hints::request(f); }
 
-CaretSuggestion P(std::string d, std::string r, std::vector<std::string> alt = {}) {
+CaretSuggestion P(std::string d, std::string r) {
     CaretSuggestion c;
     c.kind = Kind::Predict;
     c.display = d;
     c.replace = std::move(r);
     c.insert = d + " ";
-    c.alternates = std::move(alt);
     return c;
 }
 
@@ -288,13 +287,13 @@ void testPredictionGates() {
     CHECK(!nextWordWorthAsking("xong. "));
     CHECK(!nextWordWorthAsking(" "));
     CHECK_EQ(kPredictIdleMs, 300);
-    // Protocol: predict answers carry up to two alternates; replace may be empty (next word).
+    // Protocol: ONE predict candidate (no list); replace may be empty (next word).
     CaretSuggestion c;
-    CHECK(hints::parseAnswer("predict\tđược\tđư\tđược \tđường\tđưa", c));
-    CHECK(c == P("được", "đư", {"đường", "đưa"}));
+    CHECK(hints::parseAnswer("predict\tđược\tđư\tđược ", c));
+    CHECK(c == P("được", "đư"));
     CHECK(hints::parseAnswer("predict\tơn\t\tơn ", c));
     CHECK(c == P("ơn", ""));
-    CHECK(!hints::parseAnswer("predict\ta\tb\ta \tc\td\te", c));
+    CHECK(!hints::parseAnswer("predict\tđược\tđư\tđược \tđường\tđưa", c));  // the old list form
     CHECK(!hints::parseAnswer("typo\ttôi\ttpoi \ttôi \tx", c));
     CHECK(!hints::parseAnswer("typo\ttôi\t\ttôi ", c));
     CHECK(hints::keyAction(Kind::Predict, ks::Tab, 0) == hints::KeyAction::Accept);
@@ -493,36 +492,36 @@ void testPredictionSession() {
     type(r.s, r.m, "tooi dduw");
     CHECK_EQ(r.last(), req({"predict", "tôi đư", "đư", "dduw", "0"}));
     CHECK_EQ(r.reqs.back().delayMs, kPredictIdleMs);
-    r.answer(P("được", "đư", {"đường", "đưa"}));
+    r.answer(P("được", "đư"));
     CHECK(r.s.hint() != nullptr);
-    CHECK(r.m.cands == (std::vector<std::string>{"được", "đường", "đưa"}));
+    CHECK_EQ(r.m.pred, std::string("được"));  // one suggestion
     CHECK_EQ(r.m.aux, std::string("Tab"));
     CHECK(press(r.s, r.m, ks::Tab, '\t'));
     CHECK_EQ(r.m.doc, std::string("tôi được "));
     CHECK(r.m.pre.empty());
-    CHECK(r.m.cands.empty());
+    CHECK(r.m.pred.empty());
     CHECK_EQ(r.last(), req({"predict", "tôi được ", "", "", "0"}));  // next word offered
     // Next word: Tab inserts it.
     r.answer(P("không", ""));
     CHECK(press(r.s, r.m, ks::Tab, '\t'));
     CHECK_EQ(r.m.doc, std::string("tôi được không "));
 
-    // Click on an alternate (Fcitx5 CandidateWord::select / IBus candidate_clicked).
+    // Click on it (Fcitx5 CandidateWord::select / IBus candidate_clicked) = Tab.
     Rig c(with(false, false, false, true), DisplayMode::Surrounding);
     type(c.s, c.m, "dduw");
-    c.answer(P("được", "đư", {"đường", "đưa"}));
-    CHECK(c.s.chooseHint(1, c.m));
-    CHECK_EQ(c.m.doc, std::string("đường "));
-    CHECK(!c.s.chooseHint(0, c.m));  // nothing shown any more
+    c.answer(P("được", "đư"));
+    CHECK(c.s.chooseHint(c.m));
+    CHECK_EQ(c.m.doc, std::string("được "));
+    CHECK(!c.s.chooseHint(c.m));  // nothing shown any more
 
     // Any other key dismisses and goes on; digits are typed, never select.
     Rig k(with(false, false, false, true));
     type(k.s, k.m, "dduw");
-    k.answer(P("được", "đư", {"đường"}));
+    k.answer(P("được", "đư"));
     type(k.s, k.m, "1");
     CHECK_EQ(k.m.doc, std::string("đư1"));
     CHECK(!k.s.hint());
-    CHECK(k.m.cands.empty());
+    CHECK(k.m.pred.empty());
 
     // Esc: hidden, not offered again while the word starts with what was declined.
     Rig e(with(false, false, false, true));
@@ -568,7 +567,7 @@ void testPredictionSession() {
     Rig o2(both);
     type(o2.s, o2.m, "camr ");
     o2.answer(P("ơn", ""));
-    CHECK(!o2.m.cands.empty());
+    CHECK(!o2.m.pred.empty());
     CaretSuggestion date;
     date.kind = Kind::Date;
     date.display = "x";
@@ -576,7 +575,7 @@ void testPredictionSession() {
     date.insert = "x ";
     o2.answer(date);
     CHECK(o2.s.hint()->kind == Kind::Date);
-    CHECK(o2.m.cands.empty());
+    CHECK(o2.m.pred.empty());
     CHECK(!o2.m.shown.empty());
 
     // Blind field (Chrome): completion in the preedit; the text before what was typed since the
@@ -632,15 +631,17 @@ void testHelperEndToEnd() {
         mainQueue.push_back(std::move(f));
     });
     std::string ans;
+    // Next word: only two context words with a trigram row ("Tên " -> nothing, Phil 16/10/2026).
+    CHECK(svc.query(req({"predict", "Tên ", "", "", "0"}), ans));
+    CHECK_EQ(ans, std::string("-"));
     CHECK(svc.query(req({"predict", "cảm ", "", "", "0"}), ans));
-    CHECK_EQ(ans.rfind("predict\tơn\t\tơn ", 0), size_t(0));
-    CHECK(svc.query(req({"predict", "tôi đư", "đư", "dduw", "0"}), ans));
+    CHECK_EQ(ans, std::string("-"));
+    CHECK(svc.query(req({"predict", "thành phố hồ ", "", "", "0"}), ans));
+    CHECK_EQ(ans, std::string("predict\tChí\t\tChí "));
+    CHECK(svc.query(req({"predict", "xin ch", "ch", "ch", "0"}), ans));
     CaretSuggestion c;
     CHECK(hints::parseAnswer(ans, c));
-    CHECK(c.kind == Kind::Predict && c.replace == "đư");
-    bool hasDuoc = false;
-    for (auto &w : c.candidates()) hasDuoc |= w == "được";
-    CHECK(hasDuoc);
+    CHECK(c == P("chào", "ch"));  // one suggestion: the top-ranked word
     CHECK(svc.query(req({"predict", "abc.đư", "đư", "dduw", "0"}), ans));
     CHECK_EQ(ans, std::string("-"));
 
@@ -670,21 +671,25 @@ void testHelperEndToEnd() {
             if (ok) s.deliverHint(gen, cs, m);
         });
     });
-    type(s, m, "camr ");
+    type(s, m, "teen ");
+    drain(1500);
+    CHECK(!s.hint());  // "Tên ": one context word, no guess
+    type(s, m, "camr own ");
     drain(150);
     CHECK(!s.hint());  // still inside the 300 ms pause
     drain(1500);
     CHECK(s.hint() != nullptr);
-    CHECK(!m.cands.empty() && m.cands[0] == "ơn");
+    CHECK(!m.pred.empty());
+    const std::string word = m.pred;
     CHECK(press(s, m, ks::Tab, '\t'));
-    CHECK_EQ(m.doc, std::string("cảm ơn "));
+    CHECK_EQ(m.doc, "tên cảm ơn " + word + " ");
     // The typo request falls back to the prediction when there is no typo fix.
     std::atomic<int> got{0};
     CaretSuggestion fb;
     auto gen = std::make_shared<std::atomic<uint64_t>>(7);
     HintRequest r;
     r.line = req({"number", "hello "});  // no answer
-    r.fallback = req({"predict", "xin ", "", "", "0"});
+    r.fallback = req({"predict", "xin chào ", "", "", "0"});
     r.fallbackDelayMs = 100;
     r.gen = 7;
     r.liveGen = gen;

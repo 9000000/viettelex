@@ -69,7 +69,6 @@ uint32_t capitalized(uint32_t ch);
 // MARK: gợi ý từ (PredictionLogic, WordPrediction.swift)
 constexpr int kPredictIdleMs = 300;   // PredictionLogic.idleDelay
 constexpr int kPredictMinTyped = 2;   // PredictionLogic.minTyped
-constexpr int kPredictMax = 3;        // PredictionLogic.maxCandidates
 // Esc on a completion: do not offer again while the word still starts with what was
 // declined (until the next word). Case-insensitive.
 bool predictionMuted(const std::string &typed, const std::string &declined);

@@ -495,9 +495,8 @@ std::u16string HintJobs::answer(const HintMessage& m) {
         if (!r) return {};
         if (!model_) model_ = new (std::nothrow) predict::Model(*data_);
         if (!model_) return {};
-        std::vector<std::u16string> c;
-        for (const auto& w : model_->candidates(*r, text::fromUtf16(raw))) c.push_back(text::toUtf16(w));
-        return joinCandidates(c);
+        const auto c = model_->candidates(*r, text::fromUtf16(raw));
+        return c.empty() ? std::u16string() : text::toUtf16(c[0]);  // one suggestion: the top one
     }
     if (m.job == static_cast<uint32_t>(HintJob::Tones)) {
         std::u16string out;

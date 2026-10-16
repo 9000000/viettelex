@@ -387,10 +387,12 @@ final class CaretHintTests: XCTestCase {
     }
 
     func testSurfaceChoice() {
-        XCTAssertEqual(L.surface(imkPath: true, hasCandidateWindow: true, source: .imkFirstRect), .candidates)
-        XCTAssertEqual(L.surface(imkPath: true, hasCandidateWindow: true, source: .axCaret), .panel)
-        XCTAssertEqual(L.surface(imkPath: false, hasCandidateWindow: true, source: .imkFirstRect), .panel)
-        XCTAssertEqual(L.surface(imkPath: true, hasCandidateWindow: false, source: .imkFirstRect), .panel)
+        XCTAssertEqual(L.surface(kind: .typo, imkPath: true, hasCandidateWindow: true, source: .imkFirstRect), .candidates)
+        XCTAssertEqual(L.surface(kind: .typo, imkPath: true, hasCandidateWindow: true, source: .axCaret), .panel)
+        XCTAssertEqual(L.surface(kind: .typo, imkPath: false, hasCandidateWindow: true, source: .imkFirstRect), .panel)
+        XCTAssertEqual(L.surface(kind: .typo, imkPath: true, hasCandidateWindow: false, source: .imkFirstRect), .panel)
+        // Gợi ý từ: luôn ô nổi một ứng viên — ô hệ thống đánh số "1" (Phil 16/10/2026).
+        XCTAssertEqual(L.surface(kind: .predict, imkPath: true, hasCandidateWindow: true, source: .imkFirstRect), .panel)
     }
 
     func testNumberChipsSettingRoundTrip() {

@@ -541,7 +541,7 @@ std::optional<Suggestion> moneyChip(const std::u32string& before) {
     if (!hasSuffix(before, U" ")) return std::nullopt;
     auto c = numberChip(before);
     if (!c || !isMoneyFormat(c->display)) return std::nullopt;
-    return Suggestion{Kind::Number, toU16(c->display), toU16(c->replace), toU16(c->insert), {}};
+    return Suggestion{Kind::Number, toU16(c->display), toU16(c->replace), toU16(c->insert)};
 }
 
 // ================================================================ MathResults
@@ -936,7 +936,7 @@ std::optional<Suggestion> typoSuggestion(const std::u32string& before, const std
     if (fix == word || !standsAlone(before, replace)) return std::nullopt;
     const std::u32string head = before.substr(0, before.size() - replace.size());
     if (!caseAllows(raw, isSentenceStart(head))) return std::nullopt;
-    return Suggestion{Kind::Typo, toU16(fix), toU16(replace), toU16(fix + boundary), {}};
+    return Suggestion{Kind::Typo, toU16(fix), toU16(replace), toU16(fix + boundary)};
 }
 
 bool Rejected::contains(const std::u32string& w) const {
@@ -1056,7 +1056,7 @@ std::optional<Suggestion> toneSuggestion(const std::u32string& run, const std::u
     if (run.empty() || restored == run || restored.size() != run.size()) return std::nullopt;
     std::u32string display = trimSpaces(restored);
     if (display.size() > 60) display = U"…" + display.substr(display.size() - 59);
-    return Suggestion{Kind::Tones, toU16(display), toU16(run), toU16(restored), {}};
+    return Suggestion{Kind::Tones, toU16(display), toU16(run), toU16(restored)};
 }
 
 // ================================================================ date / time
@@ -1129,7 +1129,7 @@ std::optional<Suggestion> dateSuggestion(const std::u32string& before, const std
     const std::u32string replace = (vi ? prevRun + U" " : std::u32string()) + run + U" ";
     if (!standsAlone(before, replace)) return std::nullopt;
     const std::u32string value = formatDate(phrase, now);
-    return Suggestion{Kind::Date, toU16(value), toU16(replace), toU16(value + U" "), {}};
+    return Suggestion{Kind::Date, toU16(value), toU16(replace), toU16(value + U" ")};
 }
 
 bool lastRuns(const std::u32string& before, std::u32string& prevRun, std::u32string& run) {
@@ -1263,8 +1263,8 @@ bool predictionAllowedForApp(const std::string& exe) {
 }
 
 std::optional<Suggestion> predictSuggestion(const std::u32string& before, const std::u32string& typed,
-                                            const std::vector<std::u16string>& candidates) {
-    if (candidates.empty() || candidates[0].empty()) return std::nullopt;
+                                            const std::u16string& candidate) {
+    if (candidate.empty()) return std::nullopt;
     if (!typed.empty()) {
         if (!standsAlone(before, typed)) return std::nullopt;
     } else {
@@ -1272,11 +1272,9 @@ std::optional<Suggestion> predictSuggestion(const std::u32string& before, const 
     }
     Suggestion s;
     s.kind = Kind::Predict;
-    s.display = candidates[0];
+    s.display = candidate;
     s.replace = toU16(typed);
-    s.insert = candidates[0] + u" ";
-    for (size_t i = 1; i < candidates.size() && i < kPredictMaxCandidates; ++i)
-        if (!candidates[i].empty()) s.alternates.push_back(candidates[i]);
+    s.insert = candidate + u" ";
     return s;
 }
 
@@ -1285,16 +1283,6 @@ bool hintStillValid(const Suggestion& s, const std::u32string& before) {
     if (s.kind == Kind::Predict && s.replace.empty())
         return before.size() >= 2 && before.back() == U' ' && isLetter(before[before.size() - 2]);
     return standsAlone(before, toU32(s.replace));
-}
-
-Suggestion chooseCandidate(const Suggestion& s, size_t index) {
-    Suggestion out = s;
-    out.alternates.clear();
-    if (index >= 1 && index <= s.alternates.size()) {
-        out.display = s.alternates[index - 1];
-        out.insert = out.display + u" ";
-    }
-    return out;
 }
 
 bool predictMuted(const std::u32string& typed, const std::u32string& declined) {

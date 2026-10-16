@@ -2238,9 +2238,9 @@ final class TelexInputController: IMKInputController {
                                             client: client, controller: self)
     }
 
-    /// Click một ứng viên trên ô nổi của CaretHint (gợi ý từ) — như Tab / click ô hệ thống.
-    func applyCaretHintChoice(_ display: String) {
-        guard let client = client() as IMKTextInput?, let s = CaretHint.shared.take(choosing: display) else { return }
+    /// Click ô nổi của CaretHint (gợi ý từ) — như Tab / click ô hệ thống.
+    func applyCaretHintChoice() {
+        guard let client = client() as IMKTextInput?, let s = CaretHint.shared.take() else { return }
         applyCaretSuggestion(s, client)
     }
 
@@ -2251,8 +2251,7 @@ final class TelexInputController: IMKInputController {
 
     /// Click vào ứng viên trong ô hệ thống.
     override func candidateSelected(_ candidateString: NSAttributedString!) {
-        guard let client = client() as IMKTextInput?,
-              let s = CaretHint.shared.take(choosing: candidateString?.string) else { return }
+        guard let client = client() as IMKTextInput?, let s = CaretHint.shared.take() else { return }
         applyCaretSuggestion(s, client)
     }
 

@@ -43,7 +43,6 @@ struct CaretSuggestion: Equatable {
     let display: String
     let replace: String
     let insert: String
-    var alternates: [CaretSuggestion] = []
 }
 SWIFT
 cat > "$TMP/main.swift" <<'SWIFT'

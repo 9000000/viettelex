@@ -1,7 +1,9 @@
 // Predict.swift — GỢI Ý TỪ cho Linux (port macOS App/Sources/WordPrediction.swift, 16/10/2026):
 //   a) hoàn thành từ đang gõ ("đư" → được / đường / đưa; tiếng Anh khi ngữ cảnh tiếng Anh hoặc
 //      không âm tiết Việt nào khớp: "keyb" → keyboard);
-//   b) từ kế tiếp ngay sau dấu cách ("cảm ␣" → ơn).
+//   b) từ kế tiếp ngay sau dấu cách — CHỈ khi có đủ 2 từ ngữ cảnh và vnlm.bin có dòng trigram cho
+//      cặp đó ("cảm ơn ␣" → bạn); không lùi bigram một từ ("Tên ␣" → không gì — Phil 16/10/2026).
+// MỘT gợi ý (hạng 1) — không danh sách, không số thứ tự; Tab / click nhận, Esc bỏ.
 // Logic THUẦN (PredictionLogic.request / completions / wantsEnglish) + xếp hạng
 // (PredictionModel.candidates) chép 1:1 từ WordPrediction.swift — file đó kéo CFPreferences /
 // CaretHint (AppKit) nên không symlink được. Phần dùng chung thật là SYMLINK tới iOS/Keyboard
@@ -18,7 +20,8 @@ import Foundation
 import TelexCore
 
 enum PredictionLogic {
-    static let maxCandidates = 3
+    /// Độ sâu danh sách xếp hạng (= WordPrediction.swift rankDepth); bộ gõ chỉ nhận hạng 1.
+    static let rankDepth = 3
     /// Hoàn thành từ chỉ khi đã gõ ít nhất bấy nhiêu chữ (1 chữ: quá nhiễu).
     static let minTyped = 2
 
@@ -81,6 +84,11 @@ enum PredictionLogic {
         return Request(typed: t, prev: words.first, prev2: words.count > 1 ? words[1] : nil, english: english)
     }
 
+    /// = WordPrediction.swift: từ kế tiếp chỉ khi có đủ hai từ ngữ cảnh, không phải tiếng Anh.
+    static func wantsNextWord(_ r: Request) -> Bool {
+        r.typed.isEmpty && !r.english && r.prev != nil && r.prev2 != nil
+    }
+
     static func wantsEnglish(_ r: Request, vietnameseHits: Int) -> Bool {
         r.english || vietnameseHits == 0
     }
@@ -90,7 +98,7 @@ enum PredictionLogic {
         var seen = Set<String>(), out: [String] = []
         for w in ranked where w.count > n {
             if seen.insert(w.lowercased()).inserted { out.append(w) }
-            if out.count >= maxCandidates { break }
+            if out.count >= rankDepth { break }
         }
         return out
     }
@@ -101,11 +109,10 @@ enum PredictionLogic {
     }
 
     /// Dòng trả lời giao thức --serve: thay đúng từ đang gõ (`typed`, "" = chỉ chèn) bằng ứng viên
-    /// đầu + dấu cách; ứng viên 2–3 đi kèm (chỉ chữ hiện — bộ gõ tự thêm dấu cách).
+    /// HẠNG 1 + dấu cách — một gợi ý duy nhất.
     static func answer(_ words: [String], typed: String) -> String {
-        let w = Array(words.prefix(maxCandidates))
-        guard let first = w.first else { return "-" }
-        return (["predict", first, typed, first + " "] + w.dropFirst()).map(HintProtocol.escape).joined(separator: "\t")
+        guard let first = words.first, !first.isEmpty else { return "-" }
+        return ["predict", first, typed, first + " "].map(HintProtocol.escape).joined(separator: "\t")
     }
 }
 
@@ -127,10 +134,13 @@ final class PredictionModel {
     func candidates(_ r: PredictionLogic.Request, raw: String) -> [String] {
         let filterOn = true
         if r.typed.isEmpty {
-            guard !r.english, let prev = r.prev, VNSuggest.lexiconId(of: prev) != nil else { return [] }
-            let next = SuggestRank.nextFill(prev, prev2: r.prev2, personal: [], triCount: { _ in 0 },
-                                            filter: { SensitiveWords.filter($0, enabled: filterOn) })
-            return Array(next.prefix(PredictionLogic.maxCandidates)).map { DisplayCase.apply($0, after: prev) }
+            // = WordPrediction.swift: chỉ dòng trigram (prev2, prev), không lùi bigram.
+            guard PredictionLogic.wantsNextWord(r), let prev = r.prev, let prev2 = r.prev2,
+                  VNSuggest.lexiconId(of: prev) != nil,
+                  let top = SuggestRank.topNext(prev, prev2: prev2, limit: 6), top.trigram else { return [] }
+            let next = SuggestionFill.pad([], with: SensitiveWords.filter(top.words, enabled: filterOn),
+                                          need: PredictionLogic.rankDepth)
+            return next.map { DisplayCase.apply($0, after: prev) }
         }
         let typed = r.typed
         let pool = r.english ? [] : VNSuggest.matches(typed, poolLimit: 24, excluding: typed.lowercased())

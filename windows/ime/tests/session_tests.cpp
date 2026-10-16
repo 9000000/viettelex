@@ -877,23 +877,21 @@ TEST(session_prediction_replaces_word_in_progress) {
     CHECK_EQ(utf16ToUtf8(r.s.rawKeys()), std::string("dduw"));
     CHECK_EQ(r.text(), std::string("tôi đư"));
     const std::u32string before = hints::toU32(r.doc.textBeforeCaret(64));
-    auto sug = hints::predictSuggestion(before, hints::toU32(r.s.shown()), {u"được", u"đường", u"đưa"});
+    auto sug = hints::predictSuggestion(before, hints::toU32(r.s.shown()), u"được");
     CHECK(sug.has_value());
     if (!sug) return;
     CHECK(hints::hintStillValid(*sug, before));
-    // click on the 2nd candidate
-    const hints::Suggestion pick = hints::chooseCandidate(*sug, 1);
-    CHECK(pick.insert == u"đường ");
-    CHECK(r.doc.replaceBeforeCaret(pick.replace, pick.insert));
+    // Tab / click: the one suggestion
+    CHECK(r.doc.replaceBeforeCaret(sug->replace, sug->insert));
     r.s.reset();
-    CHECK_EQ(r.text(), std::string("tôi đường "));
+    CHECK_EQ(r.text(), std::string("tôi được "));
     r.type("ddi ");  // typing goes on normally after the accepted word
-    CHECK_EQ(r.text(), std::string("tôi đường đi "));
+    CHECK_EQ(r.text(), std::string("tôi được đi "));
     // next-word suggestion right after the space: insert only
-    auto next = hints::predictSuggestion(hints::toU32(r.doc.textBeforeCaret(64)), U"", {u"đâu"});
+    auto next = hints::predictSuggestion(hints::toU32(r.doc.textBeforeCaret(64)), U"", u"đâu");
     CHECK(next && next->replace.empty() && next->insert == u"đâu ");
     CHECK(r.doc.replaceBeforeCaret(next->replace, next->insert));
-    CHECK_EQ(r.text(), std::string("tôi đường đi đâu "));
+    CHECK_EQ(r.text(), std::string("tôi được đi đâu "));
 }
 
 TEST(session_prediction_never_replaces_a_composition) {
