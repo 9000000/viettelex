@@ -129,6 +129,7 @@ const ToggleDef kToggles[] = {
     {&Settings::underlineMisspelled, S::UnderlineMisspelled, S::UnderlineMisspelledDesc},  // 20
     {&Settings::autoOffFullscreen, S::AutoOffFullscreen, S::AutoOffFullscreenDesc},    // 21
     {&Settings::gameMode, S::GameMode, S::GameModeDesc},                               // 22
+    {&Settings::filterSensitive, S::FilterSensitive, S::FilterSensitiveDesc},          // 23
 };
 constexpr int kToggleCount = static_cast<int>(sizeof(kToggles) / sizeof(kToggles[0]));
 
@@ -513,6 +514,7 @@ std::vector<Item> pageItems(int tab) {
             // Gợi ý cạnh con trỏ: mostly on by default, so always visible (not collapsed).
             v.push_back(section(S::SecHints));
             for (int i = 15; i <= 19; ++i) v.push_back(toggleItem(i));
+            v.push_back(toggleItem(23));  // Lọc từ nhạy cảm (gợi ý từ + sửa lỗi gõ)
             // Công cụ văn bản (macOS: same place, after the spelling options; collapsible,
             // collapsed by default). With the tray icon off (the default) its menu does not
             // exist: the header says how to reach the tools instead.

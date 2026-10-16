@@ -286,10 +286,11 @@ struct Rec {
     std::vector<typo::Cand> cands;
     bool ok = false;
     std::u32string want;
+    std::vector<typo::Cand> en;  // English candidates (raw keys, enlexicon)
 };
 
 Rec rec(const std::u32string& typed, bool ok, const std::u32string& want) {
-    Rec r{typed, false, {}, ok, want};
+    Rec r{typed, false, {}, ok, want, {}};
     const std::u32string word = screen(typed);
     if (!hints::typoWorthChecking(U' ', typed, word, 3)) return r;
     const std::u32string lower = text::lower(typed);
@@ -299,7 +300,29 @@ Rec rec(const std::u32string& typed, bool ok, const std::u32string& want) {
         return r;
     r.gated = true;
     r.cands = typo::candidates(lower, source());
+    r.en = typo::englishCandidates(lower, source());
     return r;
+}
+
+// English Tatoeba sentences (iOS/KeyboardTests/Fixtures/swipe-lang-sentences.txt), set dev|test.
+std::vector<std::u32string> englishSentenceWords(const char* set) {
+    std::vector<std::u32string> out;
+    std::ifstream f(std::string(VTX_FIXTURES) + "/swipe-lang-sentences.txt");
+    std::string line;
+    while (std::getline(f, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty() || line[0] == '#') continue;
+        const size_t a = line.find('\t'), b = a == std::string::npos ? a : line.find('\t', a + 1);
+        if (b == std::string::npos || line.compare(0, a, set) != 0 || line.compare(a + 1, b - a - 1, "en") != 0) continue;
+        std::u32string w;
+        for (size_t i = b + 1; i <= line.size(); ++i) {
+            char c = i < line.size() ? line[i] : ' ';
+            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
+            if (c >= 'a' && c <= 'z') w.push_back(static_cast<char32_t>(c));
+            else if (!w.empty()) { out.push_back(w); w.clear(); }
+        }
+    }
+    return out;
 }
 
 std::vector<std::vector<std::u32string>> heldout() {
@@ -404,13 +427,15 @@ struct Score {
     }
 };
 
-Score score(const std::vector<Rec>& recs, const typo::Params& p) {
+// = typo::correction: the Vietnamese fix, else the English one (`english` false = VN only).
+Score score(const std::vector<Rec>& recs, const typo::Params& p, bool english = true) {
     Score s;
     for (const Rec& r : recs) {
         ++s.words;
         if (!r.ok) ++s.err;
         if (static_cast<int>(r.typed.size()) < p.minLen || !r.gated) continue;
         auto c = typo::pick(r.cands, p);
+        if (!c && english) c = typo::englishPick(r.en, r.cands, static_cast<int>(r.typed.size()));
         if (!c) continue;
         ++s.fix;
         if (r.ok) ++s.falseFix;
@@ -451,4 +476,33 @@ TEST(typo_eval_precision_floor) {
                 100 * tot.recall());
     CHECK(tot.precision() >= 0.97);
     CHECK(tot.recall() >= 0.10);
+}
+
+// English fixes (= macOS TypoFixEvalTests.testEnglishPrecisionOnHeldout): Tatoeba TEST words with
+// 15% hardware-keyboard slips (2 seeds) — P ≥ 95%, R ≥ 30%.
+TEST(typo_eval_english_precision) {
+    const auto words = englishSentenceWords("test");
+    CHECK(words.size() > 3000);
+    const typo::Params p;
+    Score en = score(collectKeep(words, 0.15, 1), p);
+    en.add(score(collectKeep(words, 0.15, 2), p));
+    Score base = score(collectKeep(words, 0.15, 1), p, false);
+    base.add(score(collectKeep(words, 0.15, 2), p, false));
+    std::printf("  TYPOFIX EN TEST: words %d | wrong-typed %d | fixes %d (good %d, wrong %d, false %d) | P=%.1f%% R=%.1f%%"
+                " (VN only: R=%.1f%%)\n", en.words, en.err, en.fix, en.good, en.wrong, en.falseFix,
+                100 * en.precision(), 100 * en.recall(), 100 * base.recall());
+    CHECK(en.precision() >= 0.95);
+    CHECK(en.recall() >= 0.30);
+}
+
+TEST(typo_fixes_english) {
+    CHECK_EQ(fix("spellnig"), std::string("spelling"));
+    CHECK_EQ(fix("Spellnig"), std::string("Spelling"));
+    CHECK_EQ(fix("teh"), std::string("the"));
+    CHECK_EQ(fix("becuase"), std::string("because"));
+    CHECK_EQ(fix("recieve"), std::string("receive"));
+    CHECK_EQ(fix("goverment"), std::string("government"));
+    CHECK_EQ(fix("hte"), std::string("-"));      // the 255 vs he 245: too close
+    CHECK_EQ(fix("kubectl"), std::string("-"));
+    CHECK_EQ(fix("tpoi"), std::string("tôi"));   // Vietnamese first
 }

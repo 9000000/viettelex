@@ -1291,4 +1291,30 @@ bool predictMuted(const std::u32string& typed, const std::u32string& declined) {
     return t.size() >= d.size() && t.compare(0, d.size(), d) == 0;
 }
 
+std::u32string acceptSpaceReplacement(char32_t key) {
+    switch (key) {
+    case U'.': case U',': case U'?': case U'!': case U';': case U':':  // AutoSpace.triggers
+    case U')': case U']': case U'}': case 0x201D: case 0x2019: case 0xBB: case 0x203A:
+        return std::u32string(1, key) + U" ";
+    case U'/':
+        return std::u32string(1, key);
+    default:
+        return {};
+    }
+}
+
+AcceptSpaceAct acceptSpaceKey(AcceptedSpace& st, char32_t ch, std::u32string& expect, std::u32string& replacement) {
+    const AcceptedSpace was = st;
+    st = AcceptedSpace();
+    if (!was.carried.empty()) {
+        if (ch != U' ') return AcceptSpaceAct::Pass;
+        expect = was.carried;
+        return AcceptSpaceAct::Swallow;
+    }
+    replacement = was.inserted.empty() || ch == 0 ? std::u32string() : acceptSpaceReplacement(ch);
+    if (replacement.empty()) return AcceptSpaceAct::Pass;
+    expect = was.inserted;
+    return AcceptSpaceAct::Replace;
+}
+
 }  // namespace vtx::hints
