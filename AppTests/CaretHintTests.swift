@@ -18,6 +18,14 @@ final class CaretHintTests: XCTestCase {
     override func tearDown() { CaretHint.shared.setPendingForTesting(nil) }
 
     /// Hồi quy (Phil 16/10/2026): bảng cột dọc luôn cao ~9 dòng dù chỉ 1–3 gợi ý ⇒ một hàng ngang.
+    func testHintPanelLeavesRoomBelowCaret() {
+        let caret = NSRect(x: 100, y: 500, width: 1, height: 16)
+        let o = TextToolsPanelLogic.origin(caret: caret, panelSize: NSSize(width: 120, height: 28),
+                                           visible: NSRect(x: 0, y: 0, width: 1440, height: 900),
+                                           gap: CaretHintLogic.panelGap)
+        XCTAssertLessThanOrEqual(o.y + 28, caret.minY - 10)   // đỉnh ô cách đáy con trỏ ≥ 10pt
+    }
+
     func testCandidateWindowIsSingleRow() {
         XCTAssertEqual(CaretHint.candidatePanelType, kIMKSingleRowSteppingCandidatePanel)
     }

@@ -153,6 +153,11 @@ enum CaretHintLogic {
 
     static let order: [CaretSource] = CaretSource.allCases
 
+    /// Khoảng cách ô gợi ý ↔ con trỏ (pt). 4pt (mặc định bảng Công cụ) đè chân chữ ở
+    /// Notes — rect con trỏ có app chỉ cao tới đường chân chữ, không gồm phần đuôi
+    /// (g, y, ợ…) (Phil 16/10/2026).
+    static let panelGap: CGFloat = 10
+
     /// Rect con trỏ đầu tiên dùng được theo `order`. `provider` được gọi LẦN LƯỢT và dừng
     /// ở nguồn đầu tiên hợp lệ (mỗi nguồn là vài lần gọi AX/IMK — không gọi thừa).
     /// Nguồn "con trỏ" phải nằm trong ô đang gõ (nếu biết `field`), trong cửa sổ đang
@@ -725,7 +730,8 @@ final class CaretHint {
         } else {
             let caret = found.rect             // ignoresMouseEvents: mọi click đều "ngoài"
             showPanel(s) { size in
-                (TextToolsPanelLogic.origin(caret: caret, panelSize: size, visible: Self.visibleFrame(for: caret)), ())
+                (TextToolsPanelLogic.origin(caret: caret, panelSize: size, visible: Self.visibleFrame(for: caret),
+                                            gap: CaretHintLogic.panelGap), ())
             }
         }
         scheduleAutoHide()
@@ -766,7 +772,8 @@ final class CaretHint {
         // để không bao giờ lệch khỏi con trỏ, và lật lên trên khi sát đáy màn hình.
         let size = c.candidateFrame().size
         if size.width > 0, size.height > 0 {
-            let o = TextToolsPanelLogic.origin(caret: caret, panelSize: size, visible: Self.visibleFrame(for: caret))
+            let o = TextToolsPanelLogic.origin(caret: caret, panelSize: size, visible: Self.visibleFrame(for: caret),
+                                               gap: CaretHintLogic.panelGap)
             c.setCandidateFrameTopLeft(NSPoint(x: o.x, y: o.y + size.height))
         }
     }
