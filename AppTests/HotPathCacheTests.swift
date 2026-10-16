@@ -199,6 +199,29 @@ final class ProbeChordGateTests: XCTestCase {
                                                      chordHeld: false, spaceHeld: false))
     }
 
+    /// Regression (10/2026 "hay bị lỗi mất quyền"): the watchdog counted a probe as sent
+    /// although postProbe's own gate (Little Snitch guard) refused to post it → two
+    /// "misses" → teardown + false stale-permission line. A probe that was not posted
+    /// must leave nothing outstanding.
+    func testUnpostedProbeIsNeverOutstanding() {
+        let r = TerminalTapController.probeTicksAfterPost(sent: 8, seen: 6, posted: false)
+        XCTAssertEqual(r.sent, r.seen)
+        let p = TerminalTapController.probeTicksAfterPost(sent: 8, seen: 7, posted: true)
+        XCTAssertEqual(p.sent, 8); XCTAssertEqual(p.seen, 7)   // posted: wait for the ack
+    }
+
+    /// A single probe-miss teardown with the post privilege intact must NOT raise the
+    /// "permission stale" repair line (its auto-fix resets a valid grant). Preflight
+    /// refusal or a repeat within the window still does.
+    func testProbeMissStaleGrantEscalation() {
+        let w = TerminalTapController.probeTeardownRepeatWindowNs
+        let now: UInt64 = 10 * w
+        XCTAssertFalse(TerminalTapController.probeMissMeansStaleGrant(canPost: true, lastProbeTeardownNs: 0, nowNs: now))
+        XCTAssertTrue(TerminalTapController.probeMissMeansStaleGrant(canPost: false, lastProbeTeardownNs: 0, nowNs: now))
+        XCTAssertTrue(TerminalTapController.probeMissMeansStaleGrant(canPost: true, lastProbeTeardownNs: now - 70_000_000_000, nowNs: now))
+        XCTAssertFalse(TerminalTapController.probeMissMeansStaleGrant(canPost: true, lastProbeTeardownNs: now - w, nowNs: now))
+    }
+
     func testQuietHandsAllowTheProbe() {
         XCTAssertTrue(SyntheticKeyboard.probeMayPost(secureInput: false, secureField: false, chordHeld: false))
     }

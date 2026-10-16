@@ -1581,8 +1581,16 @@ enum SyntheticKeyboard {
         CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(49))
     }
 
-    static func postProbe() {
-        guard let src = source else { return }
+    /// Returns TRUE only when the probe pair was actually posted. The watchdog counts a
+    /// probe as "sent" ONLY on true — the gate below and the watchdog's own precheck
+    /// used to be two separate lists, and they drifted: the Little Snitch guard
+    /// (25/09/2026) was added here but not to the watchdog's call, so every tick with
+    /// an LS window up counted a probe that was never posted → two "misses" → teardown,
+    /// 60s quarantine and a false "⚠️ Quyền trợ năng bị kẹt" (whose auto-repair then
+    /// `tccutil reset` a perfectly valid grant). Field: "hay bị lỗi mất quyền", 10/2026.
+    @discardableResult
+    static func postProbe() -> Bool {
+        guard let src = source else { return false }
         // NEVER post the probe while a password field has focus (under secure input our
         // tap does not receive events, so the marker is not swallowed by us — it lands in
         // the focused app instead; field report 2026-07-27: stray characters while typing
@@ -1592,10 +1600,10 @@ enum SyntheticKeyboard {
                          secureField: SecureFieldDetector.isSecure,
                          chordHeld: chordModifierHeld,
                          spaceHeld: spacebarHeld,
-                         syntheticGuard: SyntheticInputGuard.isActive) { return }
+                         syntheticGuard: SyntheticInputGuard.isActive) { return false }
         guard let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(probeKeycode), keyDown: true),
               let up = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(probeKeycode), keyDown: false)
-        else { return }
+        else { return false }
         // keyUp as well: a lone keyDown leaves the key logically held in apps that track
         // key state, and an unbalanced function key was observed as a stuck modifier.
         // Stamped like every other post site: back-to-back events can get equal
@@ -1605,6 +1613,7 @@ enum SyntheticKeyboard {
         stamp(up)
         down.post(tap: .cgSessionEventTap)
         up.post(tap: .cgSessionEventTap)
+        return true
     }
 
     /// IMKit-path recognizer: match ONLY on the private source's `magic` userData,
@@ -2189,6 +2198,29 @@ final class TerminalTapController {
     private var probeSentTick: UInt64 = 0
     private var probeSeenTick: UInt64 = 0
     private var probeMisses = 0
+
+    /// Probe accounting after a post attempt. Not posted ⇒ nothing can come back, so
+    /// the outstanding count is forgiven (seen = sent) — never a miss. Pure — pinned by
+    /// ProbeChordGateTests.
+    static func probeTicksAfterPost(sent: UInt64, seen: UInt64, posted: Bool) -> (sent: UInt64, seen: UInt64) {
+        posted ? (sent, seen) : (sent, sent)
+    }
+
+    /// MAIN only (watchdog): uptime of the last probe-miss teardown, 0 = none.
+    private var lastProbeTeardownNs: UInt64 = 0
+    static let probeTeardownRepeatWindowNs: UInt64 = 300_000_000_000   // 5 min
+
+    /// Does a probe-miss teardown justify the "permission stale" repair line? A single
+    /// miss pair has benign causes (probe gate drift, session switch, wedged client), and
+    /// the repair button `tccutil reset`s the grant — turning a false alarm into a REAL
+    /// loss of permission. So: yes when the privilege preflight refuses, or when this is
+    /// the second teardown within `probeTeardownRepeatWindowNs` (a removed grant that
+    /// still lets the tap be created re-fails right after the 60s quarantine). Pure.
+    static func probeMissMeansStaleGrant(canPost: Bool, lastProbeTeardownNs: UInt64,
+                                         nowNs: UInt64) -> Bool {
+        if !canPost { return true }
+        return lastProbeTeardownNs != 0 && nowNs &- lastProbeTeardownNs < probeTeardownRepeatWindowNs
+    }
     /// Last idle verdict, for transition-only logging (main-thread confined — only
     /// the watchdog timer touches it).
     private var wasIdle = true
@@ -2393,7 +2425,17 @@ final class TerminalTapController {
                     Signposts.log.fault("health probe unanswered ×\(self.probeMisses) — posts dropped or tap wedged; tearing down (quarantine 60s)")
                     DebugLog.log("health probe missed ×\(self.probeMisses) → teardown + quarantine 60s")
                     self.probeMisses = 0
-                    self.trustLooksStale = true          // menu shows the repair line
+                    // Repair line ("Quyền trợ năng bị kẹt", whose auto-fix RESETS the
+                    // grant) only when the evidence says permission: preflight refuses,
+                    // or a probe-miss teardown already happened minutes ago (a removed
+                    // grant re-fails right after the 60s quarantine). A one-off miss
+                    // shows "Bộ gõ tự tạm dừng — bấm để chạy lại" instead.
+                    let nowTeardown = DispatchTime.now().uptimeNanoseconds
+                    let canPost = Accessibility.canPostEvents
+                    self.trustLooksStale = Self.probeMissMeansStaleGrant(
+                        canPost: canPost, lastProbeTeardownNs: self.lastProbeTeardownNs, nowNs: nowTeardown)
+                    self.lastProbeTeardownNs = nowTeardown
+                    DebugLog.log("probe-miss teardown: canPost=\(canPost) → \(self.trustLooksStale ? "stale-grant repair line" : "tap paused (retry)")")
                     self.quarantine(60)
                     self.trustMayHaveChanged()
                     return
@@ -2414,15 +2456,28 @@ final class TerminalTapController {
             if !SyntheticKeyboard.probeMayPost(secureInput: IsSecureEventInputEnabled(),
                                                secureField: SecureFieldDetector.isSecure,
                                                chordHeld: SyntheticKeyboard.chordModifierHeld,
-                                               spaceHeld: SyntheticKeyboard.spacebarHeld) {
+                                               spaceHeld: SyntheticKeyboard.spacebarHeld,
+                                               syntheticGuard: SyntheticInputGuard.isActive) {
                 // Password field in focus, or a ⌘/⌃/⌥ chord held: we do not post the
                 // probe there (see postProbe), so there is nothing to ack — counting
                 // that as a miss would raise a false "stale grant" and tear down a
                 // perfectly healthy tap.
                 self.probeMisses = 0
             } else if let tap = self.stateLock.withLock({ self.tap }), CGEvent.tapIsEnabled(tap: tap) {
+                // Count BEFORE posting (the ack can land on the tap thread before
+                // postProbe returns), then forgive it if postProbe's own gate refused:
+                // a probe that was never posted must never read as a miss.
                 self.stateLock.withLock { self.probeSentTick &+= 1 }
-                SyntheticKeyboard.postProbe()
+                let posted = SyntheticKeyboard.postProbe()
+                if !posted {
+                    self.stateLock.withLock {
+                        let r = Self.probeTicksAfterPost(sent: self.probeSentTick,
+                                                         seen: self.probeSeenTick, posted: false)
+                        self.probeSentTick = r.sent; self.probeSeenTick = r.seen
+                    }
+                    self.probeMisses = 0
+                    DebugLog.log("watchdog: probe skipped by postProbe gate — not counted")
+                }
             } else if Accessibility.grantLooksStale, !self.trustLooksStale {
                 // No tap AND the privilege preflight refuses while macOS still calls us
                 // trusted: that is the stale row, and we can say so WITHOUT waiting for
