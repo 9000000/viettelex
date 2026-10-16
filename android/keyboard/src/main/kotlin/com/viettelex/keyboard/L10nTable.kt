@@ -90,7 +90,7 @@ object L10nTable {
         put("Phím cạnh dấu cách", "Key next to space")
         put("Dấu phẩy", "Comma")
         put("Dấu chấm", "Period")
-        put("Phím hẹp bên phải phím cách trên bàn chữ (điện thoại; ô email, đường dẫn giữ nguyên). Giữ phím để chọn dấu câu khác. Tắt: phím cách rộng hơn; chạm phím cách hai lần vẫn ra dấu chấm.", "The narrow key right of the space bar on the letter keyboard (phones; email and URL fields unchanged). Hold it to pick other punctuation. Off: a wider space bar; double-tapping space still types a period.")
+        put("Điện thoại: phím hẹp bên phải phím cách trên bàn chữ. Máy tính bảng: Dấu phẩy hay Dấu chấm đều giữ cả hai phím , và . hai bên phím cách; Tắt bỏ cả hai. Ô email, đường dẫn giữ nguyên. Giữ phím để chọn dấu câu khác. Tắt: phím cách rộng hơn; chạm phím cách hai lần vẫn ra dấu chấm.", "Phones: the narrow key right of the space bar on the letter keyboard. Tablets: Comma or Period both keep the , and . keys either side of the space bar; Off removes both. Email and URL fields unchanged. Hold the key to pick other punctuation. Off: a wider space bar; double-tapping space still types a period.")
         put("Nâng bàn phím", "Raise keyboard")
         put("Đổi bàn phím", "Switch keyboard")
         put("Gõ bằng giọng nói", "Voice input")

@@ -524,7 +524,7 @@ private fun PlusLockedRow(title: String, caption: String) {
     }
 }
 
-/** "Phím cạnh dấu cách": Dấu phẩy (mặc định) / Dấu chấm / Tắt — bàn chữ điện thoại, ô thường. */
+/** "Phím cạnh dấu cách": Dấu phẩy (mặc định) / Dấu chấm / Tắt — bàn chữ ô thường (điện thoại: phím hẹp; tablet: "," "." hai bên space hoặc không). */
 @Composable
 private fun SpaceSideKeyRow() {
     val c = LocalVT.current
@@ -532,7 +532,7 @@ private fun SpaceSideKeyRow() {
     VTRow {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(tr("Phím cạnh dấu cách"), style = VTType.body, color = c.label)
-            Text(tr("Phím hẹp bên phải phím cách trên bàn chữ (điện thoại; ô email, đường dẫn giữ nguyên). Giữ phím để chọn dấu câu khác. Tắt: phím cách rộng hơn; chạm phím cách hai lần vẫn ra dấu chấm."),
+            Text(tr("Điện thoại: phím hẹp bên phải phím cách trên bàn chữ. Máy tính bảng: Dấu phẩy hay Dấu chấm đều giữ cả hai phím , và . hai bên phím cách; Tắt bỏ cả hai. Ô email, đường dẫn giữ nguyên. Giữ phím để chọn dấu câu khác. Tắt: phím cách rộng hơn; chạm phím cách hai lần vẫn ra dấu chấm."),
                 style = VTType.footnote, color = c.secondary)
         }
     }

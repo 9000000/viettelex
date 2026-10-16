@@ -187,17 +187,27 @@ object KeyLayout {
      * (dư chỗ), plane số / ký hiệu / mẫu câu.
      */
     fun hasPeriodKey(c: LayoutConfig): Boolean =
-        c.plane != Plane.LETTERS || c.tablet ||
-            c.kind == InputKind.URL || c.kind == InputKind.EMAIL
+        c.plane != Plane.LETTERS || c.kind == InputKind.URL || c.kind == InputKind.EMAIL ||
+            (c.tablet && tabletPunct(c))
 
     /**
-     * Tuỳ chọn "Phím cạnh dấu cách" CÓ HIỆU LỰC cho layout này: bàn chữ ĐIỆN THOẠI ô thường ⇒
-     * [LayoutConfig.spaceSideKey]; còn lại (tablet, ô URL / email, plane số / ký hiệu / mẫu
-     * câu) ⇒ null — bố cục cố định như cũ. View dùng để biết phím "." có popup dấu câu không.
+     * Tuỳ chọn "Phím cạnh dấu cách" CÓ HIỆU LỰC (dạng một phím hẹp) cho layout này: bàn chữ
+     * ĐIỆN THOẠI ô thường ⇒ [LayoutConfig.spaceSideKey]; còn lại (tablet — xem [tabletPunct], ô
+     * URL / email, plane số / ký hiệu / mẫu câu) ⇒ null. View dùng để biết phím "." có popup dấu
+     * câu ("," chọn sẵn) không — tablet có cả "," lẫn "." nên "." không cần popup đó.
      */
     fun sideKey(c: LayoutConfig): SpaceSideKey? =
         if (c.plane == Plane.LETTERS && !c.tablet && c.kind != InputKind.URL && c.kind != InputKind.EMAIL)
             c.spaceSideKey else null
+
+    /**
+     * Tablet, bàn chữ ô thường (16/10/2026): "Phím cạnh dấu cách" Dấu phẩy / Dấu chấm ⇒ CẢ "," lẫn
+     * "." hai bên space (dư chỗ); Tắt ⇒ không phím dấu câu nào, space rộng thêm. Ô URL / email /
+     * plane khác không theo tuỳ chọn ⇒ true (giữ "." như cũ).
+     */
+    fun tabletPunct(c: LayoutConfig): Boolean =
+        !(c.plane == Plane.LETTERS && c.kind != InputKind.URL && c.kind != InputKind.EMAIL) ||
+            c.spaceSideKey != SpaceSideKey.OFF
 
     private val ROW1 = "qwertyuiop"
     private val ROW2 = "asdfghjkl"
@@ -324,7 +334,7 @@ object KeyLayout {
      * Hàng đáy kiểu Gboard: [?123|ABC 0.15][, 0.10][🌐 0.10?][😊|🗑 0.10][space còn lại][. 0.10?]
      * [enter 0.15] ("." theo [hasPeriodKey]). Bàn chữ ô thường: "," sang phải space như iOS —
      * điện thoại [?123][🌐?][😊][space][, 0.085][enter] (phím hẹp "," | "." | không có theo [sideKey]);
-     * tablet [?123][🌐?][😊][space][,][.][enter][ẩn 0.07]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
+     * tablet: [tabletLettersBottom] (space giữa, dấu câu hai bên). Plane số tablet: + [ẩn 0.07]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
      * phím ".com" riêng — space rộng như stock, đuôi tên miền ở giữ "." — DomainPopup).
      * Hệ số nhân với bề ngang CẢ hàng.
      */
@@ -336,9 +346,11 @@ object KeyLayout {
         val gap = KEY_SPACING * d
         val t = rowTop + BOTTOM_ROW_TOP * d
         val b = rowTop + rowH - BOTTOM_ROW_BOTTOM * d
-        data class Slot(val kind: Int, val label: String, val insert: String, val mult: Float)
         val slots = ArrayList<Slot>(9)
         val letters = c.plane == Plane.LETTERS
+        if (letters && c.tablet && c.kind != InputKind.EMAIL && c.kind != InputKind.URL) {
+            tabletLettersBottom(out, c, t, b, planeKey); return
+        }
         slots += Slot(KeyKind.PLANE, planeKey, planeKey, 0.15f)
         // Bàn chữ ô thường: "," sang PHẢI phím cách như iOS ([space][,][.?][enter]).
         val commaRight = letters && c.kind != InputKind.EMAIL && c.kind != InputKind.URL
@@ -353,10 +365,7 @@ object KeyLayout {
                  else Slot(KeyKind.EMOJI, "", "", 0.10f)
         slots += Slot(KeyKind.SPACE, "", " ", -1f)
         // Điện thoại: phím hẹp theo "Phím cạnh dấu cách" ("," / "." cùng chỗ cùng cỡ; Tắt ⇒ không phím, space ăn chỗ).
-        if (commaRight) {
-            if (c.tablet) slots += Slot(KeyKind.PUNCT, ",", ",", 0.10f)
-            else sideKey(c)?.char?.let { slots += Slot(KeyKind.PUNCT, it, it, PHONE_LETTERS_COMMA) }
-        }
+        if (commaRight) sideKey(c)?.char?.let { slots += Slot(KeyKind.PUNCT, it, it, PHONE_LETTERS_COMMA) }
         if (hasPeriodKey(c)) slots += Slot(KeyKind.PUNCT, ".", ".", 0.10f)
         slots += Slot(KeyKind.RETURN, c.returnLabel, "\n", 0.15f)
         if (c.tablet) slots += Slot(KeyKind.DISMISS, "", "", 0.07f)
@@ -369,6 +378,56 @@ object KeyLayout {
             out += LaidKey(s.kind, s.label, s.label, s.insert, x, t, x + w, b)
             x += w + gap
         }
+    }
+
+    private data class Slot(val kind: Int, val label: String, val insert: String, val mult: Float)
+
+    /** Tablet bàn chữ: bề rộng phím (đơn vị = BƯỚC phím hàng 10 chữ, phím + khe). */
+    const val TABLET_PLANE_U = 1.25f
+    const val TABLET_PLANE_GLOBE_U = 1.0f
+    /** 😊 / 🌐 / ẩn bàn phím. */
+    const val TABLET_CONTROL_U = 0.75f
+    /** "," "." = đúng một phím chữ. */
+    const val TABLET_PUNCT_U = 1.0f
+    const val TABLET_RETURN_U = 1.25f
+
+    /**
+     * Hàng đáy bàn chữ TABLET ô thường (16/10/2026 — tester tablet: space ngắn, lệch hẳn một bên
+     * vì [?123][😊][space][,][.][↵][ẩn] dồn 4 phím bên phải). Kiểu Gboard / Samsung tablet: space
+     * ĐÚNG GIỮA hàng, dấu câu chia hai bên, mép phím thẳng cột với hàng chữ (đơn vị = bước phím
+     * hàng q…p, cùng công thức [equalRow]):
+     *   Dấu phẩy / Dấu chấm: [?123 1.25][😊 .75][, 1] [space 4 ≈ dưới x½ c v b n x½] [. 1][↵ 1.25][ẩn .75]
+     *   Tắt:                 [?123 1.25][😊 .75]      [space 6 ≈ dưới z½ … m½]          [↵ 1.25][ẩn .75]
+     *   có 🌐: [?123 1][🌐 .75][😊 .75][,] … [.][↵][ẩn] — bên nào ngắn hơn thì phím mép (?123 hoặc ↵)
+     *   nở bù, để hai bên luôn bằng nhau ⇒ space luôn giữa (có 🌐 + dấu câu: space 3).
+     */
+    private fun tabletLettersBottom(out: MutableList<LaidKey>, c: LayoutConfig, t: Float, b: Float, planeKey: String) {
+        val d = c.density
+        val m = ROW_MARGIN_H * d
+        val gap = KEY_SPACING * d
+        val pitch = (c.widthPx - 2 * m + gap) / 10f
+        val punct = tabletPunct(c)
+        val left = ArrayList<Slot>(4); val right = ArrayList<Slot>(3)
+        left += Slot(KeyKind.PLANE, planeKey, planeKey, if (c.needsGlobe) TABLET_PLANE_GLOBE_U else TABLET_PLANE_U)
+        if (c.needsGlobe) left += Slot(KeyKind.GLOBE, "", "", TABLET_CONTROL_U)
+        left += Slot(KeyKind.EMOJI, "", "", TABLET_CONTROL_U)
+        if (punct) { left += Slot(KeyKind.PUNCT, ",", ",", TABLET_PUNCT_U); right += Slot(KeyKind.PUNCT, ".", ".", TABLET_PUNCT_U) }
+        right += Slot(KeyKind.RETURN, c.returnLabel, "\n", TABLET_RETURN_U)
+        right += Slot(KeyKind.DISMISS, "", "", TABLET_CONTROL_U)
+        val l = left.sumOf { it.mult.toDouble() }.toFloat()
+        val r = right.sumOf { it.mult.toDouble() }.toFloat()
+        // Phím mép bên ngắn hơn nở bù ⇒ hai bên bằng nhau, space đúng giữa.
+        if (l > r) { val i = right.indexOfFirst { it.kind == KeyKind.RETURN }; right[i] = right[i].copy(mult = right[i].mult + l - r) }
+        else if (r > l) left[0] = left[0].copy(mult = left[0].mult + r - l)
+        val side = maxOf(l, r)
+        var u = 0f
+        fun put(s: Slot, w: Float) {
+            out += LaidKey(s.kind, s.label, s.label, s.insert, m + u * pitch, t, m + (u + w) * pitch - gap, b)
+            u += w
+        }
+        for (s in left) put(s, s.mult)
+        put(Slot(KeyKind.SPACE, "", " ", 0f), 10f - 2 * side)
+        for (s in right) put(s, s.mult)
     }
 
     /**
