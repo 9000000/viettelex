@@ -104,6 +104,10 @@ public:
 
     bool wordActive() const;
     const std::u16string& shown() const { return shown_; }
+    // Word prediction (caret hints): raw keys of the word in progress ("dduw" for "đư"),
+    // and whether the engine took the previous word as English (macOS previousWordEnglish).
+    std::u16string rawKeys() const;
+    bool previousWordEnglish() const;
     // In-place fell back to composition for this context (unreadable / verification
     // failed); cleared by resetContext() (new field or app).
     bool contextFellBack() const { return contextFallback_; }

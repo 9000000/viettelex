@@ -13,8 +13,10 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 struct vtx_engine;
@@ -67,6 +69,9 @@ std::optional<Cand> pick(const std::vector<Cand>& cands, const Params& p = defau
 // The fix for the word typed as `raw`, or nullopt. Capital first kept.
 std::optional<std::u32string> correction(const std::u32string& raw, const Source& src, const Params& p = defaults());
 
+// (frequency, id) pairs: frequency desc, then id asc (VNSuggest / EnglishLite order).
+void sortByFreqThenId(std::vector<std::pair<int, int>>& v);
+
 // ---------------------------------------------------------------- the real data
 // VNSuggest over vnlexicon.bin: exact frequency, and "matches(prefix, poolLimit: 1)".
 class LexiconIndex {
@@ -75,6 +80,19 @@ public:
     std::optional<int> frequency(const std::u32string& word) const;
     bool contains(const std::u32string& word) const { return frequency(word).has_value(); }
     bool hasCompletion(const std::u32string& typed) const;
+    // VNSuggest.matches: syllables compatible with the word being typed (marks typed must
+    // match, marks not yet typed match anything), frequency desc then id, `excluding`
+    // (lowercase UTF-8) skipped, at most `poolLimit`.
+    struct Match {
+        std::string_view word;  // lexicon display form (lowercase UTF-8)
+        int freq = 0;
+        int id = -1;
+    };
+    std::vector<Match> matches(const std::u32string& typed, int poolLimit, std::string_view excluding) const;
+    // VNSuggest.lexiconId: id of exactly this syllable after SyllableLM.normalize
+    // (lowercase, NFC, old-style tone placement "hoà" -> "hòa"); -1 if none.
+    int lexiconId(const std::u32string& word) const;
+    const addtones::Lexicon& lexicon() const { return lx_; }
 
 private:
     struct Dec {
@@ -117,12 +135,15 @@ const std::vector<const char*>& seedAsciiWords();
 }  // namespace vtx::app::typo
 
 namespace vtx { struct HintMessage; }
+namespace vtx::app::predict { class Model; }
 
 namespace vtx::app {
 
 // VietTelex.exe's answer to a caret-hint job from the TIP (caret_hint_ipc.h): the typo fix
-// for the raw keys, or Thêm dấu for the unaccented run. "" = nothing to suggest (also
-// without language data). The lexicon source is rebuilt only when the engine flags change.
+// for the raw keys, Thêm dấu for the unaccented run, or word prediction (word_prediction.h,
+// candidates joined by kPredictSep). "" = nothing to suggest (also without language data).
+// The lexicon source is rebuilt only when the engine flags change; the prediction model is
+// built on the first Predict job (the Windows setting is off ⇒ never).
 class HintJobs {
 public:
     explicit HintJobs(const addtones::LanguageData* data) : data_(data) {}
@@ -130,10 +151,12 @@ public:
     HintJobs(const HintJobs&) = delete;
     HintJobs& operator=(const HintJobs&) = delete;
     std::u16string answer(const HintMessage& m);
+    bool predictionLoaded() const { return model_ != nullptr; }
 
 private:
     const addtones::LanguageData* data_;
     typo::LexiconSource* source_ = nullptr;
+    predict::Model* model_ = nullptr;
     uint32_t flags_ = 0;
 };
 

@@ -180,6 +180,10 @@ bool EnglishLexicon::load(const uint8_t* b, size_t n) {
 
 bool EnglishLexicon::contains(std::string_view w) const { return std::binary_search(words_.begin(), words_.end(), w); }
 
+size_t EnglishLexicon::lowerBound(std::string_view w) const {
+    return static_cast<size_t>(std::lower_bound(words_.begin(), words_.end(), w) - words_.begin());
+}
+
 // ================================================================ SyllableLM (vnlm.bin v3)
 
 uint64_t SyllableLM::u64(int base, int64_t wi) const { return rd64(d_ + base + (wi << 3)); }
@@ -434,6 +438,106 @@ float SyllableLM::score(int prev2, int prev1, int w) const {
     }
     const int j = biFind(row, w);
     return j >= 0 ? biScoreAt(j) : g2;
+}
+
+// ---------------------------------------------------------------- Context (word prediction)
+
+void SyllableLM::Bigram::forEachImpl(NextFn fn, void* ctx) const {
+    if (!lm_ || size() <= 0) return;
+    const SyllableLM* lm = lm_;
+    lm->biScan(row_, [&](int m, int c) { fn(ctx, c, lm->biScoreAt(m) + lm->adj(c)); });
+}
+
+SyllableLM::TriCursor SyllableLM::triStart(int64_t lo, int64_t pos, int64_t base) const {
+    TriCursor t;
+    t.m = lo;
+    t.base = base;
+    t.end = base + count_;
+    t.wi = pos >> 6;
+    if (t.wi >= tri_.words) return t;
+    t.w = u64(tri_.high, t.wi) & (~uint64_t{0} << (pos & 63));
+    triNext(t);
+    return t;
+}
+
+void SyllableLM::triNext(TriCursor& t) const {
+    t.c = kEnd;
+    if (t.m >= tri_.n) return;
+    while (t.w == 0) {
+        ++t.wi;
+        if (t.wi >= tri_.words) return;
+        t.w = u64(tri_.high, t.wi);
+    }
+    const int64_t k = (((t.wi << 6) + ctz64(t.w) - t.m) << tri_.l) | low(tri_, static_cast<int>(t.m));
+    if (k >= t.end) return;
+    t.c = static_cast<int>(k - t.base);
+    t.v = q(cbValue(cb3Base_, triScore_, t.m, bits3_));
+    t.w &= t.w - 1;
+    ++t.m;
+}
+
+bool SyllableLM::context(int prev2, int prev1, Context& out) const {
+    out = Context();
+    if (!d_ || prev1 < 0 || prev1 >= count_) return false;
+    out.lm_ = this;
+    out.g2_ = q(static_cast<int8_t>(d_[g2Base_ + prev1]));
+    int k = -1;
+    if (prev2 >= 0 && prev2 < count_) {
+        const int j = biFind(rowAt(prev2), prev1);
+        if (j >= 0) k = context(j);
+    }
+    out.bi_ = rowAt(prev1);
+    if (k < 0) return true;
+    out.triBase_ = static_cast<int64_t>(k) * count_;
+    lowerBound(tri_, out.triBase_, out.triLo_, out.triPos_);
+    out.g3_ = q(cbValue(cbgBase_, g3Base_, k, bitsG_));
+    return true;
+}
+
+float SyllableLM::Context::explicitPmi(int w) const {
+    if (!lm_ || w < 0 || w >= lm_->count_) return 0;
+    if (triBase_ >= 0) {
+        const int t = lm_->scanFind(lm_->tri_, triLo_, triPos_, triBase_ + w);
+        if (t >= 0) return lm_->q(lm_->cbValue(lm_->cb3Base_, lm_->triScore_, t, lm_->bits3_)) + lm_->adj(w);
+    }
+    const int j = lm_->biFind(bi_, w);
+    return j >= 0 ? lm_->biScoreAt(j) + lm_->adj(w) : 0;
+}
+
+int SyllableLM::Context::forEachTrigramImpl(NextFn fn, void* ctx) const {
+    if (!lm_ || triBase_ < 0) return 0;
+    TriCursor t = lm_->triStart(triLo_, triPos_, triBase_);
+    int n = 0;
+    while (t.c != kEnd) {
+        fn(ctx, t.c, t.v + lm_->adj(t.c));
+        ++n;
+        lm_->triNext(t);
+    }
+    return n;
+}
+
+void SyllableLM::Context::forEachNextImpl(NextFn fn, void* ctx) const {
+    if (!lm_) return;
+    const SyllableLM* lm = lm_;
+    TriCursor t;
+    if (triBase_ >= 0) t = lm->triStart(triLo_, triPos_, triBase_);
+    const float back = triBase_ >= 0 ? g3_ : 0;
+    lm->biScan(bi_, [&](int m, int c) {
+        while (t.c < c) {
+            fn(ctx, t.c, t.v + lm->adj(t.c));
+            lm->triNext(t);
+        }
+        if (t.c == c) {
+            fn(ctx, c, t.v + lm->adj(c));
+            lm->triNext(t);
+        } else {
+            fn(ctx, c, back + lm->biScoreAt(m) + lm->adj(c));
+        }
+    });
+    while (t.c != kEnd) {
+        fn(ctx, t.c, t.v + lm->adj(t.c));
+        lm->triNext(t);
+    }
 }
 
 float SyllableLM::uniAdj(int w) const { return (!d_ || w < 0 || w >= count_) ? 0 : adj(w); }

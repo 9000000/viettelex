@@ -335,6 +335,7 @@ LRESULT CALLBACK mainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             toastShutdown();
             removeTrayIcon();
             textActionsShutdown();
+            predictionWatchStop();
             hookShutdown();
             PostQuitMessage(0);
             return 0;
@@ -568,7 +569,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     // through" would look like a broken keyboard.
     const bool staleGameMode = g_settings.gameMode;
     g_settings.gameMode = false;
-    if (snapshotMissing() || staleGameMode) saveSettings(g_settings);
+    // Windows' text-suggestion setting (word prediction) may have changed while we were not
+    // running: republish the snapshot then.
+    const bool predictionStale = readFlag(L"systemTextPredictionPublished") != g_settings.systemTextPrediction;
+    if (snapshotMissing() || staleGameMode || predictionStale) saveSettings(g_settings);
     // Another user on a per-machine install (Store / SYSTEM install before their next logon).
     const bool setupDoneBefore = readFlag(L"userSetupDone");
     runUserSetup(vtx::SetupTrigger::AppStart);
@@ -598,6 +602,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     hookSetChordTarget(g_mainWnd, kMsgSwitchChord);
     hookConfigure(g_settings);
     textActionsConfigure();
+    predictionWatchStart();
     gameConfigure();
     mirrorAppLanguage();  // AppContainer hosts read the per-app Việt/Anh memory from here
     appLog("app", std::string("started ") + VTX_VER_STRING);

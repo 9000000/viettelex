@@ -8,6 +8,7 @@
 
 #include "caret_hint_ipc.h"
 #include "text_action_logic.h"
+#include "word_prediction.h"
 
 #include <viettelex/add_tones.hpp>
 #include <viettelex/telex_engine.hpp>
@@ -272,6 +273,91 @@ bool LexiconIndex::hasCompletion(const std::u32string& typed) const {
     return false;
 }
 
+void sortByFreqThenId(std::vector<std::pair<int, int>>& v) {
+    std::sort(v.begin(), v.end(), [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
+        return a.first != b.first ? a.first > b.first : a.second < b.second;
+    });
+}
+
+std::vector<LexiconIndex::Match> LexiconIndex::matches(const std::u32string& typed, int poolLimit,
+                                                      std::string_view excluding) const {
+    std::vector<Match> out;
+    std::vector<Dec> dec;
+    if (!lx_.ok() || poolLimit <= 0 || !decompose(typed, dec)) return out;
+    std::string prefix;
+    for (const Dec& d : dec) prefix.push_back(static_cast<char>(d.base));
+    std::vector<std::pair<int, int>> pool;  // (freq, id)
+    auto consider = [&](int id) {
+        const std::string_view f = lx_.folded(id);
+        if (f.size() < prefix.size()) return;
+        for (size_t i = 0; i < dec.size(); ++i) {
+            if (static_cast<uint8_t>(f[i]) != dec[i].base) return;
+            const uint8_t cand = lx_.attr(id, static_cast<int>(i));
+            const uint8_t q = dec[i].attr >> 3, t = dec[i].attr & 7;
+            if (q != 0 && q != cand >> 3) return;
+            if (t != 0 && t != (cand & 7)) return;
+        }
+        pool.emplace_back(lx_.freq(id), id);
+    };
+    if (prefix.size() == 1) {  // one key: the precomputed top-32 bucket (VNLexicon2Data.firstCharTop)
+        const int c = prefix[0] - 'a';
+        if (c < 0 || c >= 26) return out;
+        for (int id : firstTop_[static_cast<size_t>(c)]) consider(id);
+    } else {
+        int lo = 0, hi = 0;
+        range(prefix, lo, hi);
+        for (int id = lo; id < hi; ++id) consider(id);
+    }
+    sortByFreqThenId(pool);
+    for (const auto& [f, id] : pool) {
+        const std::string_view w = lx_.display(id);
+        if (w == excluding) continue;
+        out.push_back(Match{w, f, id});
+        if (static_cast<int>(out.size()) >= poolLimit) break;
+    }
+    return out;
+}
+
+namespace {
+// SyllableLM.normalize: lowercase NFC, then the old tone placement vnlexicon uses
+// ("hoà" -> "hòa", "thuý" -> "thúy"; "quý" stays).
+std::u32string normalizeSyllable(const std::u32string& w) {
+    std::u32string s = text::nfc(text::lower(w));
+    if (s.size() < 2) return s;
+    static const struct {
+        char32_t a, b, ra, rb;
+    } kOld[] = {
+        {U'o', 0xE0, 0xF2, U'a'},   {U'o', 0xE1, 0xF3, U'a'},   {U'o', 0x1EA3, 0x1ECF, U'a'}, {U'o', 0xE3, 0xF5, U'a'},
+        {U'o', 0x1EA1, 0x1ECD, U'a'}, {U'o', 0xE8, 0xF2, U'e'}, {U'o', 0xE9, 0xF3, U'e'},   {U'o', 0x1EBB, 0x1ECF, U'e'},
+        {U'o', 0x1EBD, 0xF5, U'e'}, {U'o', 0x1EB9, 0x1ECD, U'e'}, {U'u', 0x1EF3, 0xF9, U'y'}, {U'u', 0xFD, 0xFA, U'y'},
+        {U'u', 0x1EF7, 0x1EE7, U'y'}, {U'u', 0x1EF9, 0x169, U'y'}, {U'u', 0x1EF5, 0x1EE5, U'y'},
+    };
+    const char32_t a = s[s.size() - 2], b = s[s.size() - 1];
+    for (const auto& o : kOld) {
+        if (o.a != a || o.b != b) continue;
+        if (a == U'u' && s.size() >= 3 && s[s.size() - 3] == U'q') return s;
+        s[s.size() - 2] = o.ra;
+        s[s.size() - 1] = o.rb;
+        return s;
+    }
+    return s;
+}
+}  // namespace
+
+int LexiconIndex::lexiconId(const std::u32string& word) const {
+    const std::u32string w = normalizeSyllable(word);
+    std::vector<Dec> dec;
+    if (!lx_.ok() || !decompose(w, dec)) return -1;
+    std::string prefix;
+    for (const Dec& d : dec) prefix.push_back(static_cast<char>(d.base));
+    const std::string u = utf8(w);
+    int lo = 0, hi = 0;
+    range(prefix, lo, hi);
+    for (int id = lo; id < hi; ++id)
+        if (lx_.folded(id).size() == prefix.size() && lx_.display(id) == u) return id;
+    return -1;
+}
+
 // ================================================================ LexiconSource
 
 LexiconSource::LexiconSource(const addtones::LanguageData& data, uint32_t engineFlags)
@@ -385,7 +471,10 @@ const int16_t kFirstCharTop[26][32] = {
 
 namespace vtx::app {
 
-HintJobs::~HintJobs() { delete source_; }
+HintJobs::~HintJobs() {
+    delete source_;
+    delete model_;
+}
 
 std::u16string HintJobs::answer(const HintMessage& m) {
     if (!data_ || !data_->ok() || m.text.empty()) return {};
@@ -398,6 +487,17 @@ std::u16string HintJobs::answer(const HintMessage& m) {
         }
         auto fix = typo::correction(text::fromUtf16(m.text), *source_);
         return fix ? text::toUtf16(*fix) : std::u16string();
+    }
+    if (m.job == static_cast<uint32_t>(HintJob::Predict)) {
+        std::u16string before, typed, raw;
+        if (!unpackPredictText(m.text, before, typed, raw)) return {};
+        auto r = predict::request(text::fromUtf16(before), text::fromUtf16(typed), (m.flags & kPredictEnglish) != 0);
+        if (!r) return {};
+        if (!model_) model_ = new (std::nothrow) predict::Model(*data_);
+        if (!model_) return {};
+        std::vector<std::u16string> c;
+        for (const auto& w : model_->candidates(*r, text::fromUtf16(raw))) c.push_back(text::toUtf16(w));
+        return joinCandidates(c);
     }
     if (m.job == static_cast<uint32_t>(HintJob::Tones)) {
         std::u16string out;

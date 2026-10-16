@@ -33,6 +33,7 @@ const BoolKey kBoolKeys[] = {
     {"underlineMisspelled", &Settings::underlineMisspelled},
     {"autoOffFullscreen", &Settings::autoOffFullscreen},
     {"gameMode", &Settings::gameMode},
+    {"systemTextPrediction", &Settings::systemTextPrediction},
 };
 constexpr size_t kBoolCount = sizeof(kBoolKeys) / sizeof(kBoolKeys[0]);
 constexpr uint32_t kMagic = 0x53585456;  // "VTXS"
@@ -68,6 +69,8 @@ struct Reader {
     }
 };
 }  // namespace
+
+bool isSystemMirror(const BoolKey& k) { return k.field == &Settings::systemTextPrediction; }
 
 const BoolKey* boolKeys(size_t* count) {
     if (count) *count = kBoolCount;

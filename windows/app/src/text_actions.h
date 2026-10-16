@@ -16,6 +16,13 @@ namespace vtx::app {
 void textActionsConfigure();
 void textActionsShutdown();
 
+// Gợi ý từ: watch Windows' "Show text suggestions when typing on the physical keyboard"
+// (word_prediction.h kHwkbPredictionKey) — RegNotifyChangeKeyValue + a thread-pool wait, no
+// thread of our own, nothing polled. A change updates g_settings.systemTextPrediction and
+// republishes the snapshot (TIPs pick it up at their next focus change).
+void predictionWatchStart();
+void predictionWatchStop();
+
 // Main-window messages owned by this module (WM_HOTKEY, WM_COPYDATA from the TIP, timers).
 bool textActionsMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result);
 // AppCommand::TextToolReply from the TIP.

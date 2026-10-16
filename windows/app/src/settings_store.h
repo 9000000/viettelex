@@ -11,7 +11,10 @@
 
 namespace vtx::app {
 
+// loadSettings() also fills Settings::systemTextPrediction from Windows' own setting
+// (readSystemTextPrediction); saveSettings() never stores that mirror under VietTelex.
 Settings loadSettings();
+bool readSystemTextPrediction();
 bool saveSettings(const Settings& s);
 
 // Plain values the app keeps for itself (not part of the TIP snapshot).

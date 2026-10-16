@@ -1,5 +1,6 @@
 // End-to-end plumbing tests: key sequence -> TypingSession -> FakeDocument, in both
 // output modes, against the real C++ engine (windows/engine).
+#include "caret_hints.h"
 #include "fake_document.h"
 #include "session.h"
 #include "settings.h"
@@ -861,4 +862,54 @@ TEST(underline_reopened_word_keeps_its_mark) {
     CHECK(r.doc.comp);
     CHECK_EQ(r.text(), std::string("đc"));
     CHECK(r.doc.misspelled);
+}
+
+// Gợi ý từ (word prediction): what the TIP reads from the session when it arms a
+// prediction, and accepting a completion over the word being typed in place
+// (caret_hints.h predictSuggestion / hintStillValid; the TIP's applyHint does exactly
+// replaceBeforeCaret(replace, insert) + session reset).
+TEST(session_prediction_replaces_word_in_progress) {
+    Rig r(OutputMode::InPlace);
+    r.type("tooi dduw");
+    CHECK(r.s.wordActive());
+    CHECK(r.s.wordMode() == OutputMode::InPlace);
+    CHECK_EQ(utf16ToUtf8(r.s.shown()), std::string("đư"));
+    CHECK_EQ(utf16ToUtf8(r.s.rawKeys()), std::string("dduw"));
+    CHECK_EQ(r.text(), std::string("tôi đư"));
+    const std::u32string before = hints::toU32(r.doc.textBeforeCaret(64));
+    auto sug = hints::predictSuggestion(before, hints::toU32(r.s.shown()), {u"được", u"đường", u"đưa"});
+    CHECK(sug.has_value());
+    if (!sug) return;
+    CHECK(hints::hintStillValid(*sug, before));
+    // click on the 2nd candidate
+    const hints::Suggestion pick = hints::chooseCandidate(*sug, 1);
+    CHECK(pick.insert == u"đường ");
+    CHECK(r.doc.replaceBeforeCaret(pick.replace, pick.insert));
+    r.s.reset();
+    CHECK_EQ(r.text(), std::string("tôi đường "));
+    r.type("ddi ");  // typing goes on normally after the accepted word
+    CHECK_EQ(r.text(), std::string("tôi đường đi "));
+    // next-word suggestion right after the space: insert only
+    auto next = hints::predictSuggestion(hints::toU32(r.doc.textBeforeCaret(64)), U"", {u"đâu"});
+    CHECK(next && next->replace.empty() && next->insert == u"đâu ");
+    CHECK(r.doc.replaceBeforeCaret(next->replace, next->insert));
+    CHECK_EQ(r.text(), std::string("tôi đường đi đâu "));
+}
+
+TEST(session_prediction_never_replaces_a_composition) {
+    Rig r(OutputMode::Composition);
+    r.type("dduw");
+    CHECK(r.doc.comp);
+    CHECK(r.s.wordMode() == OutputMode::Composition);  // the TIP arms no completion here
+    // and the document refuses an in-place replace while composing (applyHint bails too)
+    CHECK(!r.doc.replaceBeforeCaret(u"đư", u"được "));
+}
+
+TEST(session_prediction_english_context) {
+    Rig r(OutputMode::InPlace);
+    r.type("this is the ");
+    CHECK(r.s.previousWordEnglish());
+    Rig v(OutputMode::InPlace);
+    v.type("xin ");
+    CHECK(!v.s.previousWordEnglish());
 }

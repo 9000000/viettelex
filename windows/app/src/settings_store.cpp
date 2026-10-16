@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "shortcuts.h"
+#include "word_prediction.h"
 #include "utf.h"
 
 namespace vtx::app {
@@ -137,15 +138,23 @@ std::string narrow(const std::wstring& w) {
     return s;
 }
 
+bool readSystemTextPrediction() {
+    DWORD v = 0, sz = sizeof v;
+    const bool present = RegGetValueW(HKEY_CURRENT_USER, predict::kHwkbPredictionKey, predict::kHwkbPredictionValue,
+                                      RRF_RT_REG_DWORD, nullptr, &v, &sz) == ERROR_SUCCESS;
+    return predict::resolveHwkbPrediction(present, v);
+}
+
 Settings loadSettings() {
     Settings s;
+    s.systemTextPrediction = readSystemTextPrediction();  // Windows' own setting, not ours
     HKEY k = openRoot(false);
     if (!k) return s;
     size_t count = 0;
     const BoolKey* keys = boolKeys(&count);
     for (size_t i = 0; i < count; ++i) {
         DWORD v;
-        if (getDword(k, widen(keys[i].name).c_str(), v)) s.*keys[i].field = v != 0;
+        if (!isSystemMirror(keys[i]) && getDword(k, widen(keys[i].name).c_str(), v)) s.*keys[i].field = v != 0;
     }
     std::wstring str;
     if (getString(k, L"switchHotkey", str)) s.switchHotkey = narrow(str);
@@ -173,7 +182,11 @@ bool saveSettings(const Settings& s) {
     if (!k) return false;
     size_t count = 0;
     const BoolKey* keys = boolKeys(&count);
-    for (size_t i = 0; i < count; ++i) setDword(k, widen(keys[i].name).c_str(), (s.*keys[i].field) ? 1 : 0);
+    for (size_t i = 0; i < count; ++i)
+        if (!isSystemMirror(keys[i])) setDword(k, widen(keys[i].name).c_str(), (s.*keys[i].field) ? 1 : 0);
+    // Bookkeeping only (not a setting): what the snapshot says about Windows' text
+    // suggestions, so a start-up after the Windows toggle changed republishes it.
+    setDword(k, L"systemTextPredictionPublished", s.systemTextPrediction ? 1 : 0);
     setString(k, L"switchHotkey", widen(s.switchHotkey));
     setString(k, L"menuIcon", widen(s.menuIcon));
     setString(k, L"uiLanguage", widen(s.uiLanguage));
