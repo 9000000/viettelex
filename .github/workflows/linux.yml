@@ -23,6 +23,7 @@ on:
       - "iOS/Keyboard/*.swift"
       - "iOS/Keyboard/Resources/*.bin"
       - "App/Sources/SeedNextData.swift"   # gợi ý từ: bảng seed (generated, symlinked)
+      - "App/Sources/LearnedModel.swift"   # học từ bạn gõ (symlinked)
       - "iOS/KeyboardTests/Fixtures/**"
       - "android/telexcore/src/test/resources/golden.tsv.gz"
       - "LICENSE"

@@ -4,12 +4,16 @@ viettelex (1.0.15) UNRELEASED; urgency=medium
     gõ hai dấu cách, tự viết hoa đầu câu, ngoặc kép cong và gạch dài, gợi ý
     từ (một gợi ý, Tab để nhận) kèm từ tiếng Anh và sửa lỗi gõ tiếng Anh.
   * Công tắc "Lọc từ nhạy cảm" cho gợi ý.
+  * "Học từ bạn gõ": gợi ý theo cụm bạn hay dùng, chỉ lưu trên máy; có nút
+    "Xoá từ đã học…".
   * ---
   * Automatic text (Settings → Customize, off by default): period on double
     space, auto-capitalize sentences, smart quotes and dashes, word prediction
     (one suggestion, Tab to accept) including English words and English typo
     fixes.
   * "Filter sensitive words" switch for suggestions.
+  * "Learn from your typing": suggestions follow phrases you use, stored only
+    on this computer; with a "Clear learned words…" button.
 
  -- VietTelex Maintainers <maintainers@viettelex.invalid>  Fri, 16 Oct 2026 17:00:00 +0700
 
