@@ -174,4 +174,16 @@ final class SystemAutoTextTests: XCTestCase {
         XCTAssertEqual(compose("dduwowcj", capFirst: false), "được")
         XCTAssertEqual(compose("vieejt", capFirst: true), "Việt")
     }
+
+    /// Hồi quy (Phil 16/10/2026): chữ đầu tiên của văn bản không tự viết hoa — bản cũ chỉ
+    /// viết hoa khi vai trò AX đúng là AXTextArea (đọc không được ⇒ không viết hoa).
+    func testCapitalizeAtTextStartUnlessKnownSingleLine() {
+        XCTAssertTrue(FocusedRole.capitalizesAtStart(role: nil))
+        XCTAssertTrue(FocusedRole.capitalizesAtStart(role: "AXTextArea"))
+        XCTAssertTrue(FocusedRole.capitalizesAtStart(role: "AXWebArea"))
+        XCTAssertTrue(FocusedRole.capitalizesAtStart(role: "AXGroup"))
+        XCTAssertFalse(FocusedRole.capitalizesAtStart(role: "AXTextField"))
+        XCTAssertFalse(FocusedRole.capitalizesAtStart(role: "AXSearchField"))
+        XCTAssertFalse(FocusedRole.capitalizesAtStart(role: "AXComboBox"))
+    }
 }

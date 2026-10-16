@@ -256,21 +256,41 @@ enum FocusedRole {
     static var _testOverride: Bool?
     #endif
 
+    /// Đầu văn bản có được viết hoa không. Chỉ KHÔNG viết hoa khi biết chắc là ô một dòng
+    /// (AXTextField / AXSearchField / AXComboBox — tên đăng nhập, ô tìm kiếm, thanh địa
+    /// chỉ). Không đọc được vai trò (app không lộ AX, trình duyệt chưa bật AX) ⇒ viết hoa
+    /// như ô soạn thảo: bản cũ đòi đúng AXTextArea nên chữ đầu câu đầu tiên hay không viết
+    /// hoa (Phil 16/10/2026).
     static func isMultilineText() -> Bool {
         #if DEBUG
         if let v = _testOverride { return v }
         #endif
-        guard AXIsProcessTrusted() else { return false }
+        return capitalizesAtStart(role: focusedRole())
+    }
+
+    static func capitalizesAtStart(role: String?) -> Bool {
+        guard let role else { return true }
+        return !singleLineRoles.contains(role)
+    }
+
+    static let singleLineRoles: Set<String> = [kAXTextFieldRole as String, "AXSearchField",
+                                               kAXComboBoxRole as String]
+
+    private static func focusedRole() -> String? {
+        guard AXIsProcessTrusted() else { return nil }
         let sys = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(sys, 0.05)
         var ref: CFTypeRef?
         guard AXUIElementCopyAttributeValue(sys, kAXFocusedUIElementAttribute as CFString, &ref) == .success,
-              let f = ref, CFGetTypeID(f) == AXUIElementGetTypeID() else { return false }
+              let f = ref, CFGetTypeID(f) == AXUIElementGetTypeID() else { return nil }
         let el = f as! AXUIElement
         AXUIElementSetMessagingTimeout(el, 0.05)
         var roleRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(el, kAXRoleAttribute as CFString, &roleRef) == .success,
-              let role = roleRef as? String else { return false }
-        return role == (kAXTextAreaRole as String)
+              let role = roleRef as? String else { return nil }
+        var sub: CFTypeRef?
+        if AXUIElementCopyAttributeValue(el, kAXSubroleAttribute as CFString, &sub) == .success,
+           (sub as? String) == (kAXSearchFieldSubrole as String) { return "AXSearchField" }
+        return role
     }
 }
