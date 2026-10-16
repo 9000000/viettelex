@@ -32,13 +32,24 @@
 namespace viettelex {
 
 struct CaretSuggestion {
-    enum class Kind { Math, Number, Typo, Tones, Date };
+    // Predict: gợi ý từ (auto_text.h, WordPrediction.swift) — `replace` = the word being
+    // composed ("" = next word, insert only), up to 3 candidates (display + alternates), each
+    // inserted with a trailing space. Shown in the frontend's candidate list.
+    enum class Kind { Math, Number, Typo, Tones, Date, Predict };
     Kind kind = Kind::Math;
     std::string display;  // shown near the caret ("= 36", "1.200.000 ₫", "tôi")
     std::string replace;  // tail of the text before the caret to replace ("" = insert only)
     std::string insert;   // text inserted in its place
+    std::vector<std::string> alternates;  // Predict: candidates 2–3 (click only; Tab = display)
     bool operator==(const CaretSuggestion &o) const {
-        return kind == o.kind && display == o.display && replace == o.replace && insert == o.insert;
+        return kind == o.kind && display == o.display && replace == o.replace && insert == o.insert &&
+               alternates == o.alternates;
+    }
+    // Every candidate in display order (main first).
+    std::vector<std::string> candidates() const {
+        std::vector<std::string> v{display};
+        v.insert(v.end(), alternates.begin(), alternates.end());
+        return v;
     }
 };
 
@@ -60,6 +71,10 @@ struct HintRequest {
     // The Session's live key generation: a queued / delayed request whose generation moved on
     // is dropped without contacting the helper ("gõ tiếp là huỷ").
     std::shared_ptr<const std::atomic<uint64_t>> liveGen;
+    // Asked only when `line` gets no suggestion, `fallbackDelayMs` after the submit (word
+    // prediction after a space: every other caret suggestion wins over it).
+    std::string fallback;
+    int fallbackDelayMs = 0;
 };
 
 namespace hints {
@@ -76,7 +91,8 @@ std::string label(const CaretSuggestion &s);
 // Protocol (Serve.swift): fields joined by TAB, `\` TAB LF CR escaped.
 std::string escape(const std::string &s);
 std::string request(const std::vector<std::string> &fields);
-// "-" / garbage → false. "<kind>\t<display>\t<replace>\t<insert>" → true.
+// "-" / garbage → false. "<kind>\t<display>\t<replace>\t<insert>" → true; "predict" may add
+// up to two more displays (the alternates).
 bool parseAnswer(const std::string &line, CaretSuggestion &out);
 
 // Cheap boundary gates (no data), same rules as the macOS code they name.

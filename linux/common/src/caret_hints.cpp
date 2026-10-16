@@ -124,6 +124,11 @@ KeyAction keyAction(CaretSuggestion::Kind kind, uint32_t keysym, uint32_t mods) 
 }
 
 std::string label(const CaretSuggestion &s) {
+    if (s.kind == CaretSuggestion::Kind::Predict) {
+        std::string o = s.display;
+        for (const auto &a : s.alternates) o += "  ·  " + a;
+        return o + "   Tab";
+    }
     return s.display + (s.kind == CaretSuggestion::Kind::Math ? "   Tab / Enter" : "   Tab");
 }
 
@@ -173,18 +178,23 @@ bool parseAnswer(const std::string &line, CaretSuggestion &out) {
         if (t == std::string::npos) break;
         start = t + 1;
     }
-    if (f.size() != 4 || f[1].empty() || f[3].empty()) return false;
+    const bool predict = !f.empty() && f[0] == "predict";
+    if (f.size() < 4 || f.size() > (predict ? 6u : 4u) || f[1].empty() || f[3].empty()) return false;
     CaretSuggestion s;
     if (f[0] == "math") s.kind = CaretSuggestion::Kind::Math;
     else if (f[0] == "number") s.kind = CaretSuggestion::Kind::Number;
     else if (f[0] == "typo") s.kind = CaretSuggestion::Kind::Typo;
     else if (f[0] == "tones") s.kind = CaretSuggestion::Kind::Tones;
     else if (f[0] == "date") s.kind = CaretSuggestion::Kind::Date;
+    else if (predict) s.kind = CaretSuggestion::Kind::Predict;
     else return false;
-    if (s.kind == CaretSuggestion::Kind::Math ? !f[2].empty() : f[2].empty()) return false;
+    // Math only inserts; Predict replaces the word being typed or inserts the next word.
+    if (s.kind == CaretSuggestion::Kind::Math ? !f[2].empty() : (!predict && f[2].empty())) return false;
     s.display = f[1];
     s.replace = f[2];
     s.insert = f[3];
+    for (size_t i = 4; i < f.size(); ++i)
+        if (!f[i].empty()) s.alternates.push_back(f[i]);
     out = std::move(s);
     return true;
 }
@@ -333,7 +343,20 @@ void HintService::loop() {
         if (!current()) continue;
         std::string ans;
         CaretSuggestion s;
-        if (!query(job->req.line, ans) || !hints::parseAnswer(ans, s) || !current()) continue;
+        bool got = !job->req.line.empty() && query(job->req.line, ans) && hints::parseAnswer(ans, s);
+        if (!got && !job->req.fallback.empty() && current()) {
+            // No other suggestion: the fallback (word prediction) after its own pause.
+            int wait = job->req.fallbackDelayMs - job->req.delayMs;
+            if (wait > 0) {
+                std::unique_lock<std::mutex> l(mu_);
+                bool superseded =
+                    cv_.wait_for(l, std::chrono::milliseconds(wait), [this] { return stop_ || next_; });
+                if (stop_) return;
+                if (superseded) continue;
+            }
+            got = current() && query(job->req.fallback, ans) && hints::parseAnswer(ans, s);
+        }
+        if (!got || !current()) continue;
         if (!alive_->load()) return;
         auto alive = alive_;
         Done done = std::move(job->done);

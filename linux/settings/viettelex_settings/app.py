@@ -81,6 +81,26 @@ HINT_SWITCHES = (
      N_("“hôm nay”, “ngày mai”, “hôm qua” → dd/mm/yyyy; “bây giờ” → giờ:phút (today, tomorrow, "
         "yesterday, now sau một từ tiếng Anh). Tab để thay.")),
 )
+# Văn bản tự động (tab Tuỳ chỉnh): key config.toml [general], nhãn, mô tả — mặc định tắt hết.
+AUTO_TEXT_SWITCHES = (
+    ("double_space_period", N_("Thêm dấu chấm khi gõ hai dấu cách"),
+     N_("Gõ hai dấu cách liền nhau sau một chữ → “. ” (giữ phím cách thì không). Chỉ ở app cho bộ gõ "
+        "đọc chữ quanh con trỏ.")),
+    ("auto_capitalize", N_("Tự viết hoa đầu câu"),
+     N_("Chữ đầu câu (sau . ? ! hoặc xuống dòng) tự viết hoa, Telex vẫn ghép đúng (dduwowcj → Được). "
+        "Bỏ qua viết tắt, email, địa chỉ web; xoá chữ hoa đó thì chữ kế giữ thường.")),
+    ("smart_punctuation", N_("Ngoặc kép cong và gạch dài"),
+     N_("\" ' → ngoặc cong theo ngữ cảnh (don't → don’t); -- → — (gõ thêm - thì thành ---).")),
+    ("word_prediction", N_("Gợi ý từ"),
+     N_("Dừng gõ một chút → tối đa 3 từ trong ô gợi ý của bộ gõ: hoàn thành từ đang gõ hoặc từ kế "
+        "tiếp. Tab chọn từ đầu, bấm chuột chọn từ bất kỳ, Esc bỏ; không bao giờ tự thay. Cần gói "
+        "viettelex-text-tools.")),
+)
+QUOTE_STYLE_CHOICES = (
+    ("curly", N_("“ ” ‘ ’ (mặc định)")),
+    ("low9", "„ “ ‚ ‘"),
+    ("guillemets", "« » ‹ ›"),
+)
 HINT_SUMMARY = (
     ("text_tools_menu", N_("menu Công cụ…")),
     ("math_results", N_("phép tính")),
@@ -413,6 +433,18 @@ class SettingsWindow(Adw.PreferencesWindow):
             r.get_activatable_widget().connect("notify::active", summary)
         self.refreshers.append(summary)
         summary()
+        page.add(g)
+
+        # Văn bản tự động (SETTINGS.md §8b): macOS làm theo cài đặt Nhập văn bản của hệ thống;
+        # Linux không có cài đặt chung ⇒ công tắc riêng, mặc định tắt hết.
+        g = Adw.PreferencesGroup(
+            title=_("Văn bản tự động"),
+            description=_("Mặc định tắt. Không chạy trong terminal, trình soạn code, ô địa chỉ web / "
+                          "email, ô mật khẩu và khi đang gõ English."))
+        for key, title, sub in AUTO_TEXT_SWITCHES:
+            self.switch(g, "general", key, _(title), _(sub))
+        self.combo(g, "general", "quote_style", _("Kiểu ngoặc kép"),
+                   [(v, _(label)) for v, label in QUOTE_STYLE_CHOICES])
         page.add(g)
 
         g = Adw.PreferencesGroup(title=_("Chuyển Việt/Anh"))

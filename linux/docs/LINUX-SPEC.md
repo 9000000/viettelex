@@ -208,6 +208,22 @@ Phép tính, chip số dạng tiền, sửa lỗi gõ sai, thêm dấu cho cụm
   fixture chung math-results/number-chips), `caret_hints` (cổng, Session, HintService với helper
   thật), `fcitx5_smoke` / `ibus_smoke` (12*3= → aux "= 36", Tab chèn 36).
 
+### 5.6 Văn bản tự động + gợi ý từ (16/10/2026) — port macOS SystemAutoText / WordPrediction
+Dấu chấm khi gõ hai dấu cách, tự viết hoa đầu câu, ngoặc kép cong + gạch dài, gợi ý từ. macOS
+theo cài đặt hệ thống; Linux: công tắc riêng, mặc định tắt (`common/SETTINGS.md` §8b).
+- Luật thuần: `common/src/auto_text.cpp` (chép `SystemAutoText.swift`, cổng rẻ của
+  `PredictionLogic`). `Session` dùng chung đuôi chữ của §5.5; phím nhả (release) cho biết phím
+  cách có bị giữ (Fcitx5/IBus không có cờ autorepeat). Viết hoa = đưa chữ HOA vào engine ở chữ
+  đầu từ. Thay chữ đã chốt (". ", "—", "---") chỉ khi được sửa quanh con trỏ + đọc lại màn hình.
+- Gợi ý từ: `Session` hẹn yêu cầu `predict` (HintService chờ 0,3 s, thế hệ phím huỷ; sau dấu cách
+  là `fallback` của yêu cầu gợi ý khác — chúng thắng). Tính ở `--serve`
+  (`Predict.swift` + symlink `SuggestionSupport`/`DisplayCase`/`SensitiveWords`): xếp hạng y như
+  macOS/iOS, dữ liệu vnlexicon/vnlm/enlexicon đã có trong gói — không thêm file dữ liệu.
+  Hiển thị: Fcitx5 `CommonCandidateList` / IBus `IBusLookupTable` (ngang, nhãn rỗng, aux "Tab");
+  click → `Session::chooseHint`.
+- Test: `auto_text` (ca SystemAutoTextTests + Session theo chế độ + helper thật), `caret_suggest`
+  (ca WordPredictionTests), `fcitx5_smoke` / `ibus_smoke` ("cảm␣" → ô ứng viên "ơn", chọn / Tab).
+
 ## 6. Riêng Linux cần xử lý
 
 

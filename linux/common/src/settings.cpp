@@ -186,6 +186,16 @@ Settings parseConfig(const std::string &toml) {
             else if (key == "typo_hints") setBool(s.typoHints, v);
             else if (key == "tone_hints") setBool(s.toneHints, v);
             else if (key == "date_hints") setBool(s.dateHints, v);
+            else if (key == "double_space_period") setBool(s.doubleSpacePeriod, v);
+            else if (key == "auto_capitalize") setBool(s.autoCapitalize, v);
+            else if (key == "smart_punctuation") setBool(s.smartPunctuation, v);
+            else if (key == "quote_style") {
+                if (v.kind == Value::Str) {
+                    std::string q = lower(trim(v.s));
+                    if (q == "curly" || q == "low9" || q == "guillemets") s.quoteStyle = q;
+                }
+            }
+            else if (key == "word_prediction") setBool(s.wordPrediction, v);
             else if (key == "add_tones_hotkey") {
                 if (v.kind == Value::Str) s.addTonesHotkey = v.s;
             }
@@ -237,6 +247,11 @@ std::string serializeConfig(const Settings &s) {
       << "typo_hints = " << b(s.typoHints) << "\n"
       << "tone_hints = " << b(s.toneHints) << "\n"
       << "date_hints = " << b(s.dateHints) << "\n"
+      << "double_space_period = " << b(s.doubleSpacePeriod) << "\n"
+      << "auto_capitalize = " << b(s.autoCapitalize) << "\n"
+      << "smart_punctuation = " << b(s.smartPunctuation) << "\n"
+      << "quote_style = " << quote(s.quoteStyle) << "\n"
+      << "word_prediction = " << b(s.wordPrediction) << "\n"
       << "\n[experimental]\n"
       << "no_underline = " << (s.noUnderline == NoUnderline::ForwardKeys ? "\"forward-keys\"" : "\"off\"") << "\n"
       << "\n[app_modes]\n";

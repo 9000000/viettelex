@@ -111,7 +111,8 @@ add_library(viettelex-common STATIC
   common/src/gnome.cpp
   common/src/gnome_monitor.cpp
   common/src/text_tools.cpp
-  common/src/caret_hints.cpp)
+  common/src/caret_hints.cpp
+  common/src/auto_text.cpp)
 target_include_directories(viettelex-common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/common/include")
 target_compile_definitions(viettelex-common PRIVATE VT_TEXT_TOOL_PATH="${VT_TEXT_TOOL_INSTALLED}")
 target_link_libraries(viettelex-common PUBLIC telexcore PkgConfig::GIO Threads::Threads)
@@ -143,6 +144,11 @@ if(VT_BUILD_TESTS)
   add_executable(test_caret_hints common/tests/test_caret_hints.cpp)
   target_link_libraries(test_caret_hints PRIVATE viettelex-common)
   add_test(NAME caret_hints COMMAND test_caret_hints)
+  # Auto text (auto_text.h + Session): double-space period, sentence capitals, smart quotes /
+  # dashes, word prediction — macOS SystemAutoTextTests / WordPredictionTests cases.
+  add_executable(test_auto_text common/tests/test_auto_text.cpp)
+  target_link_libraries(test_auto_text PRIVATE viettelex-common)
+  add_test(NAME auto_text COMMAND test_auto_text)
   if(VT_TEXT_TOOL)
     # test_common also runs the real helper end to end (runTextTool / TextToolRunner).
     set_tests_properties(common PROPERTIES ENVIRONMENT
@@ -154,6 +160,8 @@ if(VT_BUILD_TESTS)
                      "${VT_REPO_ROOT}/iOS/KeyboardTests/Fixtures/add-tones.txt")
     set_tests_properties(text_tool_fixtures PROPERTIES ENVIRONMENT "VIETTELEX_DATA_DIR=${VT_TEXT_DATA_SRC}")
     set_tests_properties(caret_hints PROPERTIES ENVIRONMENT
+      "VIETTELEX_TEXT_TOOL=${VT_TEXT_TOOL};VIETTELEX_DATA_DIR=${VT_TEXT_DATA_SRC}")
+    set_tests_properties(auto_text PROPERTIES ENVIRONMENT
       "VIETTELEX_TEXT_TOOL=${VT_TEXT_TOOL};VIETTELEX_DATA_DIR=${VT_TEXT_DATA_SRC}")
     # Caret suggestion logic (Swift, CaretSuggest.swift + Serve.swift): the macOS
     # CaretSuggestionsTests / MathHintTests cases + shared math/number fixtures.

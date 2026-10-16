@@ -12,7 +12,9 @@
 //   date    <before> <prevRun> <run> <boundary> <Y> <M> <D> <h> <m>
 //   typo    <before> <word> <boundary> <raw> <flags 10×0/1>
 //   tones   <before>
-// Trả lời: `-` (không gợi ý) hoặc `<kind> <display> <replace> <insert>`.
+//   predict <before> <typed> <raw> <english 0|1>              (gợi ý từ — Predict.swift)
+// Trả lời: `-` (không gợi ý) hoặc `<kind> <display> <replace> <insert>`; "predict" thêm tối đa
+// hai ứng viên phụ (chỉ chữ hiện).
 import Foundation
 #if canImport(Glibc)
 import Glibc
@@ -88,6 +90,8 @@ enum HintProtocol {
                   VTDataFile.url("vnlexicon.bin") != nil,
                   let fix = TypoFixLogic.lexiconCorrection(raw: raw, flags: .init(bits: at(5))) else { return "-" }
             return answer(TypoFixLogic.suggestion(before: before, word: word, boundary: boundary, raw: raw, fix: fix))
+        case "predict":
+            return predictAnswer(before: before, typed: at(2), raw: at(3), english: at(4) == "1")
         case "tones":
             guard let run = ToneRunLogic.run(before: before),
                   let restored = apply(.addTones, run) else { return "-" }

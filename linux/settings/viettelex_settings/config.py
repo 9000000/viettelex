@@ -50,6 +50,13 @@ DEFAULTS = {
         "typo_hints": True,       # tpoi␣ → tôi
         "tone_hints": False,      # toi di hoc. → tôi đi học.
         "date_hints": True,       # hôm nay␣ → 28/09/2026, bây giờ␣ → 21:35
+        # Văn bản tự động (SETTINGS.md §8b) — macOS theo cài đặt Nhập văn bản của hệ thống;
+        # Linux không có ⇒ công tắc riêng, MẶC ĐỊNH TẮT HẾT (terminal / code).
+        "double_space_period": False,   # chào␣␣ → "chào. "
+        "auto_capitalize": False,       # viết hoa chữ đầu câu
+        "smart_punctuation": False,     # " ' → “ ” ‘ ’, -- → —
+        "quote_style": "curly",         # curly “”‘’ | low9 „“‚‘ | guillemets «»‹›
+        "word_prediction": False,       # gợi ý từ: hoàn thành từ / từ kế tiếp (Tab)
     },
     # Thử nghiệm (SETTINGS.md §9): "forward-keys" = gõ không gạch chân ở Chrome/Electron.
     "experimental": {
@@ -64,6 +71,7 @@ APP_MODES = ("preedit", "surrounding", "direct", "off")
 INPUT_METHODS = ("telex", "vni")
 DISPLAY_MODES = ("preedit", "surrounding")
 UI_LANGUAGES = ("vi", "en")
+QUOTE_STYLES = ("curly", "low9", "guillemets")
 
 
 def config_dir():
@@ -287,6 +295,8 @@ def normalize(data):
         g["display_mode"] = "preedit"
     if g["ui_language"] not in UI_LANGUAGES:
         g["ui_language"] = "vi"
+    if g["quote_style"] not in QUOTE_STYLES:
+        g["quote_style"] = "curly"
     if out["experimental"]["no_underline"] not in NO_UNDERLINE_MODES:
         out["experimental"]["no_underline"] = "off"
     if g["add_tones_hotkey"] and normalize_hotkey(g["add_tones_hotkey"]) is None:

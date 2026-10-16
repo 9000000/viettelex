@@ -372,6 +372,15 @@ void Session::applySettings(const Settings &s) {
                          s.collisionPrefersVietnamese,      s.teencode};
     engineBits_.clear();
     for (bool b : bits) engineBits_ += b ? '1' : '0';
+    period_ = s.doubleSpacePeriod;
+    capitalize_ = s.autoCapitalize;
+    smart_ = s.smartPunctuation;
+    predict_ = s.wordPrediction;
+    quotes_ = autotext::quotesFor(s.quoteStyle);
+    if (!predict_) declinedPrediction_.clear();
+    if (!period_) lastSpaceMs_ = -1;
+    if (!smart_) lastEmDashOurs_ = false;
+    if (!capitalize_) autoCappedWord_ = suppressAutoCap_ = false;
     updateHintsOn();
     if (!hintsOn_) tailReset();
 }
@@ -459,20 +468,52 @@ void Session::seedTail(InputContext &ic) {
     }
 }
 
-void Session::requestHint(std::vector<std::string> fields, int delayMs) {
+void Session::requestHint(std::vector<std::string> fields, int delayMs, std::vector<std::string> fallback,
+                          int fallbackDelayMs) {
     if (!hintSink_) return;
     HintRequest r;
     r.line = hints::request(fields);
     r.delayMs = delayMs;
     r.gen = keyGen_->load();
     r.liveGen = keyGen_;
+    if (!fallback.empty()) {
+        r.fallback = hints::request(fallback);
+        r.fallbackDelayMs = fallbackDelayMs;
+    }
     hintSink_(r);
+}
+
+// Context of a word-prediction request. Unlike the other suggestions, an unknown text before
+// the typed tail is NOT marked (U+FFFC): the first word typed after a focus / click in a field
+// whose text is not readable (Chrome, Firefox, Electron — preedit) is taken to stand alone, so
+// "cảm␣" there still offers "ơn". Only a suggestion; nothing is replaced but the word being
+// typed (macOS reads the screen instead, which Linux cannot do in those fields).
+std::string Session::predictBefore() const { return tailHead_ == TailHead::Newline ? "\n" + tail_ : tail_; }
+
+// Word prediction after a space ("cảm ␣" → ơn): the helper request, or {} when not asked.
+std::vector<std::string> Session::nextWordRequest() {
+    if (!predict_ || !hintSink_ || !autoTextHere() || !vt_is_empty(e_) || !autotext::nextWordWorthAsking(tail_))
+        return {};
+    declinedPrediction_.clear();  // a new word: the old Esc no longer applies
+    return {"predict", predictBefore(), "", "", vt_previous_word_english(e_) ? "1" : "0"};
+}
+
+// Completion of the word being typed ("đư" → được / đường / đưa), after kPredictIdleMs of no
+// typing (HintService waits; any key moves the generation on and cancels it).
+void Session::schedulePrediction(const std::string &typed, const std::string &rawKeys) {
+    // Preedit: the word is the composition (nothing on screen to replace); Surrounding: it is
+    // on screen and only replaced where the Session may edit.
+    if (!autoTextHere() || (mode_ == DisplayMode::Surrounding && !surroundingEdits_)) return;
+    if (!autotext::completionWorthAsking(typed) || autotext::predictionMuted(typed, declinedPrediction_)) return;
+    requestHint({"predict", predictBefore() + typed, typed, rawKeys, vt_previous_word_english(e_) ? "1" : "0"},
+                autotext::kPredictIdleMs);
 }
 
 // A printable boundary (or Enter / Tab / navigation) was just handled: keep the typed tail
 // in step with the screen, then fire the cheap triggers (MathHint.swift afterEquals /
 // afterNumberSpace, CaretSuggestions.swift afterWord — same order: date, typo, tones).
-void Session::afterBoundary(uint32_t ch, uint32_t keysym) {
+// Word prediction after a space comes last, as a fallback: any other suggestion wins.
+void Session::afterBoundary(uint32_t ch, uint32_t keysym, const std::string *typed) {
     if (isNewlineKey(keysym)) {
         tail_.clear();
         tailHead_ = TailHead::Newline;
@@ -494,7 +535,7 @@ void Session::afterBoundary(uint32_t ch, uint32_t keysym) {
     size_t ps = pe;
     while (ps > 0 && !isTailSpace(tail_[ps - 1])) --ps;
     std::string prevRun = tail_.substr(ps, pe - ps);
-    std::string boundary = encode(ch);
+    std::string boundary = typed ? *typed : encode(ch);
     tailAppend(boundary);
 
     hints::ToneTrigger tt = hintFlags_.tones ? toneTracker_.feed(run, ch) : hints::ToneTrigger::None;
@@ -503,46 +544,113 @@ void Session::afterBoundary(uint32_t ch, uint32_t keysym) {
         if (hintFlags_.math) requestHint({"math", typedBefore()});
         return;
     }
+    std::vector<std::string> primary;
+    int delayMs = 0;
     // Everything else replaces committed text: only where the Session may edit before the
     // caret (surrounding proven, or Direct's blind BackSpaces) — macOS `canReplace`.
-    if (mode_ != DisplayMode::Direct && !surroundingEdits_) return;
-    if (hintFlags_.number && hints::numberWorthChecking(ch, run, prevRun)) {
-        requestHint({"number", typedBefore()});
-        return;
-    }
-    if (hintFlags_.date && hints::dateCandidate(ch, prevRun, run)) {
+    if (mode_ != DisplayMode::Direct && !surroundingEdits_) {
+    } else if (hintFlags_.number && hints::numberWorthChecking(ch, run, prevRun)) {
+        primary = {"number", typedBefore()};
+    } else if (hintFlags_.date && hints::dateCandidate(ch, prevRun, run)) {
         std::time_t t = std::time(nullptr);
         std::tm lt{};
         localtime_r(&t, &lt);
-        requestHint({"date", typedBefore(), prevRun, run, boundary, std::to_string(lt.tm_year + 1900),
-                     std::to_string(lt.tm_mon + 1), std::to_string(lt.tm_mday), std::to_string(lt.tm_hour),
-                     std::to_string(lt.tm_min)});
-        return;
-    }
-    if (hintFlags_.typo && lastEnded_.ended && !lastEnded_.raw.empty() && lastEnded_.text == run &&
-        hints::typoWorthChecking(ch, lastEnded_.raw, run) && !rejectedTypos_.contains(run) &&
-        // An unaccented syllable ("hoc" = học/hóc) is never a typo for TypoFixLogic (the
-        // lexicon has a toned completion); skipping it here keeps it from masking Thêm dấu.
-        !vt_is_unaccented_syllable(run.c_str())) {
+        primary = {"date", typedBefore(), prevRun, run, boundary, std::to_string(lt.tm_year + 1900),
+                   std::to_string(lt.tm_mon + 1), std::to_string(lt.tm_mday), std::to_string(lt.tm_hour),
+                   std::to_string(lt.tm_min)};
+    } else if (hintFlags_.typo && lastEnded_.ended && !lastEnded_.raw.empty() && lastEnded_.text == run &&
+               hints::typoWorthChecking(ch, lastEnded_.raw, run) && !rejectedTypos_.contains(run) &&
+               // An unaccented syllable ("hoc" = học/hóc) is never a typo for TypoFixLogic (the
+               // lexicon has a toned completion); skipping it here keeps it from masking Thêm dấu.
+               !vt_is_unaccented_syllable(run.c_str())) {
         // An English word of the engine's list: the helper would answer "no fix" (isKnown) —
         // same outcome without waking it (it stays asleep while typing English).
         if (!hints::typoKnownEnglish(lastEnded_.raw))
-            requestHint({"typo", typedBefore(), run, boundary, lastEnded_.raw, engineBits_});
-        return;
+            primary = {"typo", typedBefore(), run, boundary, lastEnded_.raw, engineBits_};
+    } else if (tt != hints::ToneTrigger::None) {
+        primary = {"tones", typedBefore()};
+        delayMs = tt == hints::ToneTrigger::Pause ? 900 : 0;  // ToneRunLogic.pauseDelay
     }
-    if (tt != hints::ToneTrigger::None)
-        requestHint({"tones", typedBefore()}, tt == hints::ToneTrigger::Pause ? 900 : 0);  // ToneRunLogic.pauseDelay
+    std::vector<std::string> next;
+    if (ch == ' ' && predict_) next = nextWordRequest();
+    if (!primary.empty()) requestHint(std::move(primary), delayMs, std::move(next), autotext::kPredictIdleMs);
+    else if (!next.empty()) requestHint(std::move(next), autotext::kPredictIdleMs);
 }
 
 void Session::deliverHint(uint64_t gen, const CaretSuggestion &s, InputContext &ic) {
-    if (!hintsOn_ || gen != keyGen_->load() || passthrough_ || !vietnamese_ || !vt_is_empty(e_)) return;
+    if (!hintsOn_ || gen != keyGen_->load() || passthrough_ || !vietnamese_) return;
+    if (s.kind == CaretSuggestion::Kind::Predict) {
+        // Every other suggestion wins (CaretHint.present); never in terminals.
+        if (!predict_ || hint_ || mode_ == DisplayMode::Direct) return;
+        if (s.replace.empty()) {
+            if (!vt_is_empty(e_) || !endsWith(tail_, " ")) return;  // next word: right after the space
+        } else {
+            // completion: the word being composed is still exactly what was asked about
+            if (vt_is_empty(e_) || composed() != s.replace) return;
+            if (mode_ == DisplayMode::Surrounding && !surroundingEdits_) return;
+            if (autotext::predictionMuted(s.replace, declinedPrediction_)) return;
+        }
+        hint_ = s;
+        ic.showCandidates(s.candidates(), "Tab");
+        return;
+    }
+    if (!vt_is_empty(e_)) return;
     if (!s.replace.empty() && mode_ != DisplayMode::Direct && !surroundingEdits_) return;
     if (!endsWith(tail_, s.replace)) return;  // the typed text moved on
     if (s.kind == CaretSuggestion::Kind::Tones && !declinedTones_.empty() &&
         s.replace.compare(0, declinedTones_.size(), declinedTones_) == 0)
         return;
+    if (hint_) ic.hideHint();  // a word prediction was shown: this one replaces it
     hint_ = s;
     ic.showHint(hints::label(s));
+}
+
+bool Session::chooseHint(size_t index, InputContext &ic) {
+    if (!hint_ || hint_->kind != CaretSuggestion::Kind::Predict) return false;
+    std::vector<std::string> c = hint_->candidates();
+    if (index >= c.size()) return false;
+    selectionMemo_ = -1;
+    if (hintsOn_) keyGen_->fetch_add(1);
+    return applyPrediction(c[index], ic);
+}
+
+// Tab / click on a word prediction: the word being composed (or nothing, after a space) becomes
+// `word` + a space; then the next word is offered as after a typed space.
+bool Session::applyPrediction(const std::string &word, InputContext &ic) {
+    CaretSuggestion s = *hint_;
+    dismissHint(ic);
+    const std::string insert = word + " ";
+    if (!s.replace.empty()) {
+        if (vt_is_empty(e_) || composed() != s.replace) return false;
+        if (mode_ == DisplayMode::Preedit) {
+            vt_reset(e_);
+            ic.commit(insert);  // before hiding the preedit (see finish)
+            hidePreedit(ic);
+        } else if (mode_ == DisplayMode::Surrounding) {
+            if (ic.hasSelection() || !inPlaceAllowed(ic, s.replace)) return false;
+            replace(ic, int(utf8Chars(s.replace)), insert, s.replace);
+            vt_reset(e_);
+            preedit_.clear();
+        } else {
+            return false;
+        }
+        applyPendingMode();
+    } else {
+        if (!vt_is_empty(e_) || mode_ == DisplayMode::Direct) return false;
+        replace(ic, 0, insert, std::string());
+    }
+    tailAppend(insert);
+    vt_forget_last_commit(e_);  // ⌫ must not re-open the word that was replaced
+    lastWasBoundaryChar_ = false;
+    lastEnded_ = EndedWord();
+    toneTracker_.reset();
+    gluedToDigit_ = false;
+    caretMoved_ = false;
+    autoCappedWord_ = suppressAutoCap_ = false;
+    lastSpaceMs_ = -1;
+    std::vector<std::string> next = nextWordRequest();
+    if (!next.empty()) requestHint(std::move(next), autotext::kPredictIdleMs);
+    return true;
 }
 
 void Session::dismissHint(InputContext &ic) {
@@ -561,12 +669,15 @@ void Session::declineHint(InputContext &ic) {
         rejectedTypos_.add(w);
     } else if (hint_->kind == CaretSuggestion::Kind::Tones) {
         declinedTones_ = hint_->replace;
+    } else if (hint_->kind == CaretSuggestion::Kind::Predict && !hint_->replace.empty()) {
+        declinedPrediction_ = hint_->replace;  // not again while the word starts with it
     }
     dismissHint(ic);
 }
 
 // Tab (math: Enter too). False = the screen no longer matches: dismissed, key goes on.
 bool Session::applyHint(InputContext &ic) {
+    if (hint_->kind == CaretSuggestion::Kind::Predict) return applyPrediction(hint_->display, ic);
     CaretSuggestion s = *hint_;
     dismissHint(ic);
     if (!s.replace.empty() && mode_ != DisplayMode::Direct) {
@@ -664,6 +775,9 @@ void Session::focusIn() {
     hint_.reset();  // the frontend hid it on focus-out (finish)
     if (hintsOn_) keyGen_->fetch_add(1);
     tailReset();
+    lastSpaceMs_ = -1;
+    lastEmDashOurs_ = autoCappedWord_ = suppressAutoCap_ = false;
+    declinedPrediction_.clear();
     caretMoved_ = true;
     lastWasBoundaryChar_ = false;
 }
@@ -672,6 +786,8 @@ void Session::finish(InputContext &ic, bool commitPreedit) {
     dismissHint(ic);
     if (hintsOn_) keyGen_->fetch_add(1);  // answers still on their way are stale now
     tailReset();
+    lastSpaceMs_ = -1;
+    lastEmDashOurs_ = autoCappedWord_ = suppressAutoCap_ = false;
     ackDrop();  // the caret moved / focus left: nothing to compare any more
     if (mode_ == DisplayMode::Preedit && !vt_is_empty(e_)) {
         std::string text = composed();
@@ -768,9 +884,22 @@ void Session::endWord(InputContext &ic, bool suppressRestore, bool allowShortcut
 
 bool Session::processKey(const KeyEvent &ev, InputContext &ic) {
     if (ev.forwarded) return false;  // our own forwarded key: the app must get it untouched
-    if (ev.release) return false;
+    if (ev.release) {
+        // Double-space period: a held space (autorepeat — frameworks send no repeat flag)
+        // presses again without a release in between.
+        if (ev.keysym == ks::space) spaceReleased_ = true;
+        return false;
+    }
     if (ks::isModifierOnly(ev.keysym)) return false;
     selectionMemo_ = -1;
+    // Auto text state of the previous key: every real key consumes it (macOS periodSpaceNs /
+    // lastEmDashOurs).
+    const int64_t prevSpaceMs = lastSpaceMs_;
+    const bool prevEmDashOurs = lastEmDashOurs_;
+    lastSpaceMs_ = -1;
+    lastEmDashOurs_ = false;
+    const bool spaceHeld = ev.keysym == ks::space && !spaceReleased_;
+    if (ev.keysym == ks::space) spaceReleased_ = false;
     applyPendingMode();
     // Key edits ([experimental] no_underline): confirm the last ones before anything else.
     ackLagging_ = false;
@@ -854,17 +983,42 @@ bool Session::processKey(const KeyEvent &ev, InputContext &ic) {
         bool r = handleLetter(ch, ic);
         caretMoved_ = false;
         lastWasBoundaryChar_ = false;
+        // Word prediction: complete the word being typed after a pause (off = one bool).
+        if (predict_ && hintSink_ && !vt_is_empty(e_)) schedulePrediction(composed(), raw());
         return r;
     }
 
     // Boundary: space, punctuation, digits (Telex), Enter/Tab/Esc, navigation, …
     bool printable = ch >= 0x20 && ch < 0x7f;
     bool newline = isNewlineKey(ev.keysym);
+    autoCappedWord_ = suppressAutoCap_ = false;
+    // Double-space period / "--" → "—": the second key arrives once the word is committed and
+    // replaces committed text (only where the Session may edit; screen read back first).
+    if (printable && (ch == ' ' ? period_ : (ch == '-' && smart_)) && !ks::isKeypad(ev.keysym) &&
+        vt_is_empty(e_) && tryAutoReplace(ch == ' ', prevSpaceMs, spaceHeld, prevEmDashOurs, ic)) {
+        gluedToDigit_ = false;
+        lastWasBoundaryChar_ = false;
+        caretMoved_ = false;
+        return true;
+    }
     endWord(ic, printable && isBracket(ch), !gluedToDigit_);
     if (newline) vt_reset_context(e_);   // a new line has no preceding word
-    if (hintsOn_) afterBoundary(ch, ev.keysym);
-    if (printable && mode_ == DisplayMode::Surrounding) ackAppend(encode(ch));  // the app types it
+    // Smart quotes: “ ” ‘ ’ instead of the key (inserted, nothing replaced).
+    std::string quoted;
+    if (printable && (ch == '"' || ch == '\'') && smart_ && autoTextHere() && smartQuoteFor(ch, ic, quoted))
+        ic.commit(quoted);
+    if (hintsOn_) afterBoundary(ch, ev.keysym, quoted.empty() ? nullptr : &quoted);
+    if (printable && mode_ == DisplayMode::Surrounding)
+        ackAppend(quoted.empty() ? encode(ch) : quoted);  // the app types it / we committed it
     else ackDrop();
+    if (!quoted.empty()) {
+        vt_forget_last_commit(e_);  // ⌫ re-open compares word + the key: not what is on screen
+        gluedToDigit_ = false;
+        lastWasBoundaryChar_ = false;
+        caretMoved_ = false;
+        return true;
+    }
+    if (ch == ' ' && period_ && !ks::isKeypad(ev.keysym)) lastSpaceMs_ = nowMs_ ? nowMs_() : 0;
     if (printable) {
         gluedToDigit_ = gluesShortcutToken(ch);
         lastWasBoundaryChar_ = true;
@@ -929,6 +1083,20 @@ bool Session::handleLetter(uint32_t ch, InputContext &ic) {
                     ic.deleteBeforeCursor(int(n));
                     preedit_.clear();
                 }
+            }
+        }
+    }
+
+    // Sentence capital (auto_capitalize): decided ONCE, on the first letter of a word, by
+    // feeding the engine the uppercase key — Telex still composes ("Dduwowcj" → "Được").
+    if (capitalize_ && vt_is_empty(e_)) {
+        autoCappedWord_ = false;
+        if (ch >= 'a' && ch <= 'z' && autoTextHere()) {
+            if (suppressAutoCap_) {
+                suppressAutoCap_ = false;  // the user deleted the last auto capital: keep this one
+            } else if (shouldCapitalize(ic)) {
+                ch = autotext::capitalized(ch);
+                autoCappedWord_ = true;
             }
         }
     }
@@ -1038,6 +1206,11 @@ bool Session::handleBackspace(InputContext &ic) {
     if (mode_ == DisplayMode::Surrounding) shown = composed();
     vt_action a;
     vt_backspace(e_, &a);
+    // ⌫ took away exactly the auto capital: the user declined it — the next first letter stays.
+    if (autoCappedWord_ && vt_is_empty(e_)) {
+        suppressAutoCap_ = true;
+        autoCappedWord_ = false;
+    }
     if (mode_ == DisplayMode::Preedit) {
         if (vt_is_empty(e_)) {
             vt_reset(e_);
@@ -1057,6 +1230,113 @@ bool Session::handleBackspace(InputContext &ic) {
         return false;
     }
     replace(ic, a.backspaces, std::string(a.insert, size_t(a.insert_len > 0 ? a.insert_len : 0)), shown);
+    return true;
+}
+
+// MARK: - auto text (auto_text.h)
+
+namespace {
+uint32_t lastCodePoint(const std::string &s) {
+    if (s.empty()) return 0;
+    size_t i = s.size() - 1;
+    while (i > 0 && (static_cast<unsigned char>(s[i]) & 0xc0) == 0x80) --i;
+    return decodeOne(s.substr(i));
+}
+}  // namespace
+
+// First letter of a word: is it a sentence start? Decided from the typed tail (`atStart` = the
+// tail starts the field and is empty — a sentence start only in a multi-line field), else from
+// up to 24 characters read back where the client's text is proven.
+bool Session::shouldCapitalize(InputContext &ic) {
+    std::string before;
+    bool known = true, atStart = false;
+    if (tailHead_ == TailHead::Start) {
+        before = tail_;
+        atStart = tail_.empty();
+    } else if (tailHead_ == TailHead::Newline) {
+        before = "\n" + tail_;
+    } else if (!tail_.empty()) {
+        before = tail_;
+    } else {
+        known = false;
+    }
+    autotext::CapContext c =
+        known ? autotext::capitalization(&before, atStart && multiline_) : autotext::CapContext::Unknown;
+    // Not known from the keys (just clicked / focused): read up to 24 characters once, where
+    // the client's text is proven (SystemAutoText: only the first letter after a click).
+    if (c == autotext::CapContext::Unknown && surroundingEdits_ && mode_ != DisplayMode::Direct) {
+        std::string screen;
+        if (ic.textBeforeCursorTail(24, screen))
+            c = screen.empty() ? autotext::capitalization(nullptr, multiline_)
+                               : autotext::capitalization(&screen, false);
+    }
+    return c == autotext::CapContext::Capitalize;
+}
+
+// Smart quote for the " / ' key: the character before the caret from the tail, else (proven
+// surrounding only) one character read back. False = unknown → the key stays as it is.
+bool Session::smartQuoteFor(uint32_t ch, InputContext &ic, std::string &out) {
+    uint32_t prev = 0;
+    bool hasPrev = false;
+    if (!tail_.empty()) {
+        prev = lastCodePoint(tail_);
+        hasPrev = true;
+    } else if (tailHead_ == TailHead::Newline) {
+        prev = '\n';
+        hasPrev = true;
+    } else if (tailHead_ != TailHead::Start) {
+        std::string b;
+        if (!surroundingEdits_ || mode_ == DisplayMode::Direct || !ic.textBeforeCursorTail(1, b)) return false;
+        if (!b.empty()) {
+            prev = lastCodePoint(b);
+            hasPrev = true;
+        }
+    }
+    out = autotext::smartQuote(ch, prev, hasPrev, quotes_);
+    return !out.empty();
+}
+
+// Second space → ". " / second "-" → "—" / "—" + "-" → "---" (engine empty). Decided from the
+// typed tail; the characters to replace are read back from the screen and must match.
+bool Session::tryAutoReplace(bool space, int64_t prevSpaceMs, bool spaceHeld, bool prevEmDashOurs,
+                             InputContext &ic) {
+    if (!autoTextHere() || !surroundingEdits_) return false;
+    if (space && prevSpaceMs < 0) return false;
+    // Two characters are needed; a shorter tail with unknown text before it: read them back.
+    std::string before = tail_;
+    if (utf8Chars(before) < 2 && tailHead_ == TailHead::Unknown && !ic.textBeforeCursorTail(2, before)) return false;
+    if (before.empty()) return false;
+    std::string expect, insert;
+    if (space) {
+        uint32_t prev = 0;
+        int64_t now = nowMs_ ? nowMs_() : 0;
+        if (!autotext::doubleSpacePeriod(before, now - prevSpaceMs, spaceHeld, &prev)) return false;
+        expect = encode(prev) + " ";
+        insert = ". ";
+    } else {
+        switch (autotext::dash(before, prevEmDashOurs)) {
+        case autotext::DashEdit::None: return false;
+        case autotext::DashEdit::EmDash:
+            expect = before.substr(lastCharsOffset(before, 2));
+            insert = "\xe2\x80\x94";  // —
+            break;
+        case autotext::DashEdit::Restore:
+            expect = "\xe2\x80\x94";
+            insert = "---";
+            break;
+        }
+    }
+    std::string screen;
+    if (!ic.textBeforeCursorTail(utf8Chars(expect), screen) || !endsWith(screen, expect)) return false;
+    if (ic.hasSelection()) return false;
+    replace(ic, 1, insert, expect);
+    if (hintsOn_) {
+        tailPop(1);
+        tailAppend(insert);
+    }
+    vt_forget_last_commit(e_);  // ⌫ deletes what was inserted, it does not re-open a word
+    lastEnded_ = EndedWord();
+    lastEmDashOurs_ = !space && insert != "---";
     return true;
 }
 
