@@ -96,7 +96,7 @@ object Keys {
     const val KEY_SOUND_VOLUME = "keySoundVolume"
     /** String — kiểu âm phím ([KeySoundStyle.id]): subtle|wood|mechanical|typewriter|bubble|custom, mặc định subtle. */
     const val KEY_SOUND_STYLE = "keySoundStyle"
-    /** Int −10…10 (dp mỗi hàng). */
+    /** Int −10…18 (dp mỗi hàng; [KeyboardSettings.ROW_HEIGHT_MAX], trên +10 còn kẹp theo cao màn hình). */
     const val ROW_HEIGHT_ADJUST = "rowHeightAdjust"
     /** Bool — hàng phím số trên plane chữ (tên như iOS App Group). */
     const val NUMBER_ROW = "numberRow"
@@ -108,8 +108,12 @@ object Keys {
     const val LONG_PRESS_NUMBERS = "longPressNumbers"
     /** Bool — giữ a–l, z–m ra ký hiệu, mặc định TẮT — [KeyAlternates]. */
     const val LONG_PRESS_SYMBOLS = "longPressSymbols"
-    /** String "comma" | "period" | "off" — phím cạnh dấu cách bàn chữ điện thoại ([SpaceSideKey]), mặc định "comma". */
+    /** String "comma" | "period" | "both" | "off" — phím cạnh dấu cách bàn chữ điện thoại ([SpaceSideKey]), mặc định "comma". */
     const val SPACE_SIDE_KEY = "spaceSideKey"
+    /** String "bottom" | "top" — nút 😊 ở hàng đáy hay thanh gợi ý ([EmojiKeyPlacement]), mặc định "bottom". Tên như iOS App Group. */
+    const val EMOJI_KEY_PLACEMENT = "emojiKeyPlacement"
+    /** String "medium" | "large" — cỡ chữ trên phím ([KeyLabelSize], Android), mặc định "medium". */
+    const val KEY_LABEL_SIZE = "keyLabelSize"
     /** String "off" | "left" | "right" — chế độ một tay (điện thoại; tên như iOS App Group). */
     const val ONE_HAND_MODE = "oneHandMode"
     /**

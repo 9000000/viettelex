@@ -271,6 +271,7 @@ struct TinhNangSections: View {
     @AppStorage(PlusFeature.textToolsKey, store: featureDefaults) private var textToolsEnabled = true
     @AppStorage("oneHandMode", store: featureDefaults) private var oneHandMode = "off"
     @AppStorage(SpaceSideKey.key, store: featureDefaults) private var spaceSideKey = SpaceSideKey.defaultValue.rawValue
+    @AppStorage(EmojiKeyPlacement.key, store: featureDefaults) private var emojiKeyPlacement = EmojiKeyPlacement.defaultValue.rawValue
     @AppStorage("clipboardHistory", store: featureDefaults) private var clipboardHistory = false
     @AppStorage("incognitoMode", store: featureDefaults) private var incognitoMode = false
     @AppStorage(ICloudSync.enabledKey, store: featureDefaults) private var iCloudSync = false
@@ -300,6 +301,7 @@ struct TinhNangSections: View {
         case .phim:
             return Self.join([(numberRow, numberRowFullHeight ? L("Hàng số cao") : L("Hàng số")),
                               (SpaceSideKey.parse(spaceSideKey) != .defaultValue, L("Phím cạnh dấu cách")),
+                              (EmojiKeyPlacement.parse(emojiKeyPlacement) != .defaultValue, L("Nút emoji")),
                               (spaceSwipeLanguage, L("Vuốt phím cách")),
                               (swipeKeyCommands, L("Vuốt sao chép/dán")),
                               (autoSpaceAfterPunct, L("Cách sau dấu câu")),
@@ -570,8 +572,10 @@ struct PhimPage: View {
     @AppStorage("autoSpaceAfterPunct", store: featureDefaults) private var autoSpaceAfterPunct = false
     /// "off" | "left" | "right" — bàn phím đọc lúc hiện (OneHand.resolve).
     @AppStorage("oneHandMode", store: featureDefaults) private var oneHandMode = "off"
-    /// "Phím cạnh dấu cách": "comma" (mặc định) | "period" | "off" — bàn phím đọc lúc hiện (SpaceSideKey).
+    /// "Phím cạnh dấu cách": "comma" (mặc định) | "period" | "both" | "off" — bàn phím đọc lúc hiện (SpaceSideKey).
     @AppStorage(SpaceSideKey.key, store: featureDefaults) private var spaceSideKey = SpaceSideKey.defaultValue.rawValue
+    /// "Nút emoji": "bottom" (mặc định) | "top" — bàn phím đọc lúc hiện (EmojiKeyPlacement).
+    @AppStorage(EmojiKeyPlacement.key, store: featureDefaults) private var emojiKeyPlacement = EmojiKeyPlacement.defaultValue.rawValue
     /// Ô phóng to chữ khi bấm phím — mặc định BẬT (KeyboardView.keyPreviewKey).
     @AppStorage("keyPreviewEnabled", store: featureDefaults) private var keyPreview = true
     /// Phím sẫm khi bấm (KeyboardView.keyPressHighlightKey) — mặc định = keyPressHighlightDefault.
@@ -607,11 +611,25 @@ struct PhimPage: View {
                             set: { spaceSideKey = $0 })) {
                             Text(L("Dấu phẩy")).tag(SpaceSideKey.comma.rawValue)
                             Text(L("Dấu chấm")).tag(SpaceSideKey.period.rawValue)
+                            Text(L("Cả hai")).tag(SpaceSideKey.both.rawValue)
                             Text(L("Tắt")).tag(SpaceSideKey.off.rawValue)
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        Text(L("Phím hẹp bên phải phím cách trên bàn chữ (ô email, đường dẫn giữ nguyên). Dấu chấm: giữ phím ra dấu phẩy (khi bật giữ phím ra ký tự đặc biệt). Tắt: phím cách rộng hơn; chạm phím cách hai lần vẫn ra dấu chấm."))
+                        Text(L("Phím hẹp bên phải phím cách trên bàn chữ (ô email, đường dẫn giữ nguyên). Dấu chấm: giữ phím ra dấu phẩy (khi bật giữ phím ra ký tự đặc biệt). Cả hai: dấu phẩy bên trái, dấu chấm bên phải phím cách. Tắt: phím cách rộng hơn; chạm phím cách hai lần vẫn ra dấu chấm."))
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L("Nút emoji"))
+                        Picker(L("Nút emoji"), selection: Binding(
+                            get: { EmojiKeyPlacement.parse(emojiKeyPlacement).rawValue },
+                            set: { emojiKeyPlacement = $0 })) {
+                            Text(L("Hàng dưới")).tag(EmojiKeyPlacement.bottom.rawValue)
+                            Text(L("Thanh trên")).tag(EmojiKeyPlacement.top.rawValue)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        Text(L("Thanh trên: nút 😊 lên thanh gợi ý (cạnh nút thu gọn), phím cách rộng hơn. Khi thanh gợi ý tắt hoặc không hiện ở ô đang gõ, nút 😊 vẫn ở hàng dưới."))
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     if !numberRow {

@@ -13,6 +13,8 @@ object StripGeometry {
     /** Bề ngang ô icon con trỏ (sau ô mẫu câu) / ô 📋 (trước ⌄), dp. */
     const val TOOL_W = 44f
     const val CLIP_W = 40f
+    /** Ô nút 😊 sát trái ⌄ ("Nút emoji" = Thanh trên), dp. */
+    const val EMOJI_W = 40f
     /** Icon thanh công cụ khi mở (☰ mẫu câu, con trỏ, 📋), dp; ⌄ nhỏ hơn 2 dp. */
     const val ICON_OPEN = 22f
     /** Icon khi thu gọn (hàng nổi 14 dp). */
@@ -46,9 +48,17 @@ object StripGeometry {
     fun barLeft(zoneW: Float, toolW: Float, toolsShown: Boolean): Float =
         zoneW + if (toolsShown) toolW else 0f
 
-    /** Mép phải vùng slot (dp): trừ zone ⌄ và ô 📋 (chỉ khi có nút và [toolsShown]). */
-    fun barRight(width: Float, zoneW: Float, clipW: Float, clipButton: Boolean, toolsShown: Boolean): Float =
-        width - zoneW - if (clipButton && toolsShown) clipW else 0f
+    /**
+     * Bề ngang các nút giữa slot và zone ⌄ (dp): 😊 ([emojiButton], LUÔN — cả khi có gợi ý, để emoji
+     * không mất lối vào) + 📋 (chỉ khi có nút và [toolsShown]).
+     */
+    fun rightExtraW(clipW: Float, clipButton: Boolean, toolsShown: Boolean, emojiButton: Boolean = false): Float =
+        (if (emojiButton) EMOJI_W else 0f) + (if (clipButton && toolsShown) clipW else 0f)
+
+    /** Mép phải vùng slot (dp): trừ zone ⌄, ô 😊 ([emojiButton]) và ô 📋 (chỉ khi có nút và [toolsShown]). */
+    fun barRight(width: Float, zoneW: Float, clipW: Float, clipButton: Boolean, toolsShown: Boolean,
+                 emojiButton: Boolean = false): Float =
+        width - zoneW - rightExtraW(clipW, clipButton, toolsShown, emojiButton)
 
     /** Mép trái/phải slot i (0..2) trong [barL, barR] → ghi vào [l]/[r]. */
     fun thirds(barL: Float, barR: Float, l: FloatArray, r: FloatArray) {

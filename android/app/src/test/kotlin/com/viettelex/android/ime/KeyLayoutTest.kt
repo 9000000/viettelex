@@ -6,6 +6,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.viettelex.keyboard.SpaceSideKey
+import com.viettelex.keyboard.EmojiKeyPlacement
+import com.viettelex.keyboard.KeyLabelSize
+import com.viettelex.keyboard.KeyboardSettings
+import org.junit.Assert.assertFalse
 
 class KeyLayoutTest {
     private val d = 1f   // dp = px
@@ -26,6 +30,8 @@ class KeyLayoutTest {
         near(KeyLayout.keyAreaDp(true, true, 0), 300f)
         near(KeyLayout.keyAreaDp(false, false, 10), 264f)
         near(KeyLayout.keyAreaDp(false, false, -99), 184f)       // kẹp −10
+        near(KeyLayout.keyAreaDp(false, false, 18), 296f)        // trần mới +18 (16/10/2026)
+        near(KeyLayout.keyAreaDp(false, false, 99), 296f)        // kẹp +18
         near(KeyLayout.stripDp(true, false), 42f)   // #112: tỉ lệ Gboard
         near(KeyLayout.stripDp(true, true), 14f)
         near(KeyLayout.stripDp(false, false), 0f)
@@ -523,6 +529,142 @@ class KeyLayoutTest {
             assertEquals(tag, bottom.map { it.kind },
                 KeyLayout.build(c.copy(plane = Plane.EMOJI_SEARCH)).filter { it.top > 0.8f * sh.h - 1 }
                     .sortedBy { it.left }.map { it.kind })
+        }
+    }
+    private fun cfg(side: SpaceSideKey = SpaceSideKey.DEFAULT, plane: Plane = Plane.LETTERS, kind: InputKind = InputKind.NORMAL,
+                    tablet: Boolean = false, one: OneHandSide = OneHandSide.OFF, emojiInStrip: Boolean = false) =
+        LayoutConfig(plane, W, H, d, kind, tablet = tablet, oneHand = one, spaceSideKey = side, emojiInStrip = emojiInStrip)
+    private fun bottomOf(c: LayoutConfig) = KeyLayout.build(c).filter { it.top > 3 * c.keyAreaPx / 4 - 1 }.sortedBy { it.left }
+    private fun kindsOf(c: LayoutConfig) = bottomOf(c).map { if (it.kind == KeyKind.PUNCT) it.insert else it.kind.toString() }
+    private val kP = KeyKind.PLANE.toString(); private val kE = KeyKind.EMOJI.toString()
+    private val kS = KeyKind.SPACE.toString(); private val kR = KeyKind.RETURN.toString()
+    private val kX = KeyKind.DISMISS.toString()
+
+    /**
+     * "Cả hai" (16/10/2026): điện thoại [?123][😊][,][space][.][↵] — "," trái, "." phải, mỗi phím
+     * hẹp như phím cạnh space; space co đúng một phím hẹp + một khe so với Dấu phẩy.
+     */
+    @Test fun spaceSideBoth() {
+        assertEquals(SpaceSideKey.BOTH, SpaceSideKey.of("both"))
+        assertEquals(listOf(kP, kE, ",", kS, ".", kR), kindsOf(cfg(SpaceSideKey.BOTH)))
+        val comma = bottomOf(cfg(SpaceSideKey.COMMA)); val both = bottomOf(cfg(SpaceSideKey.BOTH))
+        near(both[2].width, KeyLayout.PHONE_LETTERS_COMMA * W)
+        near(both[4].width, KeyLayout.PHONE_LETTERS_COMMA * W)
+        near(both[3].width, comma[2].width - KeyLayout.PHONE_LETTERS_COMMA * W - KeyLayout.KEY_SPACING)
+        // ?123, 😊, ↵ không dời; "." đúng chỗ "," cũ.
+        near(both[0].left, comma[0].left); near(both[1].right, comma[1].right)
+        near(both[4].left, comma[3].left); near(both[5].right, comma[4].right)
+        // Một tay cùng quy tắc; ô URL / email / tablet / plane số như Dấu phẩy.
+        assertEquals(listOf(kP, kE, ",", kS, ".", kR), kindsOf(cfg(SpaceSideKey.BOTH, one = OneHandSide.LEFT)))
+        for (c in listOf(cfg(SpaceSideKey.BOTH, kind = InputKind.URL), cfg(SpaceSideKey.BOTH, kind = InputKind.EMAIL),
+                cfg(SpaceSideKey.BOTH, tablet = true), cfg(SpaceSideKey.BOTH, plane = Plane.NUMBERS))) {
+            assertEquals(KeyLayout.build(c.copy(spaceSideKey = SpaceSideKey.COMMA)).map { it.toString() },
+                KeyLayout.build(c).map { it.toString() })
+        }
+        // Tablet "Cả hai" ≡ Dấu phẩy: "," và "." hai bên space.
+        assertEquals(listOf(kP, kE, ",", kS, ".", kR, kX), kindsOf(cfg(SpaceSideKey.BOTH, tablet = true)))
+        assertEquals(SpaceSideKey.BOTH, KeyLayout.sideKey(cfg(SpaceSideKey.BOTH)))
+        assertEquals(".", SpaceSideKey.BOTH.right); assertEquals(",", SpaceSideKey.BOTH.left)
+        assertNull(SpaceSideKey.COMMA.left); assertNull(SpaceSideKey.PERIOD.left); assertNull(SpaceSideKey.OFF.right)
+    }
+
+    /**
+     * "Nút emoji" = Thanh trên: bàn chữ bỏ 😊, space ăn đúng phím 😊 + một khe; mọi tổ hợp
+     * phím cạnh dấu cách; plane số, ô tìm emoji, mẫu câu giữ nguyên.
+     */
+    @Test fun emojiInStripLayouts() {
+        val expect = mapOf(
+            SpaceSideKey.COMMA to listOf(kP, kS, ",", kR), SpaceSideKey.PERIOD to listOf(kP, kS, ".", kR),
+            SpaceSideKey.BOTH to listOf(kP, ",", kS, ".", kR), SpaceSideKey.OFF to listOf(kP, kS, kR))
+        for ((side, kinds) in expect) {
+            val top = cfg(side, emojiInStrip = true)
+            assertEquals("$side", kinds, kindsOf(top))
+            val withEmoji = bottomOf(cfg(side)); val without = bottomOf(top)
+            val emoji = withEmoji.first { it.kind == KeyKind.EMOJI }
+            val sp0 = withEmoji.first { it.kind == KeyKind.SPACE }; val sp1 = without.first { it.kind == KeyKind.SPACE }
+            near(sp1.width, sp0.width + emoji.width + KeyLayout.KEY_SPACING)
+            near(without.last().right, withEmoji.last().right)   // ↵ không dời
+        }
+        // URL / email: cũng không có 😊 (strip hiện ⇒ nút ở strip).
+        assertEquals(listOf(kP, "/", kS, ".", kR), kindsOf(cfg(kind = InputKind.URL, emojiInStrip = true)))
+        // Tablet: space vẫn giữa hàng (?123 nở bù phần 😊).
+        val tab = bottomOf(cfg(tablet = true, emojiInStrip = true))
+        assertEquals(listOf(kP, ",", kS, ".", kR, kX), tab.map { if (it.kind == KeyKind.PUNCT) it.insert else it.kind.toString() })
+        val sp = tab.first { it.kind == KeyKind.SPACE }
+        near((sp.left + sp.right) / 2, W / 2, 0.01f)
+        // Plane số / ký hiệu, ô tìm emoji: giữ 😊; mẫu câu giữ 🗑.
+        for (pl in listOf(Plane.NUMBERS, Plane.SYMBOLS, Plane.EMOJI_SEARCH))
+            assertTrue("$pl", KeyLayout.build(cfg(plane = pl, emojiInStrip = true)).any { it.kind == KeyKind.EMOJI })
+        assertTrue(KeyLayout.build(cfg(plane = Plane.TEMPLATES, emojiInStrip = true)).any { it.kind == KeyKind.CLEAR })
+        // Mặc định không đổi gì.
+        assertFalse(LayoutConfig(Plane.LETTERS, W, H, d).emojiInStrip)
+        assertEquals(build(Plane.LETTERS).map { it.toString() }, KeyLayout.build(cfg()).map { it.toString() })
+    }
+
+    /** Thanh trên nhưng strip không hiện (tắt gợi ý / ô mật khẩu) ⇒ 😊 ở lại hàng đáy. */
+    @Test fun emojiPlacementFallback() {
+        assertTrue(EmojiKeyPlacement.inStrip(EmojiKeyPlacement.TOP, stripShown = true))
+        assertFalse(EmojiKeyPlacement.inStrip(EmojiKeyPlacement.TOP, stripShown = false))
+        assertFalse(EmojiKeyPlacement.inStrip(EmojiKeyPlacement.BOTTOM, stripShown = true))
+        assertFalse(EmojiKeyPlacement.inStrip(EmojiKeyPlacement.BOTTOM, stripShown = false))
+        for (shown in listOf(true, false)) for (p in EmojiKeyPlacement.entries) {
+            val inStrip = EmojiKeyPlacement.inStrip(p, shown)
+            val hasKey = KeyLayout.build(cfg(emojiInStrip = inStrip)).any { it.kind == KeyKind.EMOJI }
+            assertEquals("$p shown=$shown", !inStrip, hasKey)
+            assertTrue("$p shown=$shown: 😊 luôn có lối vào", hasKey || shown)
+        }
+    }
+
+    /** Trần chiều cao hàng +18; trên +10 kẹp theo nửa màn hình, tới +10 không bao giờ kẹp. */
+    @Test fun rowHeightRangeAndClamp() {
+        assertEquals(-10, KeyboardSettings.ROW_HEIGHT_MIN)
+        assertEquals(18, KeyboardSettings.ROW_HEIGHT_MAX)
+        // Không biết màn hình ⇒ không kẹp.
+        assertEquals(18, KeyLayout.effectiveRowAdjust(false, false, 18))
+        assertEquals(18, KeyLayout.effectiveRowAdjust(false, false, 30))
+        // Điện thoại dọc 800 dp: 224 + 72 = 296 ≤ 400 ⇒ đủ +18 (phím 46 → 64 dp).
+        assertEquals(18, KeyLayout.effectiveRowAdjust(false, false, 18, screenHeightDp = 800f))
+        near(KeyLayout.keyAreaDp(false, false, 18, screenHeightDp = 800f), 296f)
+        // Máy thấp 680 dp + hàng số: +14 là mức cao nhất còn ≤ 340 dp (280 + 58 = 338; +15 ⇒ 342.8).
+        assertEquals(14, KeyLayout.effectiveRowAdjust(false, false, 18, numberRow = true, screenHeightDp = 680f))
+        assertTrue(KeyLayout.keyAreaDp(false, false, 18, numberRow = true, screenHeightDp = 680f) <= 340f)
+        // Máy nhỏ 600 dp + hàng số đủ cao: +10 đã vượt nửa màn hình ⇒ dừng ở +10 (không thấp hơn trần cũ).
+        near(KeyLayout.keyAreaDp(false, false, 18, numberRow = true, numberRowFull = true, screenHeightDp = 600f),
+            KeyLayout.keyAreaDp(false, false, 10, numberRow = true, numberRowFull = true))
+        // Ngang 360 dp: không vượt +10 (≡ trần cũ), cũng không thấp hơn +10.
+        assertEquals(10, KeyLayout.effectiveRowAdjust(false, true, 18, screenHeightDp = 360f))
+        near(KeyLayout.keyAreaDp(false, true, 18, screenHeightDp = 360f), KeyLayout.keyAreaDp(false, true, 10))
+        // Tới +10: luôn như cũ dù màn hình thấp.
+        assertEquals(10, KeyLayout.effectiveRowAdjust(false, true, 10, screenHeightDp = 200f))
+        assertEquals(-4, KeyLayout.effectiveRowAdjust(false, true, -4, screenHeightDp = 200f))
+        // Tablet dọc 1280 dp: đủ +18.
+        assertEquals(18, KeyLayout.effectiveRowAdjust(true, false, 18, screenHeightDp = 1280f))
+        // Nhãn cài đặt "+N dp cả bàn phím".
+        assertEquals(72, KeyLayout.adjustTotalDp(18, numberRow = false))
+    }
+
+    /** "Cỡ chữ trên phím" = Lớn: kẹp theo phím hẹp, không nhỏ hơn cỡ chuẩn. */
+    @Test fun keyLabelFit() {
+        // Vừa phím ⇒ giữ nguyên cỡ muốn.
+        near(KeyLabelFit.fit(want = 26.84f, min = 22f, glyphW = 20f, keyW = 31f, pad = 3f), 26.84f)
+        // Tràn ⇒ thu tỉ lệ cho vừa (31 − 6 = 25 chỗ, chữ 30 ⇒ × 25/30).
+        near(KeyLabelFit.fit(want = 30f, min = 22f, glyphW = 30f, keyW = 31f, pad = 3f), 25f)
+        // Phím cực hẹp ⇒ không nhỏ hơn cỡ chuẩn (Vừa).
+        near(KeyLabelFit.fit(want = 26.84f, min = 22f, glyphW = 40f, keyW = 20f, pad = 3f), 22f)
+        // Hệ số Lớn ~ +20–25 % chữ, phím chức năng ít hơn.
+        val big = KeyLabelSize.LARGE
+        assertTrue(big.letterScale in 1.2f..1.25f)
+        assertTrue(big.controlScale in 1.05f..big.letterScale)
+        assertEquals(1f, KeyLabelSize.MEDIUM.letterScale, 0f)
+        assertEquals(KeyLabelSize.MEDIUM, KeyLabelSize.of(null))
+        assertEquals(KeyLabelSize.LARGE, KeyLabelSize.of("large"))
+        // Phím chữ hẹp nhất (320–411 dp, một tay) — sau kẹp "W" (≈ 0.9 em) luôn vừa chỗ hoặc về cỡ chuẩn.
+        for (width in listOf(320f, 360f, 411f)) for (one in listOf(OneHandSide.OFF, OneHandSide.LEFT)) {
+            val keys = KeyLayout.build(LayoutConfig(Plane.LETTERS, width, H, d, oneHand = one))
+            val kw = keys.filter { it.kind == KeyKind.LETTER }.minOf { it.width }
+            val want = 22f * big.letterScale
+            val size = KeyLabelFit.fit(want, 22f, 0.9f * want, kw, KeyLabelFit.PAD_DP)
+            assertTrue("$width $one", 0.9f * size <= kw - 2 * KeyLabelFit.PAD_DP + 0.01f || size == 22f)
         }
     }
 }

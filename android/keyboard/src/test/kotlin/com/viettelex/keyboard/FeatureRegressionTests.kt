@@ -52,7 +52,7 @@ class SettingsRegressionTests {
 
     @Test fun testRowHeightClampedAndResetAt() {
         val s = KeyboardSettings.load { when (it) { Keys.ROW_HEIGHT_ADJUST -> 42; Keys.USERLM_RESET_AT -> 7L; else -> null } }
-        assertEquals(10, s.rowHeightAdjust)
+        assertEquals(KeyboardSettings.ROW_HEIGHT_MAX, s.rowHeightAdjust)   // kẹp trần (+18)
         assertEquals(7L, s.userlmResetAt)
     }
 

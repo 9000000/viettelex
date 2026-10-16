@@ -368,8 +368,12 @@ fun ThemePage(onBack: () -> Unit) {
                         com.viettelex.android.ime.KeyLayout.adjustTotalDp(adj, numberRow, numberRowFull)),
                     style = VTType.footnote, color = c.secondary,
                 )
+                // Trên trần cũ +10: IME kẹp theo cao màn hình (KeyLayout.effectiveRowAdjust).
+                if (adj > com.viettelex.keyboard.KeyboardSettings.ROW_HEIGHT_UNCLAMPED_MAX)
+                    Text(tr("Màn hình thấp hoặc xoay ngang: tự giới hạn để bàn phím không quá nửa màn hình."),
+                        style = VTType.footnote, color = c.secondary)
             }
-            IosStepper(adj, -10..10) { adj = it }
+            IosStepper(adj, com.viettelex.keyboard.KeyboardSettings.ROW_HEIGHT_MIN..com.viettelex.keyboard.KeyboardSettings.ROW_HEIGHT_MAX) { adj = it }
         }
         RowDivider()
         KeyboardRaiseRow()

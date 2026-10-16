@@ -336,10 +336,13 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// Bật/tắt thanh gợi ý cho ô hiện tại. `reserveStrip` = công tắc toàn cục: ô từ chối
     /// gợi ý vẫn GIỮ dải strip (trống) để chiều cao bàn phím không đổi khi đổi ô.
     func setSuggestionsEnabled(_ on: Bool, reserveStrip: Bool? = nil) {
+        let emojiBefore = emojiInBar
         suggestionsEnabled = on
         stripReserved = reserveStrip ?? on
         lastSuggestionSig = nil        // chrome đổi → lượt show kế phải ghi lại UI
         updateSuggestionChrome()
+        // Nút emoji Thanh trên: thanh bật/tắt ở ô này ⇒ 😊 rời / về hàng đáy.
+        if emojiInBar != emojiBefore { rebuild(); setNeedsLayout() }
     }
 
     /// Collapse/expand thanh gợi ý bằng chevron (user 2026-07-24): thu gọn còn
@@ -531,7 +534,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// Frame thường không đổi ⇒ SuggestionBar không layout lại.
     private func layoutSuggestionBar() {
         let w = Self.stripZoneWidth
-        let right = w + (clipboardButtonVisible ? Self.clipZoneWidth : 0)
+        let right = w + barRightExtras
         // Host cấp thiếu chiều cao ⇒ strip co (phím giữ nguyên): bar dời lên VỪA đủ để không
         // đè hàng đầu (còn vừa thì đứng yên).
         let h: CGFloat = 20
@@ -550,6 +553,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         burgerZone.isHidden = !open || zone == .none
         chevronZone.isHidden = !open
         layoutClipboardExtras(stripOpen: open)
+        layoutEmojiBarButton()
         guard open, bounds.width > 0 else { stripZonesKey = nil; return }
         let strip = max(rowsTopConstraint?.constant ?? openStripNow, openStripNow)
         // layoutSubviews chạy cả khi gõ (shift/balloon) — trạng thái không đổi thì khỏi
@@ -638,6 +642,16 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// bàn chữ iPhone ô thường. Trong chữ ký rebuild; đọc ở applyAppearance, không tốn gì mỗi phím.
     var spaceSideKey: SpaceSideKey = .defaultValue {
         didSet { if spaceSideKey != oldValue { rebuild() } }
+    }
+    /// "Nút emoji" (Phím & cử chỉ, mặc định Hàng dưới — EmojiKeyPlacement). Trong chữ ký rebuild
+    /// qua [emojiInBar]; đọc ở applyAppearance, không tốn gì mỗi phím.
+    var emojiKeyPlacement: EmojiKeyPlacement = .defaultValue {
+        didSet { if emojiKeyPlacement != oldValue { rebuild(); setNeedsLayout() } }
+    }
+    /// Nút 😊 nằm trên thanh gợi ý thay hàng đáy bàn chữ: chọn Thanh trên + thanh gợi ý bật ở ô
+    /// này (không thì giữ 😊 ở hàng đáy — emoji luôn có lối vào) + iPhone.
+    var emojiInBar: Bool {
+        EmojiKeyPlacement.emojiInBar(emojiKeyPlacement, barShown: suggestionsEnabled, pad: Self.isPad)
     }
 
     // MARK: giữ phím chữ ra ký tự phụ (KeyAlternates, issue #98)
@@ -826,6 +840,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         lastSuggestionSig = nil   // chrome đổi → lượt show kế ghi lại (kể cả thẻ Dán)
         refreshCollapseButton(visible: visible)
         refreshBarHitInsets()
+        layoutEmojiBarButton()   // 😊 Thanh trên: ẩn/hiện theo plane ngay (không đợi layoutSubviews)
     }
 
     // Rotation / Split View: indent hàng 2 và chiều cao tính theo bounds THẬT,
@@ -864,7 +879,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         logGeometryIfChanged()
         if pasteCard.superview != nil, !pasteCard.isHidden {   // xoay màn hình
             let w = Self.stripZoneWidth
-            let clipW = clipboardButtonVisible ? Self.clipZoneWidth : 0   // chừa nút 📋
+            let clipW = barRightExtras   // chừa nút 📋 / 😊
             pasteCard.frame = CGRect(x: w, y: Self.barTopPad, width: max(bounds.width - 2 * w - clipW, 0),
                                      height: openStripNow - Self.barTopPad)
         }
@@ -1358,6 +1373,67 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         bringSubviewToFront(p)
     }
 
+    // MARK: Nút emoji trên thanh gợi ý ("Nút emoji" = Thanh trên, EmojiKeyPlacement)
+    static let emojiZoneWidth: CGFloat = 40
+    /// Bề ngang chừa bên phải bar (trước ⌄): 📋 (lịch sử clipboard) + 😊 (Thanh trên).
+    private var barRightExtras: CGFloat {
+        (clipboardButtonVisible ? Self.clipZoneWidth : 0) + (emojiInBar ? Self.emojiZoneWidth : 0)
+    }
+    private var emojiZoneMade = false
+    private lazy var emojiZone: UIButton = {
+        emojiZoneMade = true
+        let b = UIButton(type: .custom)
+        b.accessibilityLabel = "Emoji"
+        b.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            Self.clickModifier()
+            self.emojiABCSlot = nil          // ABC về chỗ mặc định của plane emoji
+            self.plane = .emoji
+            self.rebuild()
+        }, for: .touchUpInside)
+        addSubview(b)
+        return b
+    }()
+    /// Khung nút 😊 trên thanh (nil = không hiện) — THUẦN để test: bar mở ⇒ ô cao trọn strip bên
+    /// trái 📋 (hoặc ⌄); thu gọn ⇒ nút nổi 18pt bên trái ⌄ nổi (48pt).
+    static func emojiBarFrame(width: CGFloat, strip: CGFloat, collapsed: Bool, clip: Bool) -> CGRect {
+        if collapsed { return CGRect(x: width - 48 - 44, y: 0, width: 44, height: 18) }
+        let x = width - stripZoneWidth - (clip ? clipZoneWidth : 0) - emojiZoneWidth
+        return CGRect(x: x, y: 0, width: emojiZoneWidth, height: strip)
+    }
+    private func layoutEmojiBarButton() {
+        let visible = emojiInBar && suggestionsEnabled && plane != .emoji && plane != .emojiSearch
+        if !visible { if emojiZoneMade { emojiZone.isHidden = true }; return }
+        guard bounds.width > 0 else { return }
+        let strip = max(rowsTopConstraint?.constant ?? openStripNow, openStripNow)
+        let f = Self.emojiBarFrame(width: bounds.width, strip: strip, collapsed: barCollapsed,
+                                   clip: clipboardButtonVisible)
+        emojiZone.isHidden = false
+        defer { bringSubviewToFront(emojiZone) }
+        // layoutSubviews chạy cả khi gõ (shift/balloon): trạng thái không đổi ⇒ khỏi dựng lại ảnh.
+        let key = EmojiZoneKey(frame: f, collapsed: barCollapsed, ink: palette.barInk)
+        guard key != emojiZoneKey else { return }
+        emojiZoneKey = key
+        emojiZone.frame = f
+        emojiZone.setImage(UIImage(systemName: "face.smiling",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: barCollapsed ? 12 : 14, weight: .regular)),
+            for: .normal)
+        emojiZone.tintColor = palette.barInk.ui.withAlphaComponent(barCollapsed ? 0.45 : 0.6)
+        // Icon canh hàng chữ gợi ý (tâm y≈10) như ⌄ / 📋; thu gọn: tâm 7 như nút nổi.
+        if barCollapsed {
+            emojiZone.contentEdgeInsets = UIEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)
+        } else {
+            let bottomInset = max(strip - 20 - Self.barTopPad, 0)
+            emojiZone.contentEdgeInsets = UIEdgeInsets(top: Self.barTopPad, left: 0, bottom: bottomInset, right: 0)
+        }
+    }
+    private struct EmojiZoneKey: Equatable { let frame: CGRect; let collapsed: Bool; let ink: RGBA }
+    private var emojiZoneKey: EmojiZoneKey?
+    #if DEBUG
+    /// Test hook: khung nút 😊 trên thanh (nil = ẩn / chưa tạo).
+    var debugEmojiBarButton: UIButton? { emojiZoneMade && !emojiZone.isHidden ? emojiZone : nil }
+    #endif
+
     private func layoutClipboardExtras(stripOpen: Bool) {
         let showClip = stripOpen && clipboardButtonVisible
         if clipboardButtonVisible || clipZoneMade { clipZone.isHidden = !showClip }
@@ -1450,7 +1526,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                                                  : L("Dán nội dung vừa copy")
             if pasteCard.superview == nil { addSubview(pasteCard) }
             let w = Self.stripZoneWidth
-            let clipW = clipboardButtonVisible ? Self.clipZoneWidth : 0   // chừa nút 📋
+            let clipW = barRightExtras   // chừa nút 📋 / 😊
             pasteCard.frame = CGRect(x: w, y: Self.barTopPad, width: max(bounds.width - 2 * w - clipW, 0),
                                      height: openStripNow - Self.barTopPad)
             (pasteCard.viewWithTag(91) as? UILabel)?.textColor = ink
@@ -1627,6 +1703,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         numberRowEnabled = UserDefaultsProvider.shared?.bool(forKey: Self.numberRowKey) ?? false
         numberRowFullHeight = UserDefaultsProvider.shared?.bool(forKey: KeyGeometry.numberRowFullHeightKey) ?? false
         spaceSideKey = SpaceSideKey.load(UserDefaultsProvider.shared)
+        emojiKeyPlacement = EmojiKeyPlacement.load(UserDefaultsProvider.shared)
         // Bàn phím tách đôi (mặc định TẮT) — rebuild() cuối hàm áp nếu đổi.
         splitSetting = UserDefaultsProvider.shared?.bool(forKey: SplitLayout.settingKey) ?? false
         keyPreviewEnabled = Self.keyPreviewSetting(UserDefaultsProvider.shared)
@@ -1814,6 +1891,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private var builtNumberRow = false
     private var builtNumberRowFull = false
     private var builtSpaceSide: SpaceSideKey = .defaultValue
+    private var builtEmojiInBar = false
     private var builtPressHighlight = KeyboardView.keyPressHighlightDefault
     /// Khe/lề dựng vào constraint lúc build (preset stock: dọc ≠ ngang) — đổi là dựng lại.
     /// (Phần cắt / đệm hàng đáy đổi tại chỗ ở applyBottomTrim — không cần dựng lại.)
@@ -1868,6 +1946,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             || builtNumberRow != numberRowEnabled
             || builtNumberRowFull != numberRowFullHeight
             || builtSpaceSide != spaceSideKey
+            || builtEmojiInBar != emojiInBar
             || builtPressHighlight != keyPressHighlightEnabled
             || builtAlts != activeAlts
             || builtSplit != split
@@ -1911,6 +1990,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         builtNumberRow = numberRowEnabled
         builtNumberRowFull = numberRowFullHeight
         builtSpaceSide = spaceSideKey
+        builtEmojiInBar = emojiInBar
         builtPressHighlight = keyPressHighlightEnabled
         builtAlts = activeAlts
         builtSplit = split
@@ -2863,19 +2943,34 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         // Slot cạnh trái space: bình thường là nút emoji; plane mẫu câu thay
         // bằng THÙNG RÁC = xoá sạch ô nhập (user 2026-07-25). Cùng kiểu nút đơn
         // sắc như ABC nên giữ chung biến emojiBtn để ăn width multiplier 0.10.
-        let emojiBtn: KeyButton
-        if clearInsteadOfEmoji {
-            emojiBtn = controlButton(title: "") { [weak self] in
+        // "Nút emoji" = Thanh trên (EmojiKeyPlacement): bàn CHỮ iPhone không có 😊 — nút nằm trên
+        // thanh gợi ý; thanh không hiện ở ô này ⇒ giữ 😊 (emojiInBar false).
+        let emojiBtn: KeyButton?
+        if planeKey == "123", !clearInsteadOfEmoji, plane == .letters, emojiInBar {
+            emojiBtn = nil
+        } else if clearInsteadOfEmoji {
+            let clear = controlButton(title: "") { [weak self] in
                 self?.tapped(.clearField)
             }
-            emojiBtn.setImage(UIImage(systemName: "trash",
+            clear.setImage(UIImage(systemName: "trash",
                 withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)), for: .normal)
-            emojiBtn.tintColor = ink
-            emojiBtn.accessibilityLabel = L("Xoá ô nhập")
+            clear.tintColor = ink
+            clear.accessibilityLabel = L("Xoá ô nhập")
+            emojiBtn = clear
         } else {
             emojiBtn = makeEmojiKey()
         }
-        views.append(emojiBtn)
+        if let e = emojiBtn { views.append(e) }
+        // "Cả hai" (SpaceSideKey.both): phím "," hẹp BÊN TRÁI space (cùng cỡ phím hẹp phải).
+        let leftPunctKeys: [(btn: KeyButton, mult: CGFloat)]
+        let sideApplies = planeKey == "123" && !Self.isPad && !clearInsteadOfEmoji
+            && ![.email, .url, .search].contains(inputKind)
+        if sideApplies {
+            leftPunctKeys = makePunctKeys(KeyLayout.phoneLettersSides(spaceSideKey).left
+                                            .map { ($0, $0, KeyLayout.phoneLettersComma) },
+                                          planeKey: planeKey, sideKey: spaceSideKey)
+        } else { leftPunctKeys = [] }
+        views += leftPunctKeys.map(\.btn)
         let space = makeSpaceKey(primary: true)
         views.append(space)
         // Nhóm phím dấu câu bên phải space. Bình thường là dấu phẩy; ô email/url
@@ -2902,16 +2997,16 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             case .search: puncts = padLetters ? [] : [(".", ".", 0.075)]
             // iPad plane chữ: không phím "," riêng như stock ("!," hàng 3 đã có). iPhone: phím
             // hẹp theo "Phím cạnh dấu cách" ("," / "." cùng chỗ cùng cỡ; Tắt ⇒ không phím).
-            default:     puncts = padLetters ? [] : KeyLayout.phoneLettersPuncts(spaceSideKey)
+            default:     puncts = padLetters ? [] : KeyLayout.phoneLettersSides(spaceSideKey).right
                                                         .map { ($0, $0, KeyLayout.phoneLettersComma) }
             }
         } else {
             puncts = [(",", ",", 0.075)]
         }
-        let sideKey: SpaceSideKey? = (planeKey == "123" && !padLetters && !clearInsteadOfEmoji
-            && ![.email, .url, .search].contains(inputKind)) ? spaceSideKey : nil
-        let punctKeys = makePunctKeys(puncts, planeKey: planeKey, sideKey: sideKey)
-        views += punctKeys.map(\.btn)
+        let sideKey: SpaceSideKey? = sideApplies ? spaceSideKey : nil
+        let rightPunctKeys = makePunctKeys(puncts, planeKey: planeKey, sideKey: sideKey)
+        views += rightPunctKeys.map(\.btn)
+        let punctKeys = leftPunctKeys + rightPunctKeys
         // iPad: return nằm cuối hàng 2 như stock (buildLettersPad / buildPadSymbolic).
         var ret: KeyButton?
         if !padStock {
@@ -2978,7 +3073,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         let spec = padStock ? KeyLayout.padBottomRow(padStyle, letters: padLetters) : KeyLayout.phoneBottom
         func frac(_ id: String) -> CGFloat { KeyLayout.units(id, in: spec) ?? 0.1 }
         planeBtn.widthAnchor.constraint(equalTo: stack.widthAnchor, multiplier: frac("plane")).isActive = true
-        emojiBtn.widthAnchor.constraint(equalTo: stack.widthAnchor, multiplier: frac("emoji")).isActive = true
+        emojiBtn?.widthAnchor.constraint(equalTo: stack.widthAnchor, multiplier: frac("emoji")).isActive = true
         // Globe PHẢI có width cố định: thiếu thì nó và space cùng "tự do", stack
         // bóp globe còn bề ngang icon và chia lại mỗi lần phím đổi trạng thái —
         // hàng đáy iPad nhảy size khi bấm (feedback 26/09/2026). Chỉ space co giãn.
@@ -3003,7 +3098,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             padFunction(planeBtn, left: true)
             if let b = planeBtn2 { padFunction(b, left: false) }   // nhãn phải dạt phải như stock
             if let g = globeBtn { padFunction(g, left: true) }
-            padFunction(emojiBtn, left: true)
+            if let e = emojiBtn { padFunction(e, left: true) }
             if let d = dismissBtn { padFunction(d, left: false) }
             for pk in punctKeys { pk.btn.backgroundColor = plainFill; pk.btn.normalBackground = plainFill }
         }

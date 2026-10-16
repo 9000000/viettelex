@@ -86,7 +86,7 @@ data class KeyboardSettings(
     var keyPreview: Boolean = true,
     /** Phím sẫm khi bấm (phím chữ/số/ký hiệu) — mặc định BẬT như iOS; tắt ⇒ đường chạm không thêm việc. */
     var keyPressHighlight: Boolean = true,
-    /** −10…10 dp mỗi hàng. */
+    /** [ROW_HEIGHT_MIN]…[ROW_HEIGHT_MAX] dp mỗi hàng (IME kẹp thêm phần trên +10 theo cao màn hình — KeyLayout.effectiveRowAdjust). */
     var rowHeightAdjust: Int = 0,
     /** Hàng phím số 1…0 trên hàng chữ — mặc định TẮT. */
     var numberRow: Boolean = false,
@@ -100,6 +100,10 @@ data class KeyboardSettings(
     var longPressSymbols: Boolean = false,
     /** Phím cạnh dấu cách (bàn chữ ô thường; tablet: có / không "," "." hai bên space) — mặc định "," ([SpaceSideKey]). */
     var spaceSideKey: SpaceSideKey = SpaceSideKey.DEFAULT,
+    /** Nút 😊: hàng đáy (mặc định) / thanh gợi ý ([EmojiKeyPlacement]). */
+    var emojiKeyPlacement: EmojiKeyPlacement = EmojiKeyPlacement.DEFAULT,
+    /** Cỡ chữ trên phím: Vừa (mặc định) / Lớn ([KeyLabelSize]). */
+    var keyLabelSize: KeyLabelSize = KeyLabelSize.DEFAULT,
     /** Chế độ một tay: "off" | "left" | "right" — mặc định tắt (tablet bỏ qua). */
     var oneHandMode: String = "off",
     /** Bàn phím thả nổi (#112) — mặc định TẮT; bật ⇒ một tay + nâng bàn phím bị bỏ qua. */
@@ -122,6 +126,15 @@ data class KeyboardSettings(
     companion object {
         /** Trần thanh "Nâng bàn phím" (dp). */
         const val KEYBOARD_RAISE_MAX = 48
+        /**
+         * "Chiều cao hàng phím" (dp mỗi hàng). Trần +10 → +18 (16/10/2026, tester: phím vẫn nhỏ ở
+         * mức lớn nhất ⇒ hàng 56 → 74 dp, phím 46 → 64 dp ≈ +14 % so với trần cũ). Phần trên +10
+         * kẹp theo cao màn hình (KeyLayout.effectiveRowAdjust) cho máy nhỏ / màn ngang.
+         */
+        const val ROW_HEIGHT_MIN = -10
+        const val ROW_HEIGHT_MAX = 18
+        /** Trần cũ — tới mức này không bao giờ bị kẹp theo màn hình (không thụt lùi người đang dùng). */
+        const val ROW_HEIGHT_UNCLAMPED_MAX = 10
         fun clampRaise(dp: Int): Int = dp.coerceIn(0, KEYBOARD_RAISE_MAX)
 
         /** [get] trả giá trị thô của key (vd `prefs.all[key]`), null nếu vắng. */
@@ -174,11 +187,13 @@ data class KeyboardSettings(
             s.longPressNumbers = b(Keys.LONG_PRESS_NUMBERS, s.longPressNumbers)
             s.longPressSymbols = b(Keys.LONG_PRESS_SYMBOLS, s.longPressSymbols)
             s.spaceSideKey = SpaceSideKey.of(get(Keys.SPACE_SIDE_KEY))
+            s.emojiKeyPlacement = EmojiKeyPlacement.of(get(Keys.EMOJI_KEY_PLACEMENT))
+            s.keyLabelSize = KeyLabelSize.of(get(Keys.KEY_LABEL_SIZE))
             s.oneHandMode = (get(Keys.ONE_HAND_MODE) as? String)?.takeIf { it == "left" || it == "right" } ?: "off"
             s.floatingKeyboard = b(Keys.FLOATING_KEYBOARD, s.floatingKeyboard)
             s.clipboardHistory = b(Keys.CLIPBOARD_HISTORY, s.clipboardHistory)
             s.incognito = b(Keys.INCOGNITO, s.incognito)
-            s.rowHeightAdjust = ((get(Keys.ROW_HEIGHT_ADJUST) as? Number)?.toInt() ?: 0).coerceIn(-10, 10)
+            s.rowHeightAdjust = ((get(Keys.ROW_HEIGHT_ADJUST) as? Number)?.toInt() ?: 0).coerceIn(ROW_HEIGHT_MIN, ROW_HEIGHT_MAX)
             s.userlmResetAt = (get(Keys.USERLM_RESET_AT) as? Number)?.toLong() ?: 0
             s.learnWords = s.showSuggestions   // bật gợi ý = bật học (quyết định 2026-07-24)
             return s

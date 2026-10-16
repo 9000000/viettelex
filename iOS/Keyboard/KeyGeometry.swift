@@ -488,25 +488,56 @@ enum BalloonGeometry {
 /// với Android Keys.SPACE_SIDE_KEY): phím hẹp bên phải space ở hàng đáy bàn CHỮ iPhone, ô thường.
 ///  • `.comma` (mặc định, bố cục cũ): "," — giữ ra "." (khi bật giữ phím ra ký tự phụ).
 ///  • `.period`: "." cùng chỗ cùng cỡ — giữ ra ",".
+///  • `.both` (16/10/2026, "Cả hai"): "," TRÁI space + "." PHẢI space, mỗi phím cùng cỡ phím hẹp
+///    cũ, space co lại. "," giữ ra "." như mặc định; "." không có giữ phím (như iPad).
 ///  • `.off`: không phím; space rộng thêm. Chạm space hai lần vẫn ra ". ".
 /// iPad, ô email / URL / thanh địa chỉ, plane số / ký hiệu / mẫu câu không đổi. Đọc lúc
 /// dựng hàng đáy (applyAppearance) — 0 chi phí mỗi phím.
 enum SpaceSideKey: String, CaseIterable {
-    case comma, period, off
+    case comma, period, both, off
     static let key = "spaceSideKey"
     static let defaultValue: SpaceSideKey = .comma
 
-    /// Ký tự của phím (nil = không có phím).
+    /// Ký tự của phím CÓ GIỮ PHÍM (nil = không có phím): `.both` ⇒ "," (bên trái space).
     var char: String? {
-        switch self { case .comma: return ","; case .period: return "."; case .off: return nil }
+        switch self { case .comma, .both: return ","; case .period: return "."; case .off: return nil }
     }
-    /// Ký tự giữ phím ra (phím còn lại của cặp , / .).
+    /// Ký tự giữ phím [char] ra (phím còn lại của cặp , / .).
     var holdAlt: String? {
-        switch self { case .comma: return "."; case .period: return ","; case .off: return nil }
+        switch self { case .comma, .both: return "."; case .period: return ","; case .off: return nil }
+    }
+    /// Phím hẹp BÊN TRÁI space (chỉ `.both`).
+    var left: String? { self == .both ? "," : nil }
+    /// Phím hẹp BÊN PHẢI space.
+    var right: String? {
+        switch self { case .comma: return ","; case .period, .both: return "."; case .off: return nil }
     }
     /// Giá trị lạ / thiếu ⇒ mặc định.
     static func parse(_ raw: Any?) -> SpaceSideKey {
         (raw as? String).flatMap(SpaceSideKey.init(rawValue:)) ?? defaultValue
     }
     static func load(_ d: UserDefaults?) -> SpaceSideKey { parse(d?.object(forKey: key)) }
+}
+
+/// "Nút emoji" (Tính năng → Phím & cử chỉ; khoá App Group `emojiKeyPlacement`, cùng chuỗi với
+/// Android Keys.EMOJI_KEY_PLACEMENT):
+///  • `.bottom` (mặc định): phím 😊 ở hàng đáy bàn chữ như cũ.
+///  • `.top` ("Thanh trên"): bỏ 😊 khỏi hàng đáy bàn CHỮ iPhone (space ăn chỗ), nút 😊 lên thanh
+///    gợi ý (cạnh ⌄ khi mở, nút nổi khi thu gọn). Thanh gợi ý không hiện ở ô này (tắt gợi ý,
+///    ô mật khẩu…) ⇒ giữ 😊 ở hàng đáy để emoji không bao giờ mất lối vào ([emojiInBar]).
+/// iPad / bàn tách đôi / plane số, ký hiệu không đổi. Đọc lúc dựng hàng đáy — 0 chi phí mỗi phím.
+enum EmojiKeyPlacement: String, CaseIterable {
+    case bottom, top
+    static let key = "emojiKeyPlacement"
+    static let defaultValue: EmojiKeyPlacement = .bottom
+    static func parse(_ raw: Any?) -> EmojiKeyPlacement {
+        (raw as? String).flatMap(EmojiKeyPlacement.init(rawValue:)) ?? defaultValue
+    }
+    static func load(_ d: UserDefaults?) -> EmojiKeyPlacement { parse(d?.object(forKey: key)) }
+
+    /// Nút 😊 nằm trên thanh gợi ý (và KHÔNG ở hàng đáy bàn chữ)? Chỉ khi chọn `.top`, thanh
+    /// gợi ý đang bật cho ô này, và iPhone (iPad giữ hàng đáy stock).
+    static func emojiInBar(_ p: EmojiKeyPlacement, barShown: Bool, pad: Bool) -> Bool {
+        p == .top && barShown && !pad
+    }
 }

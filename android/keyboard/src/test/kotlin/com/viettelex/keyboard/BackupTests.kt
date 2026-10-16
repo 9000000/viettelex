@@ -103,7 +103,7 @@ class BackupTests {
 
     @Test fun forwardCompatibleFile() {
         val p = BackupCodec.decode(fixture("backup-future-v2"))
-        assertEquals(mapOf<String, Any>("simpleTelex" to false, "rowHeightAdjust" to 10), p.settings)
+        assertEquals(mapOf<String, Any>("simpleTelex" to false, "rowHeightAdjust" to 18), p.settings)   // 99 kẹp trần Android +18 (iOS vẫn +10)
         assertEquals(mapOf("hn" to "Hà Nội"), p.shortcuts)
         assertEquals(listOf(TemplateItem("🙂", "Cảm ơn")), p.templates)
     }
@@ -128,8 +128,10 @@ class BackupTests {
             "keyboardTransparency" to 250, "keyLabelTransparency" to 35,
             BackupPrefs.SHORTCUTS_KEY to "# VietTelex — bảng gõ tắt\nko: không\n")
         val p = BackupPrefs.snapshot({ prefs[it] }, listOf(TemplateItem("", "a")), null)
-        assertEquals(46, p.settings!!.size)
+        assertEquals(48, p.settings!!.size)
         assertEquals("comma", p.settings!![Keys.SPACE_SIDE_KEY])   // phím cạnh dấu cách: mặc định ","
+        assertEquals("bottom", p.settings!![Keys.EMOJI_KEY_PLACEMENT])   // nút emoji: mặc định hàng dưới
+        assertEquals("medium", p.settings!![Keys.KEY_LABEL_SIZE])   // cỡ chữ trên phím: mặc định Vừa
         assertEquals("en", p.settings!![Keys.TRANSLATE_TARGET])   // Dịch trên máy: mặc định English
         assertEquals(false, p.settings!![Keys.NUMBER_ROW_FULL_HEIGHT])   // mặc định tắt
         assertEquals(true, p.settings!![Keys.TEXT_TOOLS_ENABLED])   // chưa đặt ⇒ BẬT (mặc định)
@@ -144,7 +146,7 @@ class BackupTests {
         assertEquals(false, p.settings!!["autoSpaceAfterPunct"])
         assertEquals(true, p.settings!!["quickTelex"])
         assertEquals(true, p.settings!!["simpleTelex"])
-        assertEquals(10, p.settings!!["rowHeightAdjust"])
+        assertEquals(18, p.settings!!["rowHeightAdjust"])         // kẹp trần +18 (16/10/2026)
         assertNull(p.settings!!["showPeriodKey"])                 // 12/10/2026: bỏ công tắc "." — không sao lưu
         assertEquals(0, p.settings!![Keys.KEYBOARD_RAISE])        // #112 mặc định 0
         assertEquals(false, p.settings!![Keys.FLOATING_KEYBOARD]) // #112 thả nổi mặc định tắt

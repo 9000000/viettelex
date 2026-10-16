@@ -35,18 +35,43 @@ class KeyMenusTests {
         assertEquals(CommaPopup.choices, CommaPopup.choices(",", lettersPlane = true, periodKey = true))
     }
 
+    /** "Nút emoji" / "Cỡ chữ trên phím" (16/10/2026): đọc cài đặt, mặc định, sao lưu. */
+    @Test fun emojiPlacementAndLabelSizeParsing() {
+        assertEquals(EmojiKeyPlacement.BOTTOM, EmojiKeyPlacement.of(null))
+        assertEquals(EmojiKeyPlacement.BOTTOM, EmojiKeyPlacement.of("strip"))
+        assertEquals(EmojiKeyPlacement.TOP, EmojiKeyPlacement.of("top"))
+        assertEquals(KeyLabelSize.MEDIUM, KeyLabelSize.of("huge"))
+        assertEquals(KeyLabelSize.LARGE, KeyLabelSize.of("large"))
+        val s = KeyboardSettings.load { when (it) { Keys.EMOJI_KEY_PLACEMENT -> "top"; Keys.KEY_LABEL_SIZE -> "large"; else -> null } }
+        assertEquals(EmojiKeyPlacement.TOP, s.emojiKeyPlacement)
+        assertEquals(KeyLabelSize.LARGE, s.keyLabelSize)
+        val d = KeyboardSettings.load { null }
+        assertEquals(EmojiKeyPlacement.BOTTOM, d.emojiKeyPlacement)
+        assertEquals(KeyLabelSize.MEDIUM, d.keyLabelSize)
+        assertEquals("emojiKeyPlacement", Keys.EMOJI_KEY_PLACEMENT)   // cùng tên iOS App Group
+        assertEquals(SettingKind.Choice("bottom", setOf("bottom", "top")),
+            BackupSettings.all.first { it.key == Keys.EMOJI_KEY_PLACEMENT }.kind)
+        assertEquals(SettingKind.Choice("medium", setOf("medium", "large")),
+            BackupSettings.all.first { it.key == Keys.KEY_LABEL_SIZE }.kind)
+        assertEquals(SettingKind.IntRange(0, -10..18), BackupSettings.all.first { it.key == Keys.ROW_HEIGHT_ADJUST }.kind)
+        assertEquals(18, KeyboardSettings.load { if (it == Keys.ROW_HEIGHT_ADJUST) 99 else null }.rowHeightAdjust)
+        assertEquals(15, KeyboardSettings.load { if (it == Keys.ROW_HEIGHT_ADJUST) 15 else null }.rowHeightAdjust)
+    }
+
     @Test fun spaceSideKeyParsing() {
         assertEquals(SpaceSideKey.COMMA, SpaceSideKey.of(null))
         assertEquals(SpaceSideKey.COMMA, SpaceSideKey.of("dot"))
         assertEquals(SpaceSideKey.COMMA, SpaceSideKey.of(3))
         assertEquals(SpaceSideKey.PERIOD, SpaceSideKey.of("period"))
         assertEquals(SpaceSideKey.OFF, SpaceSideKey.of("off"))
-        assertEquals(setOf("comma", "period", "off"), SpaceSideKey.IDS)
+        assertEquals(setOf("comma", "period", "both", "off"), SpaceSideKey.IDS)
+        assertEquals(SpaceSideKey.BOTH, SpaceSideKey.of("both"))
+        assertEquals(SpaceSideKey.BOTH, KeyboardSettings.load { if (it == Keys.SPACE_SIDE_KEY) "both" else null }.spaceSideKey)
         assertEquals(SpaceSideKey.PERIOD, KeyboardSettings.load { if (it == Keys.SPACE_SIDE_KEY) "period" else null }.spaceSideKey)
         assertEquals(SpaceSideKey.COMMA, KeyboardSettings.load { null }.spaceSideKey)
         // Sao lưu: có trong Spec, mặc định "comma", giá trị lạ bỏ qua.
         val spec = BackupSettings.all.first { it.key == Keys.SPACE_SIDE_KEY }
-        assertEquals(SettingKind.Choice("comma", setOf("comma", "period", "off")), spec.kind)
+        assertEquals(SettingKind.Choice("comma", setOf("comma", "period", "both", "off")), spec.kind)
     }
 
     /** "," cạnh phải space (điện thoại 390 dp: tâm ≈ 0.73 W) ⇒ hàng loe sang trái, ô "," gần ngón. */

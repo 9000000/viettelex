@@ -1,5 +1,6 @@
 package com.viettelex.android.ime
 
+import com.viettelex.keyboard.KeyboardSettings
 import com.viettelex.keyboard.SpaceSideKey
 
 /**
@@ -103,6 +104,11 @@ data class LayoutConfig(
     val numberRowFull: Boolean = false,
     /** "Phím cạnh dấu cách" (Settings, mặc định ",") — chỉ bàn chữ điện thoại ô thường, [KeyLayout.sideKey]. */
     val spaceSideKey: SpaceSideKey = SpaceSideKey.DEFAULT,
+    /**
+     * "Nút emoji" = Thanh trên VÀ thanh gợi ý đang hiện (EmojiKeyPlacement.inStrip): bàn CHỮ bỏ phím
+     * 😊 ở hàng đáy (space ăn chỗ) — nút nằm trên StripView. Plane khác / ô tìm emoji giữ 😊.
+     */
+    val emojiInStrip: Boolean = false,
 )
 
 object KeyLayout {
@@ -138,17 +144,45 @@ object KeyLayout {
         gap + numberKeyRatio(full) * maxOf(unit - gap, 0f)
 
     /**
-     * Gboard: điện thoại 224 dọc (4 × 56) / 168 ngang; tablet 256 / 300; + rowHeightAdjust × 4 hàng.
+     * Vùng phím không cao quá phần này của chiều cao màn hình (dp) khi chỉnh hàng VƯỢT trần cũ
+     * +10 ([KeyboardSettings.ROW_HEIGHT_UNCLAMPED_MAX]) — máy nhỏ / màn ngang (16/10/2026).
+     */
+    const val MAX_KEY_AREA_FRACTION = 0.5f
+
+    /**
+     * Mức chỉnh hàng thực dùng: kẹp [KeyboardSettings.ROW_HEIGHT_MIN]…[KeyboardSettings.ROW_HEIGHT_MAX];
+     * phần trên +10 chỉ dùng tới chừng vùng phím còn ≤ [MAX_KEY_AREA_FRACTION] × [screenHeightDp]
+     * (≤ 0 = không biết màn hình ⇒ không kẹp). Tới +10 luôn giữ nguyên như trước (không thụt lùi).
+     */
+    fun effectiveRowAdjust(tablet: Boolean, landscape: Boolean, rowHeightAdjust: Int, numberRow: Boolean = false,
+                           numberRowFull: Boolean = false, screenHeightDp: Float = 0f): Int {
+        val a = rowHeightAdjust.coerceIn(KeyboardSettings.ROW_HEIGHT_MIN, KeyboardSettings.ROW_HEIGHT_MAX)
+        val floor = KeyboardSettings.ROW_HEIGHT_UNCLAMPED_MAX
+        if (a <= floor || screenHeightDp <= 0f) return a
+        val cap = MAX_KEY_AREA_FRACTION * screenHeightDp
+        var e = a
+        while (e > floor && rawKeyAreaDp(tablet, landscape, e, numberRow, numberRowFull) > cap) e--
+        return e
+    }
+
+    private fun rawKeyAreaDp(tablet: Boolean, landscape: Boolean, adj: Int, numberRow: Boolean, numberRowFull: Boolean): Float {
+        val base = if (tablet) (if (landscape) 300f else 256f) else (if (landscape) 168f else 224f)
+        val four = base + adj * 4f
+        return if (numberRow) four + numberRowHeight(four / 4f, ROW_GAP, numberRowFull) else four
+    }
+
+    /**
+     * Gboard: điện thoại 224 dọc (4 × 56) / 168 ngang; tablet 256 / 300; + rowHeightAdjust × 4 hàng
+     * ([effectiveRowAdjust]: −10…+18, phần trên +10 kẹp theo [screenHeightDp]).
      * Hàng số bật ⇒ + [numberRowHeight] (điện thoại dọc: 10 + 0.8 × 46 = 46.8 dp), cho MỌI plane
      * (chuyển 123/emoji không đổi chiều cao bàn phím; plane số/ký hiệu giữ 4 hàng, mỗi hàng cao hơn chút).
      * [numberRowFull] ⇒ hàng số cao đúng 1 hàng chữ (56 dp dọc), bàn phím cao thêm tương ứng.
      */
     fun keyAreaDp(tablet: Boolean, landscape: Boolean, rowHeightAdjust: Int, numberRow: Boolean = false,
-                  numberRowFull: Boolean = false): Float {
-        val base = if (tablet) (if (landscape) 300f else 256f) else (if (landscape) 168f else 224f)
-        val four = base + rowHeightAdjust.coerceIn(-10, 10) * 4f
-        return if (numberRow) four + numberRowHeight(four / 4f, ROW_GAP, numberRowFull) else four
-    }
+                  numberRowFull: Boolean = false, screenHeightDp: Float = 0f): Float =
+        rawKeyAreaDp(tablet, landscape,
+            effectiveRowAdjust(tablet, landscape, rowHeightAdjust, numberRow, numberRowFull, screenHeightDp),
+            numberRow, numberRowFull)
 
     /** Cả bàn phím cao thêm bao nhiêu dp khi chỉnh [rowHeightAdjust] dp mỗi hàng (chữ cài đặt). */
     fun adjustTotalDp(rowHeightAdjust: Int, numberRow: Boolean, numberRowFull: Boolean = false): Int = Math.round(
@@ -182,8 +216,9 @@ object KeyLayout {
      * Hàng đáy có phím "." RIÊNG (thêm vào, ngoài phím hẹp cạnh space)? Plane chữ ô thường ĐIỆN
      * THOẠI: KHÔNG — một phím hẹp duy nhất kiểu iPhone [?123][😊][space rộng][, hẹp][↵] (issue
      * #113; Phil 12/10/2026 bỏ công tắc "Hiện phím dấu chấm" — hàng ", ." dồn góc, space bé —
-     * KHÔNG đưa lại hàng hai phím). Phím hẹp đó là "," / "." / không có theo "Phím cạnh dấu
-     * cách" ([sideKey], 16/10/2026). Luôn có: ô URL / email (giữ "." ra đuôi tên miền), tablet
+     * KHÔNG đưa lại hàng ", ." dồn góc). Phím hẹp đó là "," / "." / không có theo "Phím cạnh dấu
+     * cách" ([sideKey], 16/10/2026); "Cả hai" (16/10/2026, Phil duyệt) = "," TRÁI + "." phải space,
+     * space vẫn ở giữa — không phải "." riêng. Luôn có: ô URL / email (giữ "." ra đuôi tên miền), tablet
      * (dư chỗ), plane số / ký hiệu / mẫu câu.
      */
     fun hasPeriodKey(c: LayoutConfig): Boolean =
@@ -265,7 +300,9 @@ object KeyLayout {
             Plane.EMOJI_SEARCH -> {
                 // Plane chữ đầy đủ trong phần dưới; hàng trên (1/5) là ô tìm + kết quả.
                 val head = searchHeaderPx(c.keyAreaPx)
-                for (k in build(c.copy(plane = Plane.LETTERS, keyAreaPx = c.keyAreaPx - head, oneHand = OneHandSide.OFF))) {
+                // Ô tìm emoji: strip ẩn ⇒ luôn giữ 😊 (về bảng emoji).
+                for (k in build(c.copy(plane = Plane.LETTERS, keyAreaPx = c.keyAreaPx - head, oneHand = OneHandSide.OFF,
+                        emojiInStrip = false))) {
                     k.top += head; k.bottom += head
                     out += k
                 }
@@ -333,7 +370,8 @@ object KeyLayout {
     /**
      * Hàng đáy kiểu Gboard: [?123|ABC 0.15][, 0.10][🌐 0.10?][😊|🗑 0.10][space còn lại][. 0.10?]
      * [enter 0.15] ("." theo [hasPeriodKey]). Bàn chữ ô thường: "," sang phải space như iOS —
-     * điện thoại [?123][🌐?][😊][space][, 0.085][enter] (phím hẹp "," | "." | không có theo [sideKey]);
+     * điện thoại [?123][🌐?][😊?][space][, 0.085][enter] (phím hẹp "," | "." | không có theo [sideKey];
+     * Cả hai: [?123][😊?][, 0.085][space][. 0.085][enter]; 😊 lên strip khi [LayoutConfig.emojiInStrip]);
      * tablet: [tabletLettersBottom] (space giữa, dấu câu hai bên). Plane số tablet: + [ẩn 0.07]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
      * phím ".com" riêng — space rộng như stock, đuôi tên miền ở giữ "." — DomainPopup).
      * Hệ số nhân với bề ngang CẢ hàng.
@@ -361,11 +399,14 @@ object KeyLayout {
         } else ","
         if (!commaRight) slots += Slot(KeyKind.PUNCT, left, left, 0.10f)
         if (c.needsGlobe) slots += Slot(KeyKind.GLOBE, "", "", 0.10f)
-        slots += if (clearInsteadOfEmoji) Slot(KeyKind.CLEAR, "", "", 0.10f)
-                 else Slot(KeyKind.EMOJI, "", "", 0.10f)
+        if (clearInsteadOfEmoji) slots += Slot(KeyKind.CLEAR, "", "", 0.10f)
+        else if (!(letters && c.emojiInStrip)) slots += Slot(KeyKind.EMOJI, "", "", 0.10f)   // Thanh trên ⇒ 😊 ở strip
+        // Điện thoại: phím hẹp theo "Phím cạnh dấu cách" ("," / "." cùng chỗ cùng cỡ; Cả hai ⇒ "," trái +
+        // "." phải, cùng cỡ; Tắt ⇒ không phím, space ăn chỗ).
+        val side = if (commaRight) sideKey(c) else null
+        side?.left?.let { slots += Slot(KeyKind.PUNCT, it, it, PHONE_LETTERS_COMMA) }
         slots += Slot(KeyKind.SPACE, "", " ", -1f)
-        // Điện thoại: phím hẹp theo "Phím cạnh dấu cách" ("," / "." cùng chỗ cùng cỡ; Tắt ⇒ không phím, space ăn chỗ).
-        if (commaRight) sideKey(c)?.char?.let { slots += Slot(KeyKind.PUNCT, it, it, PHONE_LETTERS_COMMA) }
+        side?.right?.let { slots += Slot(KeyKind.PUNCT, it, it, PHONE_LETTERS_COMMA) }
         if (hasPeriodKey(c)) slots += Slot(KeyKind.PUNCT, ".", ".", 0.10f)
         slots += Slot(KeyKind.RETURN, c.returnLabel, "\n", 0.15f)
         if (c.tablet) slots += Slot(KeyKind.DISMISS, "", "", 0.07f)
@@ -410,7 +451,7 @@ object KeyLayout {
         val left = ArrayList<Slot>(4); val right = ArrayList<Slot>(3)
         left += Slot(KeyKind.PLANE, planeKey, planeKey, if (c.needsGlobe) TABLET_PLANE_GLOBE_U else TABLET_PLANE_U)
         if (c.needsGlobe) left += Slot(KeyKind.GLOBE, "", "", TABLET_CONTROL_U)
-        left += Slot(KeyKind.EMOJI, "", "", TABLET_CONTROL_U)
+        if (!c.emojiInStrip) left += Slot(KeyKind.EMOJI, "", "", TABLET_CONTROL_U)
         if (punct) { left += Slot(KeyKind.PUNCT, ",", ",", TABLET_PUNCT_U); right += Slot(KeyKind.PUNCT, ".", ".", TABLET_PUNCT_U) }
         right += Slot(KeyKind.RETURN, c.returnLabel, "\n", TABLET_RETURN_U)
         right += Slot(KeyKind.DISMISS, "", "", TABLET_CONTROL_U)
@@ -632,5 +673,20 @@ object KeyLayout {
         }
         val lim = 21f * d
         return if (best != null && bestD <= lim * lim) best else null
+    }
+}
+
+/**
+ * Kẹp cỡ chữ nhãn phím ("Cỡ chữ trên phím" = Lớn) theo bề ngang phím — THUẦN, pinned by
+ * KeyLayoutTest. [glyphW] = bề ngang chữ rộng nhất ("W") ở cỡ [want]; chữ phải chừa [pad] mỗi
+ * bên trong phím [keyW]. Không vừa ⇒ thu nhỏ tỉ lệ, nhưng không nhỏ hơn cỡ chuẩn [min].
+ */
+object KeyLabelFit {
+    const val PAD_DP = 3f
+
+    fun fit(want: Float, min: Float, glyphW: Float, keyW: Float, pad: Float): Float {
+        val room = keyW - 2 * pad
+        if (glyphW <= 0f || glyphW <= room) return want
+        return maxOf(minOf(min, want), want * maxOf(room, 0f) / glyphW)
     }
 }

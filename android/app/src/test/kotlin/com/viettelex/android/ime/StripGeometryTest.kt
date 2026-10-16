@@ -87,4 +87,20 @@ class StripGeometryTest {
         assertTrue(content(SuggestionSet(paste = true, clipChips = listOf(ClipChip(ClipChip.Kind.OTP, "482913", "OTP 482913")))))
         assertTrue(content(SuggestionSet(emojis = listOf("😀"))))
     }
+    /** "Nút emoji" = Thanh trên: ô 😊 40 dp cạnh ⌄ LUÔN trừ khỏi bar (cả khi có gợi ý), 📋 bên trái nó. */
+    @Test fun emojiButtonAlwaysReserved() {
+        val w = 411f; val zone = KeyLayout.STRIP_ZONE_W
+        for (tools in listOf(true, false)) for (clip in listOf(true, false)) {
+            val plain = StripGeometry.barRight(w, zone, StripGeometry.CLIP_W, clip, tools)
+            val emoji = StripGeometry.barRight(w, zone, StripGeometry.CLIP_W, clip, tools, emojiButton = true)
+            assertEquals(StripGeometry.EMOJI_W, plain - emoji, 0.001f)
+            assertEquals(w - zone - emoji, StripGeometry.rightExtraW(StripGeometry.CLIP_W, clip, tools, emojiButton = true), 0.001f)
+        }
+        // Có gợi ý (tools ẩn): chỉ còn 😊 bên phải; 3 slot vẫn bằng nhau.
+        val l = FloatArray(3); val r = FloatArray(3)
+        StripGeometry.thirds(StripGeometry.barLeft(zone, StripGeometry.TOOL_W, false),
+            StripGeometry.barRight(w, zone, StripGeometry.CLIP_W, true, false, emojiButton = true), l, r)
+        assertEquals((w - 2 * zone - StripGeometry.EMOJI_W) / 3f, r[0] - l[0], 0.001f)
+        assertEquals(0f, StripGeometry.rightExtraW(StripGeometry.CLIP_W, false, true), 0.001f)
+    }
 }

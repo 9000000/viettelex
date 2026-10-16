@@ -13,6 +13,7 @@ import android.view.animation.DecelerateInterpolator
 import com.viettelex.android.R
 import com.viettelex.keyboard.CommaPopup
 import com.viettelex.keyboard.SpaceSideKey
+import com.viettelex.keyboard.KeyLabelSize
 import com.viettelex.keyboard.DomainPopup
 import com.viettelex.keyboard.EmojiKeyAction
 import com.viettelex.keyboard.EmojiKeyMenu
@@ -270,19 +271,26 @@ class KeyboardView(
     private val borderPaint = theme.keyBorder?.let { c ->
         Paint(Paint.ANTI_ALIAS_FLAG).apply { color = c; style = Paint.Style.STROKE; strokeWidth = theme.dp(1f) }
     }
-    // Gboard: chữ 22 sp regular, nhãn chức năng 14 sp medium (font hệ thống sans-serif)
-    private val letterPaint = theme.text(22f)
-    private val controlPaint = theme.text(14f, medium = true)
+    // Gboard: chữ 22 sp regular, nhãn chức năng 14 sp medium (font hệ thống sans-serif).
+    // "Cỡ chữ trên phím" = Lớn ⇒ [applyLabelSize] đổi textSize (lúc cấu hình, không mỗi phím).
+    private val letterPaint = theme.text(LETTER_SP)
+    private val controlPaint = theme.text(CONTROL_SP, medium = true)
     private val badgePaint = theme.text(14f, medium = true)
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = theme.ink }
-    private val letterOff = theme.centerOffset(letterPaint)
-    private val controlOff = theme.centerOffset(controlPaint)
-    private val digitPaint = theme.text(24f)
-    private val digitOff = theme.centerOffset(digitPaint)
-    private val sidePaint = theme.text(20f)
-    private val sideOff = theme.centerOffset(sidePaint)
-    private val hintPaint = theme.text(10f, medium = true)
-    private val hintOff = theme.centerOffset(hintPaint)
+    private var letterOff = theme.centerOffset(letterPaint)
+    private var controlOff = theme.centerOffset(controlPaint)
+    private val digitPaint = theme.text(DIGIT_SP)
+    private var digitOff = theme.centerOffset(digitPaint)
+    private val sidePaint = theme.text(SIDE_SP)
+    private var sideOff = theme.centerOffset(sidePaint)
+    private val hintPaint = theme.text(HINT_SP, medium = true)
+    private var hintOff = theme.centerOffset(hintPaint)
+    /** Hệ số icon trên phím (⇧ ⌫ 😊 🌐 ↵ …) theo "Cỡ chữ trên phím". */
+    private var iconScale = 1f
+    private val largeHintDrop = theme.dp(2f)
+    private var labelSize = KeyLabelSize.DEFAULT
+    /** Cỡ chữ cái đã kẹp theo bề ngang phím chữ hẹp nhất (px) — chỉ tính lại khi đổi. */
+    private var fittedKeyW = -1f
     private val hintLift = theme.dp(6f)
     private val hintDrop = theme.dp(12f)
     private val keyPressed = theme.pressed(theme.keyFill)
@@ -568,9 +576,12 @@ class KeyboardView(
     fun configure(returnLabel: String, kind: InputKind, needsGlobe: Boolean, showLogo: Boolean,
                   templatesEnabled: Boolean, templates: List<TemplateItem>, keyAreaPx: Float,
                   numberSigned: Boolean = false, numberDecimal: Boolean = false, numberRow: Boolean = false,
-                  numberRowFull: Boolean = false, spaceSideKey: SpaceSideKey = SpaceSideKey.DEFAULT) {
+                  numberRowFull: Boolean = false, spaceSideKey: SpaceSideKey = SpaceSideKey.DEFAULT,
+                  emojiInStrip: Boolean = false, labelSize: KeyLabelSize = KeyLabelSize.DEFAULT) {
         this.numberRow = numberRow
         this.spaceSideKey = spaceSideKey
+        this.emojiInStrip = emojiInStrip
+        if (labelSize != this.labelSize) { this.labelSize = labelSize; applyLabelSize() }
         this.numberRowFull = numberRowFull
         this.numberSigned = numberSigned
         this.numberDecimal = numberDecimal
@@ -657,9 +668,11 @@ class KeyboardView(
     private var spaceSideKey = SpaceSideKey.DEFAULT
     /** Layout đang hiện có phím "." cạnh space thay "," (Dấu chấm) ⇒ giữ "." ra popup dấu câu. */
     private var periodSideKey = false
+    /** "Nút emoji" = Thanh trên và strip hiện ⇒ bàn chữ không có 😊 (nút ở StripView). Trong chữ ký layout. */
+    private var emojiInStrip = false
     /** Chế độ một tay (IME chỉ đặt khác OFF trên điện thoại). */
     var oneHand = OneHandSide.OFF; private set
-    private fun signature() = "$returnLabel|$inputKind|$needsGlobe|$width|$keyAreaPx|$numberSigned|$numberDecimal|$numberRow|$numberRowFull|$spaceSideKey|$oneHand|$textToolsEnabled|$translateEnabled"
+    private fun signature() = "$returnLabel|$inputKind|$needsGlobe|$width|$keyAreaPx|$numberSigned|$numberDecimal|$numberRow|$numberRowFull|$spaceSideKey|$emojiInStrip|$oneHand|$textToolsEnabled|$translateEnabled"
 
     private fun rebuild() {
         if (width == 0) return
@@ -671,8 +684,9 @@ class KeyboardView(
         val cfg = LayoutConfig(plane, width.toFloat(), keyAreaPx, d, inputKind, needsGlobe,
             theme.tablet, returnLabel, numberSigned, numberDecimal, numberRow, oneHand,
             editTools = textToolsEnabled, numberRowFull = numberRowFull, editTranslate = translateEnabled,
-            spaceSideKey = spaceSideKey)
+            spaceSideKey = spaceSideKey, emojiInStrip = emojiInStrip)
         keys = planeCache.getOrPut(plane) { KeyLayout.build(cfg) }
+        fitLetterLabels()
         periodSideKey = KeyLayout.sideKey(cfg) == SpaceSideKey.PERIOD
         railSpan = if (OneHand.appliesTo(plane)) OneHand.rail(width.toFloat(), oneHand) else null
         a11y.invalidateRoot()             // TalkBack tắt ⇒ trả về ngay (manager không bật)
@@ -843,9 +857,12 @@ class KeyboardView(
         val cx = k.centerX; val cy = k.centerY
         when (k.kind) {
             KeyKind.LETTER -> {
-                drawLabel(c, if (shift == Shift.OFF) k.label else k.upper, cx, cy, letterPaint, letterOff, contentAlpha)
+                val alt = if (alts.isNotEmpty()) alts[k.label[0]] else null
+                // Chữ Lớn + ký tự phụ góc trên ⇒ hạ chữ chính một chút để không chạm ký tự phụ.
+                val ly = if (alt != null && labelSize != KeyLabelSize.MEDIUM) cy + largeHintDrop else cy
+                drawLabel(c, if (shift == Shift.OFF) k.label else k.upper, cx, ly, letterPaint, letterOff, contentAlpha)
                 // Ký tự phụ nhỏ, mờ ở góc trên-phải như Gboard.
-                if (alts.isNotEmpty()) alts[k.label[0]]?.let {
+                alt?.let {
                     drawLabel(c, it, k.right - hintInset + theme.dp(2f), k.top + hintInset, hintPaint, hintOff, (contentAlpha * 0.55f).toInt())
                 }
             }
@@ -1037,7 +1054,42 @@ class KeyboardView(
     private fun icon(c: Canvas, id: Int, cx: Float, cy: Float, sizeDp: Float, color: Int, alpha: Int) {
         iconPaint.color = color
         iconPaint.alpha = (android.graphics.Color.alpha(color) * alpha) / 255
-        ImeIcons.draw(c, id, cx, cy, sizeDp * d, iconPaint)
+        ImeIcons.draw(c, id, cx, cy, sizeDp * d * iconScale, iconPaint)
+    }
+
+    /** "Cỡ chữ trên phím": đặt lại cỡ mọi paint nhãn phím (lúc cấu hình — 0 chi phí mỗi phím). */
+    private fun applyLabelSize() {
+        val s = labelSize
+        controlPaint.textSize = theme.sp(CONTROL_SP * s.controlScale)
+        digitPaint.textSize = theme.sp(DIGIT_SP * s.controlScale)
+        sidePaint.textSize = theme.sp(SIDE_SP * s.controlScale)
+        hintPaint.textSize = theme.sp(HINT_SP * s.hintScale)
+        controlOff = theme.centerOffset(controlPaint)
+        digitOff = theme.centerOffset(digitPaint)
+        sideOff = theme.centerOffset(sidePaint)
+        hintOff = theme.centerOffset(hintPaint)
+        iconScale = s.controlScale
+        fittedKeyW = -1f
+        fitLetterLabels()
+        invalidate()
+    }
+
+    /**
+     * Chữ cái / số / dấu câu: cỡ theo [labelSize], KẸP để chữ rộng nhất ("W") còn chừa lề trong phím
+     * chữ hẹp nhất (một tay, máy hẹp, cỡ chữ hệ thống lớn) — [KeyLabelFit]. Gọi sau mỗi lần dựng layout.
+     */
+    private fun fitLetterLabels() {
+        var kw = Float.MAX_VALUE
+        for (k in keys) if ((k.kind == KeyKind.LETTER || k.kind == KeyKind.CHAR) && k.width < kw) kw = k.width
+        if (kw == Float.MAX_VALUE) kw = 0f
+        if (kw == fittedKeyW) return
+        fittedKeyW = kw
+        val want = theme.sp(LETTER_SP * labelSize.letterScale)
+        letterPaint.textSize = want
+        if (kw > 0f && labelSize != KeyLabelSize.MEDIUM) {
+            letterPaint.textSize = KeyLabelFit.fit(want, theme.sp(LETTER_SP), letterPaint.measureText("W"), kw, theme.dp(KeyLabelFit.PAD_DP))
+        }
+        letterOff = theme.centerOffset(letterPaint)
     }
 
     // MARK: touch
@@ -1761,24 +1813,56 @@ class KeyboardView(
 
     private fun openEmojiMenu() {
         val k = ptrKey.getOrNull(globePtr)?.takeIf { it.kind == KeyKind.EMOJI } ?: return
+        if (!showEmojiMenu(k.centerX, k.top, k.bottom, below = false)) return
+        globeFired = true                 // nhấc không mở plane emoji
+    }
+
+    /**
+     * Mở menu giữ 😊 neo vào phím / nút có tâm ngang [anchorCx], mép [anchorTop]…[anchorBottom]
+     * (px, toạ độ view này — âm = phía trên, tức nút 😊 trên strip). [below] ⇒ hàng ô nằm DƯỚI nút
+     * (nút strip ở đỉnh cửa sổ, không có chỗ phía trên). Ngón hiện ở [menuX], [menuY].
+     */
+    private fun showEmojiMenu(anchorCx: Float, anchorTop: Float, anchorBottom: Float, below: Boolean): Boolean {
         val acts = EmojiKeyMenu.actions(voiceAvailable, oneHandAvailable = !theme.tablet && !floatingOn,
             floatingAvailable = true)
         val h = DomainPopup.Hold(acts.map { EmojiKeyMenu.label(it, oneHand != OneHandSide.OFF, floatingOn) })
         val n = acts.size
         val wDp = width / d
         val itemW = minOf(if (theme.tablet) 56f else 48f, (wDp - 4f) / n)
-        val l = DomainPopup.layout(k.centerX / d, itemW, n, wDp)
+        val l = DomainPopup.layout(anchorCx / d, itemW, n, wDp)
         val off = top / d
         val panelH = if (theme.tablet) 52f else 46f
-        val popTop = maxOf((k.top / d + off) - 8f - panelH, 0f)
-        if (!h.open(l, popTop, k.bottom / d + off, menuX / d, menuY / d + off)) return
-        globeFired = true                 // nhấc không mở plane emoji
+        val popTop = if (below) maxOf(anchorBottom / d + off + 4f, 0f)
+                     else maxOf((anchorTop / d + off) - 8f - panelH, 0f)
+        val holdTop = if (below) anchorTop / d + off else popTop
+        val holdBottom = if (below) popTop + panelH else anchorBottom / d + off
+        if (!h.open(l, holdTop, holdBottom, menuX / d, menuY / d + off)) return false
         menuHold = h; menuActions = acts
         val inset = 4f
         balloon.showPopup((l.originX - inset) * d, popTop * d, (l.originX + l.width + inset) * d, (popTop + panelH) * d,
             FloatArray(n) { l.slotMinX(it) * d }, itemW * d, h.choices, 18f, h.selection ?: -1,
             icons = IntArray(n) { menuIcon(acts[it]) })
         feedback.longPress(this)
+        return true
+    }
+
+    // --- nút 😊 trên strip ("Nút emoji" = Thanh trên): giữ = cùng menu, hàng ô dưới nút ---
+
+    /** Giữ nút 😊 strip đủ lâu. Toạ độ px của view NÀY (y âm = trên vùng phím). true = menu mở. */
+    fun stripEmojiHold(anchorCx: Float, anchorTop: Float, anchorBottom: Float, x: Float, y: Float): Boolean {
+        dropEmojiMenu()
+        menuX = x; menuY = y
+        return showEmojiMenu(anchorCx, anchorTop, anchorBottom, below = true)
+    }
+
+    fun stripEmojiMove(x: Float, y: Float) = emojiMenuMove(x, y)
+
+    /** Nhấc ([cancel] = false ⇒ chạy mục đang chọn) / huỷ. */
+    fun stripEmojiRelease(cancel: Boolean) {
+        val menu = menuHold ?: return
+        val a = menu.selection?.let { menuActions.getOrNull(it) }
+        dropEmojiMenu()
+        if (a != null && !cancel) runMenuAction(a)
     }
 
     private fun emojiMenuMove(x: Float, y: Float) {
@@ -1908,6 +1992,12 @@ class KeyboardView(
 
     companion object {
         private const val MAX_PTR = 32
+        /** Cỡ nhãn phím chuẩn (sp, "Cỡ chữ trên phím" = Vừa) — Lớn nhân [KeyLabelSize]. */
+        const val LETTER_SP = 22f
+        const val CONTROL_SP = 14f
+        const val DIGIT_SP = 24f
+        const val SIDE_SP = 20f
+        const val HINT_SP = 10f
         const val DOUBLE_SPACE_MS = 350L
         const val SHIFT_DOUBLE_MS = 300L
         const val SPACE_HOLD_MS = 300L

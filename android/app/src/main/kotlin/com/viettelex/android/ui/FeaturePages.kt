@@ -39,6 +39,8 @@ import android.os.SystemClock
 import com.viettelex.keyboard.KeyAlternates
 import com.viettelex.keyboard.Keys
 import com.viettelex.keyboard.SpaceSideKey
+import com.viettelex.keyboard.EmojiKeyPlacement
+import com.viettelex.keyboard.KeyLabelSize
 import com.viettelex.keyboard.PlusFeature
 import com.viettelex.keyboard.PlusGate
 import java.text.Normalizer
@@ -110,7 +112,9 @@ internal data class FeatureSearchEntry(val viTitle: String, val keywords: String
             FeatureSearchEntry("Dịch trên máy", "translate dịch ngôn ngữ language ml kit plus", FeaturePage.GoTat), // l10n-key
             FeatureSearchEntry("Hàng phím số", "number row số", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Hàng số cao bằng hàng chữ", "number row tall height cao số", FeaturePage.Phim), // l10n-key
-            FeatureSearchEntry("Phím cạnh dấu cách", "dấu phẩy dấu chấm comma period key next to space", FeaturePage.Phim), // l10n-key
+            FeatureSearchEntry("Phím cạnh dấu cách", "dấu phẩy dấu chấm cả hai comma period both key next to space", FeaturePage.Phim), // l10n-key
+            FeatureSearchEntry("Nút emoji", "emoji biểu tượng cảm xúc thanh trên top bar toolbar", FeaturePage.Phim), // l10n-key
+            FeatureSearchEntry("Cỡ chữ trên phím", "cỡ chữ to lớn font size label large key", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Giữ phím hàng trên để ra số", "số giữ lâu number long press", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Giữ phím hàng 2, 3 để ra ký tự đặc biệt", "ký hiệu symbol @ # giữ lâu long press", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh", "space ngôn ngữ english language", FeaturePage.Phim), // l10n-key
@@ -296,6 +300,8 @@ private fun FeatureHome(onOpen: (FeaturePage) -> Unit) {
     val keySound by rememberBoolPref(Keys.KEY_SOUND, Prefs.D.keySound)
     val oneHand by rememberStringPref(Keys.ONE_HAND_MODE, Prefs.D.oneHandMode)
     val sideKey by rememberStringPref(Keys.SPACE_SIDE_KEY, Prefs.D.spaceSideKey.id)
+    val emojiPlace by rememberStringPref(Keys.EMOJI_KEY_PLACEMENT, Prefs.D.emojiKeyPlacement.id)
+    val labelSize by rememberStringPref(Keys.KEY_LABEL_SIZE, Prefs.D.keyLabelSize.id)
     val floating by rememberBoolPref(Keys.FLOATING_KEYBOARD, Prefs.D.floatingKeyboard)
     val hardware by rememberBoolPref(Keys.HARDWARE_TELEX, Prefs.D.hardwareTelex)
     val clipHistory by rememberBoolPref(Keys.CLIPBOARD_HISTORY, Prefs.D.clipboardHistory)
@@ -316,7 +322,9 @@ private fun FeatureHome(onOpen: (FeaturePage) -> Unit) {
         FeaturePage.GoTat -> (if (!shortcutsOn) tr("Gõ tắt tắt") else if (shortcutCount == 0) tr("Gõ tắt bật") else tr("Gõ tắt: %d mục", shortcutCount)) +
             " · " + if (templatesOn) tr("Mẫu câu bật") else tr("Mẫu câu tắt")
         FeaturePage.Phim -> join(numberRow to tr("Hàng số"),
-            (sideKey != SpaceSideKey.DEFAULT.id) to tr("Phím cạnh dấu cách"), spaceSwipe to tr("Vuốt phím cách"),
+            (SpaceSideKey.of(sideKey) != SpaceSideKey.DEFAULT) to tr("Phím cạnh dấu cách"),
+            (EmojiKeyPlacement.of(emojiPlace) != EmojiKeyPlacement.DEFAULT) to tr("Nút emoji"),
+            (KeyLabelSize.of(labelSize) != KeyLabelSize.DEFAULT) to tr("Cỡ chữ trên phím"), spaceSwipe to tr("Vuốt phím cách"),
             keyCmds to tr("Vuốt sao chép/dán"),
             autoSpace to tr("Cách sau dấu câu"), haptic to tr("Rung"), keySound to tr("Âm"),
             (oneHand != "off") to tr("Một tay"), floating to tr("Thả nổi"), hardware to tr("Bàn phím cứng"), none = tr("Mặc định"))
@@ -524,32 +532,55 @@ private fun PlusLockedRow(title: String, caption: String) {
     }
 }
 
-/** "Phím cạnh dấu cách": Dấu phẩy (mặc định) / Dấu chấm / Tắt — bàn chữ ô thường (điện thoại: phím hẹp; tablet: "," "." hai bên space hoặc không). */
+/** Hàng chọn một trong vài giá trị chuỗi (nút bấm chia đều): tiêu đề + chú thích + các ô. */
 @Composable
-private fun SpaceSideKeyRow() {
+private fun ChoiceRow(key: String, default: String, title: String, caption: String,
+                      options: List<Pair<String, String>>, normalize: (String) -> String = { it }) {
     val c = LocalVT.current
-    var mode by rememberStringPref(Keys.SPACE_SIDE_KEY, Prefs.D.spaceSideKey.id)
+    var mode by rememberStringPref(key, default)
     VTRow {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(tr("Phím cạnh dấu cách"), style = VTType.body, color = c.label)
-            Text(tr("Điện thoại: phím hẹp bên phải phím cách trên bàn chữ. Máy tính bảng: Dấu phẩy hay Dấu chấm đều giữ cả hai phím , và . hai bên phím cách; Tắt bỏ cả hai. Ô email, đường dẫn giữ nguyên. Giữ phím để chọn dấu câu khác. Tắt: phím cách rộng hơn; chạm phím cách hai lần vẫn ra dấu chấm."),
-                style = VTType.footnote, color = c.secondary)
+            Text(title, style = VTType.body, color = c.label)
+            Text(caption, style = VTType.footnote, color = c.secondary)
         }
     }
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        for ((v, t) in listOf(SpaceSideKey.COMMA.id to tr("Dấu phẩy"), SpaceSideKey.PERIOD.id to tr("Dấu chấm"),
-                SpaceSideKey.OFF.id to tr("Tắt"))) {
-            val on = SpaceSideKey.of(mode).id == v
+        for ((v, t) in options) {
+            val on = normalize(mode) == v
             Box(Modifier.weight(1f)
                 .background(if (on) c.accent else c.secondary.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
                 .clickable { mode = v }
                 .padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                Text(t, style = VTType.body, color = if (on) Color.White else c.label)
+                // 4 ô trên điện thoại hẹp ⇒ chữ nhỏ hơn một bậc cho vừa một dòng.
+                Text(t, style = if (options.size > 3) VTType.subheadline else VTType.body, maxLines = 1,
+                    color = if (on) Color.White else c.label)
             }
         }
     }
 }
+
+/**
+ * "Phím cạnh dấu cách": Dấu phẩy (mặc định) / Dấu chấm / Cả hai / Tắt — bàn chữ ô thường
+ * (điện thoại: phím hẹp, Cả hai = "," trái + "." phải; tablet: "," "." hai bên space hoặc không).
+ */
+@Composable
+private fun SpaceSideKeyRow() = ChoiceRow(Keys.SPACE_SIDE_KEY, Prefs.D.spaceSideKey.id, tr("Phím cạnh dấu cách"),
+    tr("Điện thoại: phím hẹp cạnh phím cách trên bàn chữ; Cả hai: dấu phẩy bên trái, dấu chấm bên phải phím cách. Máy tính bảng: Dấu phẩy, Dấu chấm hay Cả hai đều giữ hai phím , và . hai bên phím cách; Tắt bỏ cả hai. Ô email, đường dẫn giữ nguyên. Giữ dấu phẩy để chọn dấu câu khác. Tắt: phím cách rộng hơn; chạm phím cách hai lần vẫn ra dấu chấm."),
+    listOf(SpaceSideKey.COMMA.id to tr("Dấu phẩy"), SpaceSideKey.PERIOD.id to tr("Dấu chấm"),
+        SpaceSideKey.BOTH.id to tr("Cả hai"), SpaceSideKey.OFF.id to tr("Tắt"))) { SpaceSideKey.of(it).id }
+
+/** "Nút emoji": Hàng dưới (mặc định) / Thanh trên — [EmojiKeyPlacement]. */
+@Composable
+private fun EmojiPlacementRow() = ChoiceRow(Keys.EMOJI_KEY_PLACEMENT, Prefs.D.emojiKeyPlacement.id, tr("Nút emoji"),
+    tr("Thanh trên: nút emoji lên thanh gợi ý (cạnh nút thu gọn), phím cách rộng hơn. Giữ nút để đổi bàn phím, gõ giọng nói, một tay… Khi thanh gợi ý không hiện, nút vẫn ở hàng dưới."),
+    listOf(EmojiKeyPlacement.BOTTOM.id to tr("Hàng dưới"), EmojiKeyPlacement.TOP.id to tr("Thanh trên"))) { EmojiKeyPlacement.of(it).id }
+
+/** "Cỡ chữ trên phím": Vừa (mặc định) / Lớn — [KeyLabelSize]. */
+@Composable
+private fun KeyLabelSizeRow() = ChoiceRow(Keys.KEY_LABEL_SIZE, Prefs.D.keyLabelSize.id, tr("Cỡ chữ trên phím"),
+    tr("Lớn: chữ, ký hiệu và biểu tượng trên phím to hơn khoảng 20%."),
+    listOf(KeyLabelSize.MEDIUM.id to tr("Vừa"), KeyLabelSize.LARGE.id to tr("Lớn"))) { KeyLabelSize.of(it).id }
 
 @Composable
 private fun PhimPage(onBack: () -> Unit) {
@@ -565,6 +596,10 @@ private fun PhimPage(onBack: () -> Unit) {
             RowDivider()
         }
         SpaceSideKeyRow()
+        RowDivider()
+        EmojiPlacementRow()
+        RowDivider()
+        KeyLabelSizeRow()
         RowDivider()
         // Hàng số bật ⇒ giữ q…p ra số vô nghĩa (KeyAlternates.numbersSettingVisible).
         if (KeyAlternates.numbersSettingVisible(numberRow)) {

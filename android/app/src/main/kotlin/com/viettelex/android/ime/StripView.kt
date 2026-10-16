@@ -43,6 +43,15 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         fun onToggleOneHand()
         /** Nút 📋 (khi lịch sử clipboard bật): mở/đóng bảng lịch sử. */
         fun onToggleClipboard()
+        /** Nút 😊 ("Nút emoji" = Thanh trên): chạm = bảng emoji. */
+        fun onEmojiButton() {}
+        /**
+         * Giữ nút 😊 strip: menu như giữ phím 😊 (đổi bàn phím, giọng nói, một tay…). Toạ độ px của
+         * StripView; IME đổi sang toạ độ bàn phím. true = menu đã mở (nhận [onEmojiButtonHoldMove]).
+         */
+        fun onEmojiButtonHold(anchorCx: Float, anchorTop: Float, anchorBottom: Float, x: Float, y: Float): Boolean = false
+        fun onEmojiButtonHoldMove(x: Float, y: Float) {}
+        fun onEmojiButtonHoldEnd(cancel: Boolean) {}
     }
 
     /** Điện thoại (không tablet): giữ lâu icon con trỏ = một tay. */
@@ -88,6 +97,8 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
     /** Nút 📋 lịch sử clipboard + chỉ báo ẩn danh (đặt trước ⌄, bar co lại). */
     private var clipButton = false
     private var clipOpen = false
+    /** Nút 😊 cạnh ⌄ ("Nút emoji" = Thanh trên) — luôn hiện (cả khi có gợi ý / thu gọn), StripGeometry.EMOJI_W. */
+    var emojiButton = false; private set
     private var lastSig = ""
     private var lastSet: SuggestionSet? = null
     /** Bar đang có nội dung gợi ý (chữ/emoji/chip/thẻ Dán/pill) ⇒ ẩn icon con trỏ + 📋 (#113). */
@@ -139,8 +150,8 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         layoutPaste()
     }
 
-    /** Bề rộng dành cho 📋 / 🕶 bên trái ⌄. */
-    private fun extraW(): Float = if (clipButton && tools()) theme.dp(CLIP_W) else 0f
+    /** Bề rộng dành cho 😊 + 📋 bên trái ⌄. */
+    private fun extraW(): Float = theme.dp(StripGeometry.rightExtraW(CLIP_W, clipButton, tools(), emojiButton))
     /** Lề mỗi bên cho pill căn giữa: zone + phần lớn hơn giữa icon con trỏ (trái) và 📋/🕶 (phải). */
     private fun sideW(): Float = theme.dp(KeyLayout.STRIP_ZONE_W) + maxOf(if (tools()) theme.dp(STRIP_TOOL_W) else 0f, extraW())
 
@@ -161,8 +172,10 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
     fun viewHeightPx(): Int = if (!reserved) 0 else (stripPx() + theme.dp(4f)).toInt()
 
     /** [reserved]: giữ chỗ dải dù ô này không có gợi ý (bàn phím không đổi cao giữa các ô). */
-    fun configure(enabled: Boolean, collapsed: Boolean, templatesEnabled: Boolean, reserved: Boolean = enabled) {
+    fun configure(enabled: Boolean, collapsed: Boolean, templatesEnabled: Boolean, reserved: Boolean = enabled,
+                  emojiButton: Boolean = false) {
         anim?.cancel()
+        if (emojiButton != this.emojiButton) { this.emojiButton = emojiButton; layoutPaste() }
         this.suggestionsEnabled = enabled
         this.reserved = reserved || enabled
         this.collapsed = collapsed
@@ -251,7 +264,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         if (shown != toolsBefore) layoutPaste()
         // Trái: ô mẫu câu + icon con trỏ (bảng sửa); phải: 📋 + ⌄. Có gợi ý ⇒ ẩn con trỏ/📋 (#113).
         val barL = theme.dp(StripGeometry.barLeft(KeyLayout.STRIP_ZONE_W, STRIP_TOOL_W, shown))
-        val barR = theme.dp(StripGeometry.barRight(width / d, KeyLayout.STRIP_ZONE_W, CLIP_W, clipButton, shown))
+        val barR = theme.dp(StripGeometry.barRight(width / d, KeyLayout.STRIP_ZONE_W, CLIP_W, clipButton, shown, emojiButton))
         when (l) {
             is BarLayout.Pill -> { actionPill = l.chip; return }
             BarLayout.PasteCard -> { paste = true; return }
@@ -409,12 +422,18 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         }
     }
 
-    /** 📋 (bấm được) bên trái ⌄; thu gọn thì nhỏ lại ở hàng nổi. Không có chỉ báo ẩn danh (Phil 27/09 bỏ). */
+    /** 😊 (Thanh trên) rồi 📋 (bấm được) bên trái ⌄; thu gọn thì nhỏ lại ở hàng nổi. Không có chỉ báo ẩn danh (Phil 27/09 bỏ). */
     private fun drawExtras(c: Canvas, w: Float, cy: Float, o: Float) {
-        if (!clipButton || !tools()) return
         val zoneL = w - theme.dp(KeyLayout.STRIP_ZONE_W) * o - theme.dp(48f) * (1f - o)
         var x = zoneL
-        if (clipButton) {
+        if (emojiButton) {
+            val cx = x - theme.dp(StripGeometry.EMOJI_W) / 2
+            if (pressed == T_EMOJI_BTN && o > 0.5f) c.drawCircle(cx, cy, theme.dp(18f), chipPaint)
+            iconPaint.color = theme.withAlpha(theme.ink, 0.75f)
+            ImeIcons.draw(c, ImeIcons.FACE, cx, cy, theme.dp(StripGeometry.iconDp(o)), iconPaint)
+            x -= theme.dp(StripGeometry.EMOJI_W)
+        }
+        if (clipButton && tools()) {
             val cx = x - theme.dp(CLIP_W) / 2
             if (clipOpen && o > 0.5f) c.drawCircle(cx, cy, theme.dp(18f), chipPaint)
             iconPaint.color = theme.withAlpha(theme.ink, if (clipOpen) 1f else 0.75f)
@@ -460,7 +479,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
             MotionEvent.ACTION_DOWN -> {
                 target = findTarget(e.x, e.y)
                 downX = e.x; downY = e.y
-                if (target == T_SLOT || target == T_EMOJI || target == T_PASTE || target == T_RESTORE || target == T_PILL || target == T_EDIT) {
+                if (target == T_SLOT || target == T_EMOJI || target == T_PASTE || target == T_RESTORE || target == T_PILL || target == T_EDIT || target == T_EMOJI_BTN) {
                     pressed = target; pressedIndex = targetIndex; invalidate()
                 }
                 // chốt từ đang HIỆN dưới ngón tay — gợi ý nền về trước lúc nhấc không được đổi nó
@@ -473,16 +492,23 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
                 longFired = false
                 removeCallbacks(editLongRun)
                 if (target == T_EDIT && oneHandAvailable) postDelayed(editLongRun, LONG_MS)
+                emojiHoldOpen = false
+                removeCallbacks(emojiLongRun)
+                if (target == T_EMOJI_BTN) postDelayed(emojiLongRun, LONG_MS)
                 return target != T_NONE
             }
+            MotionEvent.ACTION_MOVE -> if (emojiHoldOpen) listener?.onEmojiButtonHoldMove(e.x, e.y)
             MotionEvent.ACTION_UP -> {
-                removeCallbacks(editLongRun)
+                removeCallbacks(editLongRun); removeCallbacks(emojiLongRun)
+                if (emojiHoldOpen) { emojiHoldOpen = false; target = T_NONE; listener?.onEmojiButtonHoldEnd(false); return true }
                 val t = if (longFired) T_NONE else target; target = T_NONE
                 if (pressed != T_NONE) { pressed = T_NONE; invalidate() }
                 if (abs(e.x - downX) > theme.dp(40f) || abs(e.y - downY) > theme.dp(40f)) return true
                 fire(t)
             }
-            MotionEvent.ACTION_CANCEL -> { removeCallbacks(editLongRun); target = T_NONE; tap.cancel(); if (pressed != T_NONE) { pressed = T_NONE; invalidate() } }
+            MotionEvent.ACTION_CANCEL -> { removeCallbacks(editLongRun); removeCallbacks(emojiLongRun)
+                if (emojiHoldOpen) { emojiHoldOpen = false; listener?.onEmojiButtonHoldEnd(true) }
+                target = T_NONE; tap.cancel(); if (pressed != T_NONE) { pressed = T_NONE; invalidate() } }
         }
         return true
     }
@@ -496,7 +522,9 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
             if (templatesEnabled && x < theme.dp(64f)) return T_BURGER
             if (x >= theme.dp(64f) && x < theme.dp(112f)) return T_EDIT
             if (x >= w - theme.dp(48f)) return T_CHEVRON
-            if (clipButton && x >= w - theme.dp(48f + CLIP_W)) return T_CLIP
+            val em = if (emojiButton) theme.dp(StripGeometry.EMOJI_W) else 0f
+            if (emojiButton && x >= w - theme.dp(48f) - em) return T_EMOJI_BTN
+            if (clipButton && x >= w - theme.dp(48f + CLIP_W) - em) return T_CLIP
             return T_NONE
         }
         if (y > strip) return T_NONE          // không lấn hàng Q–P
@@ -505,7 +533,9 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         val tools = tools()
         if (tools && x < zone + theme.dp(STRIP_TOOL_W)) return T_EDIT
         if (x >= w - zone) return T_CHEVRON
-        if (clipButton && tools && x >= w - zone - theme.dp(CLIP_W)) return T_CLIP
+        val em = if (emojiButton) theme.dp(StripGeometry.EMOJI_W) else 0f
+        if (emojiButton && x >= w - zone - em) return T_EMOJI_BTN
+        if (clipButton && tools && x >= w - zone - em - theme.dp(CLIP_W)) return T_CLIP
         if (x >= w - zone - extraW()) return T_NONE
         if (swipePreview != null || statusText != null) return T_NONE
         if (restoreOffer) return T_RESTORE
@@ -523,6 +553,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
             T_CHEVRON -> toggleCollapsed()
             T_EDIT -> { feedback.click(Feedback.MODIFIER, this); listener?.onToggleEditPanel() }
             T_CLIP -> { feedback.click(Feedback.MODIFIER, this); listener?.onToggleClipboard() }
+            T_EMOJI_BTN -> { feedback.click(Feedback.MODIFIER, this); listener?.onEmojiButton() }
             T_PASTE -> { feedback.click(Feedback.MODIFIER, this); listener?.onSuggestion(SuggestionSet.PASTE_TOKEN) }
             T_RESTORE -> { feedback.click(Feedback.MODIFIER, this); listener?.onRestoreDeleted() }
             T_PILL -> tap.up()?.let { feedback.click(Feedback.MODIFIER, this); listener?.onSuggestion(it) }
@@ -539,8 +570,25 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         listener?.onToggleOneHand()
     }
 
+    /** Menu giữ 😊 strip đang mở (nhận move / nhấc). */
+    private var emojiHoldOpen = false
+    private val emojiLongRun = Runnable {
+        if (target != T_EMOJI_BTN) return@Runnable
+        longFired = true
+        pressed = T_NONE; invalidate()
+        val cx = emojiButtonCx()
+        emojiHoldOpen = listener?.onEmojiButtonHold(cx, 0f, stripPx(), downX, downY) == true
+    }
+
+    /** Tâm ngang nút 😊 (px) theo độ mở hiện tại — cùng công thức [drawExtras]. */
+    private fun emojiButtonCx(): Float {
+        val o = openness
+        return width - theme.dp(KeyLayout.STRIP_ZONE_W) * o - theme.dp(48f) * (1f - o) - theme.dp(StripGeometry.EMOJI_W) / 2
+    }
+
     fun onHidden() {
-        removeCallbacks(editLongRun)
+        removeCallbacks(editLongRun); removeCallbacks(emojiLongRun)
+        if (emojiHoldOpen) { emojiHoldOpen = false; listener?.onEmojiButtonHoldEnd(true) }
         target = T_NONE; pressed = T_NONE; tap.cancel()
     }
 
@@ -555,6 +603,7 @@ class StripView(context: Context, private val theme: ImeTheme, private val feedb
         private const val T_EDIT = 7
         private const val T_CLIP = 8
         private const val T_PILL = 9
+        private const val T_EMOJI_BTN = 10
         /** Bề ngang ô icon con trỏ (sau ô mẫu câu), dp. */
         const val STRIP_TOOL_W = StripGeometry.TOOL_W
         private const val LONG_MS = 450L

@@ -394,8 +394,12 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         session.barCollapsed = collapsed
         // Ô cấm gợi ý chữ nhưng không nhạy cảm (StripMode.TOOLS): vẫn ☰/con trỏ/📋/⌄ + Dán (#113).
         val barOn = session.stripMode.shown
+        // "Nút emoji" = Thanh trên: chỉ khi strip CÓ vẽ (barOn) — không thì 😊 ở lại hàng đáy.
+        // TalkBack: strip không đọc được (importantForAccessibility NO) ⇒ giữ phím 😊 cho người dùng trợ năng.
+        val emojiInStrip = com.viettelex.keyboard.EmojiKeyPlacement.inStrip(settings.emojiKeyPlacement,
+            barOn && accessibility?.isTouchExplorationEnabled != true)
         st.configure(barOn, collapsed, settings.templatesEnabled,
-            reserved = KeyLayout.stripReserved(settings.showSuggestions))
+            reserved = KeyLayout.stripReserved(settings.showSuggestions), emojiButton = emojiInStrip)
         applyFloating(settings.floatingKeyboard, settings)
         kb.setEditHasSelection(info.initialSelStart >= 0 && info.initialSelStart != info.initialSelEnd)
         st.setExtras(clipButton = settings.clipboardHistory, open = false)
@@ -404,9 +408,9 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         kb.configure(field.returnLabel, field.kind, needsGlobe(), settings.showSpaceLogo,
             settings.templatesEnabled, templates,
             th.dp(KeyLayout.keyAreaDp(th.tablet, th.landscape, settings.rowHeightAdjust, settings.numberRow,
-                settings.numberRowFullHeight)),
+                settings.numberRowFullHeight, resources.configuration.screenHeightDp.toFloat())),
             field.numberSigned, field.numberDecimal, settings.numberRow, settings.numberRowFullHeight,
-            settings.spaceSideKey)
+            settings.spaceSideKey, emojiInStrip, settings.keyLabelSize)
         kb.keyPreview = settings.keyPreview
         kb.keyPressHighlight = settings.keyPressHighlight
         kb.configureSpaceFlick(settings.spaceSwipeLanguage, session.language)
@@ -1328,6 +1332,27 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     // MARK: bảng sửa văn bản + một tay
 
     override fun onToggleEditPanel() { keyboard?.toggleEditPanel() }
+
+    // --- nút 😊 trên strip ("Nút emoji" = Thanh trên) ---
+    override fun onEmojiButton() { keyboard?.setPlane(Plane.EMOJI) }
+
+    /** Toạ độ StripView → KeyboardView (cùng cha ImeRootView, kể cả thả nổi). */
+    private fun stripToKbDy(): Float {
+        val st = strip ?: return 0f; val kb = keyboard ?: return 0f
+        return (st.top - kb.top).toFloat()
+    }
+    private fun stripToKbDx(): Float {
+        val st = strip ?: return 0f; val kb = keyboard ?: return 0f
+        return (st.left - kb.left).toFloat()
+    }
+
+    override fun onEmojiButtonHold(anchorCx: Float, anchorTop: Float, anchorBottom: Float, x: Float, y: Float): Boolean {
+        val kb = keyboard ?: return false
+        val dx = stripToKbDx(); val dy = stripToKbDy()
+        return kb.stripEmojiHold(anchorCx + dx, anchorTop + dy, anchorBottom + dy, x + dx, y + dy)
+    }
+    override fun onEmojiButtonHoldMove(x: Float, y: Float) { keyboard?.stripEmojiMove(x + stripToKbDx(), y + stripToKbDy()) }
+    override fun onEmojiButtonHoldEnd(cancel: Boolean) { keyboard?.stripEmojiRelease(cancel) }
 
     override fun onEditAction(action: EditAction, selecting: Boolean) {
         clearSwipeUndo()

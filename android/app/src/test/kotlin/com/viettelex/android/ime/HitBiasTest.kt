@@ -187,4 +187,28 @@ class HitBiasTest {
         assertSame(offSpace, hit(off, offSpace.right - 1f, offSpace.centerY, 50L))
         assertSame(ret, hit(off, ret.left + 1f, ret.centerY, 50L))
     }
+    /** "Cả hai" (16/10/2026): space lấn mép CẢ "," bên trái lẫn "." bên phải; tâm mỗi phím vẫn của nó. */
+    @Test fun spaceSideBothBias() {
+        val keys = KeyLayout.build(LayoutConfig(Plane.LETTERS, W, H, d, spaceSideKey = SpaceSideKey.BOTH))
+        val space = keys.first { it.kind == KeyKind.SPACE }
+        val comma = keys.first { it.kind == KeyKind.PUNCT && it.label == "," }
+        val dot = keys.first { it.kind == KeyKind.PUNCT && it.label == "." }
+        assertTrue(comma.right <= space.left && dot.left >= space.right)
+        // "," bên trái space: dải tính từ mép PHẢI của ",".
+        assertSame(space, hit(keys, comma.right - 0.29f * comma.width, comma.centerY))
+        assertSame(comma, hit(keys, comma.right - 0.31f * comma.width, comma.centerY))
+        assertSame(space, hit(keys, comma.right - 0.38f * comma.width, comma.centerY, 100L))
+        assertSame(comma, hit(keys, comma.centerX, comma.centerY, 50L))
+        // "." bên phải space: như Dấu chấm.
+        assertSame(space, hit(keys, dot.left + 0.29f * dot.width, dot.centerY))
+        assertSame(dot, hit(keys, dot.left + 0.31f * dot.width, dot.centerY))
+        assertSame(dot, hit(keys, dot.centerX, dot.centerY, 50L))
+        // Khe giữa "," và space ⇒ space.
+        assertSame(space, hit(keys, (comma.right + space.left) / 2, space.centerY))
+        // Thanh trên (không 😊): "," kề ?123 — ?123 không lấn ",".
+        val top = KeyLayout.build(LayoutConfig(Plane.LETTERS, W, H, d, spaceSideKey = SpaceSideKey.BOTH, emojiInStrip = true))
+        val c2 = top.first { it.kind == KeyKind.PUNCT && it.label == "," }
+        assertSame(c2, hit(top, c2.left + 1f, c2.centerY, 50L))
+        assertSame(top.first { it.kind == KeyKind.SPACE }, hit(top, c2.right - 1f, c2.centerY))
+    }
 }

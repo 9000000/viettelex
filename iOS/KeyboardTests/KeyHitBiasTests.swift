@@ -87,6 +87,31 @@ final class KeyHitBiasTests: XCTestCase {
         XCTAssertTrue(kb.hitTest(CGPoint(x: cf.minX + 0.4 * cf.width, y: cf.midY), with: nil) === comma)
     }
 
+    /// "Cả hai": space thắng dải mép của CẢ "," (trái) lẫn "." (phải); tâm mỗi phím vẫn là nó.
+    @MainActor func testSpaceBarStealsBothSideKeyEdges() throws {
+        try XCTSkipIf(isPad)
+        let (kb, host) = makeKeyboard(side: .both)
+        _ = host
+        let space = try XCTUnwrap(kb.debugControl("Dấu cách"))
+        let comma = try XCTUnwrap(kb.debugKeyButton(","))
+        let dot = try XCTUnwrap(kb.debugKeyButton("."))
+        let cf = kb.convert(comma.bounds, from: comma), df = kb.convert(dot.bounds, from: dot)
+        let sf = kb.convert(space.bounds, from: space)
+        XCTAssertLessThan(cf.maxX, sf.minX); XCTAssertGreaterThan(df.minX, sf.maxX)
+        XCTAssertEqual(cf.width, 402 * KeyLayout.phoneLettersComma, accuracy: 1)
+        XCTAssertEqual(df.width, cf.width, accuracy: 0.5)
+        XCTAssertTrue(kb.hitTest(CGPoint(x: cf.midX, y: cf.midY), with: nil) === comma)
+        XCTAssertTrue(kb.hitTest(CGPoint(x: df.midX, y: df.midY), with: nil) === dot)
+        // "," bên TRÁI space: mép PHẢI của "," thuộc space.
+        XCTAssertTrue(kb.hitTest(CGPoint(x: cf.maxX - 0.2 * cf.width, y: cf.midY), with: nil) === space)
+        XCTAssertTrue(kb.hitTest(CGPoint(x: cf.maxX + 1, y: cf.midY), with: nil) === space, "khe")
+        XCTAssertTrue(kb.hitTest(CGPoint(x: cf.maxX - 0.4 * cf.width, y: cf.midY), with: nil) === comma)
+        // "." bên PHẢI space: mép TRÁI của "." thuộc space.
+        XCTAssertTrue(kb.hitTest(CGPoint(x: df.minX + 0.2 * df.width, y: df.midY), with: nil) === space)
+        XCTAssertTrue(kb.hitTest(CGPoint(x: df.minX - 1, y: df.midY), with: nil) === space, "khe")
+        XCTAssertTrue(kb.hitTest(CGPoint(x: df.minX + 0.4 * df.width, y: df.midY), with: nil) === dot)
+    }
+
     // MARK: Caps Lock tắt khi đổi plane
 
     func testPolicyClearsShiftOnlyForSymbolAndEmojiPlanes() {

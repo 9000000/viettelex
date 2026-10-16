@@ -142,6 +142,7 @@ final class KeyAlternatesTests: XCTestCase {
 
     @MainActor private func makeKeyboard(numbers: Bool, symbols: Bool, numberRow: Bool = false,
                                          side: SpaceSideKey = .comma,
+                                         emoji: EmojiKeyPlacement = .bottom, suggestions: Bool = false,
                                          log: @escaping (String) -> Void) -> (KeyboardView, UIView) {
         let kb = KeyboardView(needsGlobe: false, inputController: nil) { k in
             switch k {
@@ -156,6 +157,8 @@ final class KeyAlternatesTests: XCTestCase {
         kb.frame = host.bounds
         kb.numberRowEnabled = numberRow
         kb.spaceSideKey = side
+        kb.emojiKeyPlacement = emoji
+        if suggestions { kb.setSuggestionsEnabled(true) }
         kb.configureKeyAlternates(numbers: numbers, symbols: symbols)
         kb.layoutIfNeeded()
         return (kb, host)
@@ -389,10 +392,18 @@ final class KeyAlternatesTests: XCTestCase {
         XCTAssertEqual(KeyLayout.phoneLettersPuncts(.comma), [","])
         XCTAssertEqual(KeyLayout.phoneLettersPuncts(.period), ["."])
         XCTAssertEqual(KeyLayout.phoneLettersPuncts(.off), [])
+        XCTAssertEqual(KeyLayout.phoneLettersPuncts(.both), [",", "."])
+        XCTAssertEqual(KeyLayout.phoneLettersSides(.both).left, [","])
+        XCTAssertEqual(KeyLayout.phoneLettersSides(.both).right, ["."])
+        XCTAssertEqual(KeyLayout.phoneLettersSides(.comma).left, [])
+        XCTAssertEqual(KeyLayout.phoneLettersSides(.period).right, ["."])
+        XCTAssertEqual(SpaceSideKey.parse("both"), .both)
+        XCTAssertEqual(SpaceSideKey.both.char, ",", "phím có giữ phím = ',' bên trái")
+        XCTAssertEqual(SpaceSideKey.both.holdAlt, ".")
         XCTAssertEqual(SpaceSideKey.comma.holdAlt, ".")
         XCTAssertEqual(SpaceSideKey.period.holdAlt, ",")
         XCTAssertNil(SpaceSideKey.off.holdAlt)
-        // Sao lưu: có Spec, mặc định "comma", chỉ 3 giá trị.
+        // Sao lưu: có Spec, mặc định "comma", đúng 4 giá trị.
         let spec = BackupSettings.all.first { $0.key == SpaceSideKey.key }
         XCTAssertNotNil(spec)
         if case .string(let def, let allowed)? = spec?.kind {
@@ -486,5 +497,138 @@ final class KeyAlternatesTests: XCTestCase {
         kb2.layoutIfNeeded()
         XCTAssertFalse(kb2.debugCommaHold())
         withExtendedLifetime((host, host2)) {}
+    }
+
+    // MARK: "Cả hai" (16/10/2026) — "," trái + "." phải space
+
+    @MainActor private func bottomLabels(_ kb: KeyboardView) -> [String] {
+        (kb.debugRowLabels().last ?? []).filter { $0 != "␣" }
+    }
+
+    @MainActor func testSpaceSideKeyBothBottomRow() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "iPad không đổi")
+        let (kbC, hostC) = makeKeyboard(numbers: true, symbols: false) { _ in }
+        let (kb, host) = makeKeyboard(numbers: true, symbols: false, side: .both) { _ in }
+        let row = bottomLabels(kb), rowC = bottomLabels(kbC)
+        let si = try XCTUnwrap(row.firstIndex(of: "Dấu cách"))
+        XCTAssertEqual(row[si - 1], ",", "',' sát trái space")
+        XCTAssertEqual(row[si + 1], ".", "'.' sát phải space")
+        XCTAssertEqual(row.count, rowC.count + 1)
+        XCTAssertEqual(Array(row.prefix(2)), Array(rowC.prefix(2)), "[123][😊] giữ nguyên")
+        XCTAssertEqual(row.last, rowC.last, "return giữ nguyên")
+        let comma = try XCTUnwrap(kb.debugKeyButton(",")), dot = try XCTUnwrap(kb.debugKeyButton("."))
+        XCTAssertEqual(comma.bounds.width, 390 * KeyLayout.phoneLettersComma, accuracy: 1)
+        XCTAssertEqual(dot.bounds.width, comma.bounds.width, accuracy: 0.5)
+        let spaceC = try XCTUnwrap(kbC.debugControl("Dấu cách")).bounds.width
+        let space = try XCTUnwrap(kb.debugControl("Dấu cách")).bounds.width
+        // Space co đúng một phím hẹp + một khe.
+        XCTAssertLessThan(space, spaceC - comma.bounds.width + 1)
+        XCTAssertGreaterThan(space, spaceC - comma.bounds.width - 12)
+        // Ô email: không có "," bên trái.
+        kb.configureInputKind(.email); kb.layoutIfNeeded()
+        XCTAssertEqual(punctsRightOfSpace(kb), ["@", "."])
+        XCTAssertFalse(bottomLabels(kb).contains(","))
+        kb.configureInputKind(.normal); kb.layoutIfNeeded()
+        withExtendedLifetime((host, hostC)) {}
+    }
+
+    /// Cả hai: giữ "," ra "." như mặc định; "." không hẹn giờ giữ (không có popup, như iPad).
+    @MainActor func testSpaceSideKeyBothHold() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad)
+        var out: [String] = []
+        let (kb, host) = makeKeyboard(numbers: true, symbols: false, side: .both) { out.append($0) }
+        XCTAssertEqual(kb.debugCommaHint, ".")
+        XCTAssertTrue(kb.debugCommaHold())
+        XCTAssertEqual(out, ["T."])
+        out = []
+        XCTAssertFalse(kb.debugDomainHold(".", fire: false), "'.' không có giữ phím")
+        XCTAssertEqual(out, ["T."])
+        withExtendedLifetime(host) {}
+    }
+
+    // MARK: "Nút emoji" (16/10/2026) — Hàng dưới (mặc định) / Thanh trên
+
+    func testEmojiKeyPlacementPure() {
+        XCTAssertEqual(EmojiKeyPlacement.defaultValue, .bottom)
+        XCTAssertEqual(EmojiKeyPlacement.parse(nil), .bottom)
+        XCTAssertEqual(EmojiKeyPlacement.parse("toolbar"), .bottom)
+        XCTAssertEqual(EmojiKeyPlacement.parse("top"), .top)
+        XCTAssertEqual(EmojiKeyPlacement.key, "emojiKeyPlacement")   // cùng khoá Android
+        XCTAssertTrue(EmojiKeyPlacement.emojiInBar(.top, barShown: true, pad: false))
+        XCTAssertFalse(EmojiKeyPlacement.emojiInBar(.top, barShown: false, pad: false), "thanh ẩn ⇒ 😊 ở hàng đáy")
+        XCTAssertFalse(EmojiKeyPlacement.emojiInBar(.top, barShown: true, pad: true), "iPad giữ hàng đáy stock")
+        XCTAssertFalse(EmojiKeyPlacement.emojiInBar(.bottom, barShown: true, pad: false))
+        // Khung nút: mở = ô cao trọn strip bên trái 📋 / ⌄; thu gọn = nút nổi bên trái ⌄ nổi.
+        let z = KeyboardView.stripZoneWidth, e = KeyboardView.emojiZoneWidth, c = KeyboardView.clipZoneWidth
+        XCTAssertEqual(KeyboardView.emojiBarFrame(width: 390, strip: 36, collapsed: false, clip: false),
+                       CGRect(x: 390 - z - e, y: 0, width: e, height: 36))
+        XCTAssertEqual(KeyboardView.emojiBarFrame(width: 390, strip: 36, collapsed: false, clip: true),
+                       CGRect(x: 390 - z - c - e, y: 0, width: e, height: 36))
+        let f = KeyboardView.emojiBarFrame(width: 390, strip: 14, collapsed: true, clip: true)
+        XCTAssertEqual(f.maxX, 390 - 48, "sát trái ⌄ nổi")
+        XCTAssertEqual(f.height, 18)
+        let spec = BackupSettings.all.first { $0.key == EmojiKeyPlacement.key }
+        if case .string(let def, let allowed)? = spec?.kind {
+            XCTAssertEqual(def, "bottom")
+            XCTAssertEqual(Set(allowed), Set(EmojiKeyPlacement.allCases.map(\.rawValue)))
+        } else { XCTFail("emojiKeyPlacement phải là .string") }
+    }
+
+    @MainActor func testEmojiKeyPlacementBottomRow() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "iPad không đổi")
+        // Mặc định: 😊 ở hàng đáy, không có nút trên thanh.
+        let (kb0, host0) = makeKeyboard(numbers: true, symbols: false, suggestions: true) { _ in }
+        XCTAssertTrue(bottomLabels(kb0).contains("Emoji"))
+        XCTAssertNil(kb0.debugEmojiBarButton)
+        let space0 = try XCTUnwrap(kb0.debugControl("Dấu cách")).bounds.width
+        let emojiW = try XCTUnwrap(kb0.debugControl("Emoji")).bounds.width
+
+        // Thanh trên + thanh gợi ý bật: 😊 rời hàng đáy, space ăn chỗ, nút 😊 trên thanh.
+        let (kb, host) = makeKeyboard(numbers: true, symbols: false, emoji: .top, suggestions: true) { _ in }
+        XCTAssertFalse(bottomLabels(kb).contains("Emoji"))
+        XCTAssertEqual(bottomLabels(kb).count, bottomLabels(kb0).count - 1)
+        let space = try XCTUnwrap(kb.debugControl("Dấu cách")).bounds.width
+        XCTAssertGreaterThan(space, space0 + emojiW)
+        XCTAssertLessThan(space, space0 + emojiW + 12)
+        let btn = try XCTUnwrap(kb.debugEmojiBarButton)
+        XCTAssertEqual(btn.frame, KeyboardView.emojiBarFrame(width: 390, strip: btn.frame.height,
+                                                            collapsed: kb.isBarCollapsed, clip: false))
+        // Chạm nút ⇒ plane emoji (thanh ẩn trong plane emoji ⇒ nút ẩn).
+        btn.sendActions(for: .touchUpInside)
+        kb.layoutIfNeeded()
+        XCTAssertEqual(kb.debugPlaneName, "emoji")
+        XCTAssertNil(kb.debugEmojiBarButton)
+
+        // Thanh gợi ý tắt (ô này / công tắc) ⇒ 😊 về hàng đáy, không có nút trên thanh.
+        let (kbOff, hostOff) = makeKeyboard(numbers: true, symbols: false, emoji: .top, suggestions: false) { _ in }
+        XCTAssertTrue(bottomLabels(kbOff).contains("Emoji"))
+        XCTAssertNil(kbOff.debugEmojiBarButton)
+        kbOff.setSuggestionsEnabled(true); kbOff.layoutIfNeeded()
+        XCTAssertFalse(bottomLabels(kbOff).contains("Emoji"), "thanh bật lại ⇒ 😊 lên thanh")
+        XCTAssertNotNil(kbOff.debugEmojiBarButton)
+        kbOff.setSuggestionsEnabled(false); kbOff.layoutIfNeeded()
+        XCTAssertTrue(bottomLabels(kbOff).contains("Emoji"))
+        XCTAssertNil(kbOff.debugEmojiBarButton)
+
+        // Đổi tuỳ chọn khi đang hiện ⇒ dựng lại.
+        kb0.emojiKeyPlacement = .top; kb0.layoutIfNeeded()
+        XCTAssertFalse(bottomLabels(kb0).contains("Emoji"))
+        XCTAssertNotNil(kb0.debugEmojiBarButton)
+        withExtendedLifetime((host0, host, hostOff)) {}
+    }
+
+    /// Tổ hợp Cả hai × Thanh trên: [123][,][space][.][return]; plane số giữ 😊.
+    @MainActor func testBothWithEmojiTop() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad)
+        let (kb, host) = makeKeyboard(numbers: true, symbols: false, side: .both, emoji: .top,
+                                      suggestions: true) { _ in }
+        let row = bottomLabels(kb)
+        XCTAssertEqual(row.count, 5)
+        XCTAssertEqual(Array(row[1...3]), [",", "Dấu cách", "."])
+        try XCTUnwrap(kb.debugControl("Số")).sendActions(for: .touchDown)
+        XCTAssertEqual(kb.debugPlaneName, "numbers")
+        XCTAssertTrue(bottomLabels(kb).contains("Emoji"), "plane số giữ 😊")
+        XCTAssertNotNil(kb.debugEmojiBarButton, "thanh vẫn có 😊 ở plane số")
+        withExtendedLifetime(host) {}
     }
 }
