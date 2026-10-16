@@ -2532,6 +2532,12 @@ final class TerminalTapController {
     private var toneRun = ToneRunLogic.Tracker()
     /// ⌫ ngay sau khi nở → trả lại chữ đã gõ (một lần). Phím thật nào tới cũng tiêu thụ.
     private var shortcutUndo: ShortcutUndo?
+    /// Cài đặt Nhập văn bản của macOS (SystemAutoText.swift) — như các cờ cùng tên ở
+    /// TelexInputController. TAP-thread confined.
+    private var periodSpaceNs: UInt64 = 0
+    private var lastEmDashOurs = false
+    private var autoCappedWord = false
+    private var suppressAutoCap = false
     /// emitBoundary vừa nở: (chữ trên màn hình trước khi nở, nội dung).
     private var tapExpanded: (typed: String, expansion: String)?
     /// userInfo của .telexResetComposition: true = phím là ⌥+ký tự ("√") — chữ vẫn ở
@@ -2887,6 +2893,7 @@ final class TerminalTapController {
         if type == .leftMouseDown || type == .rightMouseDown {
             engine.reset()
             shortcutTail.caretMoved(); shortcutUndo = nil   // con trỏ đã dời (neo khi AX mù, #99)
+            autoCappedWord = false; suppressAutoCap = false; lastEmDashOurs = false; periodSpaceNs = 0
             toneRun.reset()
             numberPrevRun = ""
             // Click ngoài ô gợi ý ⇒ con trỏ dời: tắt gợi ý (Tab sau đó không được chèn vào
@@ -2923,6 +2930,9 @@ final class TerminalTapController {
         // Gõ tắt hoàn tác: chỉ ⌫ NGAY SAU lần nở — mọi phím thật khác tiêu thụ nó.
         let pendingShortcutUndo = shortcutUndo
         shortcutUndo = nil
+        let prevSpaceNs = periodSpaceNs
+        let prevEmDashOurs = lastEmDashOurs
+        periodSpaceNs = 0; lastEmDashOurs = false
 
         // One read of the activation latch for the whole key (it is a locked computed
         // property; the stamp below and the self-heal further down both need it).
@@ -3237,6 +3247,8 @@ final class TerminalTapController {
             if case let .replace(bs, insert) = engine.backspace() {
                 SyntheticKeyboard.apply(backspaces: bs, insert: insert, mode: emitMode)
             }
+            // ⌫ xoá đúng chữ hoa tự động ⇒ user từ chối: chữ đầu kế tiếp giữ nguyên.
+            if autoCappedWord, engine.isEmpty { suppressAutoCap = true; autoCappedWord = false }
             return nil
         }
         if keyCode == kReturn || keyCode == kEnter || keyCode == kTab || keyCode == kEscape {
@@ -3361,6 +3373,13 @@ final class TerminalTapController {
             // Gõ tắt (khớp iOS/Android): khoá chữ chỉ nở ở khoảng trắng / dấu câu kết thúc
             // từ, khoá ký hiệu chỉ ở khoảng trắng; từ dính sau số / . _ - / # @ không nở.
             let boundaryText = String(ch)
+            autoCappedWord = false; suppressAutoCap = false
+            // Dấu chấm khi nhấn đúp phím cách / "--" → "—" (cài đặt macOS).
+            if engine.isEmpty, ch == " " || ch == "-",
+               trySystemReplaceTap(ch == " ", prevSpaceNs: prevSpaceNs, prevEmDashOurs: prevEmDashOurs,
+                                   isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0, id: id) {
+                return nil
+            }
             let allow = ShortcutMatch.triggers(boundary: boundaryText, glued: lastTapKeyWasDigit)
             let rewrote = emitBoundary(suppressAutoRestore: isBracketUnichar(ch.utf16.first ?? unit),
                                        allowShortcuts: allow.word, allowToken: allow.token,
@@ -3394,7 +3413,12 @@ final class TerminalTapController {
                 }
                 numberPrevRun = run
             }
-            shortcutTail.append(boundaryText)
+            // Ngoặc kép cong (cài đặt macOS): phát “ ” ‘ ’ thay phím " '.
+            let smartQuote = ch == "\"" || ch == "'" ? smartQuoteTap(ch, id: id) : nil
+            shortcutTail.append(smartQuote ?? boundaryText)
+            if ch == " ", SystemAutoTextSettings.shared.period {
+                periodSpaceNs = DispatchTime.now().uptimeNanoseconds
+            }
             if let x = tapExpanded, emitMode == .backspace {
                 shortcutUndo = ShortcutUndo.make(typed: x.typed, expansion: x.expansion, boundary: boundaryText)
             }
@@ -3403,6 +3427,10 @@ final class TerminalTapController {
             // (issue #40). Anything else — an option-key symbol, a multi-scalar
             // sequence — is not worth reasoning about: forget the word.
             if !ch.isASCII { engine.forgetLastCommit() }
+            if let q = smartQuote {
+                SyntheticKeyboard.apply(backspaces: 0, insert: q, mode: emitMode)
+                return nil
+            }
             // Layout pinned → the native pass-through would type the OS layout's
             // character, not ours: fall through to reemit, which carries String(ch).
             if !rewrote, AppState.shared.tapNativeFastPath, SyntheticKeyboard.queueDrained(),
@@ -3430,6 +3458,17 @@ final class TerminalTapController {
         }
         lastTapKeyWasBoundary = false   // this key is a word key
 
+        // Viết hoa đầu câu (cài đặt macOS): chữ đầu từ đưa vào engine dạng HOA — không
+        // còn là phím gốc nên không đi đường native bên dưới.
+        var autoCapped = false
+        if engine.isEmpty {
+            autoCappedWord = false
+            if ascii >= 97, ascii <= 122, shouldAutoCapitalizeTap(id: id) {
+                ch = SystemAutoText.capitalized(ch)
+                autoCapped = true; autoCappedWord = true
+            }
+        }
+
         // Ordering rule: a native letter must never race ahead of a still-queued
         // synthetic edit ("nuwax" showed as "nuẵ" because native 'a' landed before
         // the synthetic ư from 'w'). Historically EVERY key was therefore suppressed
@@ -3441,7 +3480,7 @@ final class TerminalTapController {
         // tap callback is serial, so the decision itself cannot race.
         switch engine.feed(ch) {
         case .passthrough:
-            if AppState.shared.tapNativeFastPath, SyntheticKeyboard.queueDrained(),
+            if !autoCapped, AppState.shared.tapNativeFastPath, SyntheticKeyboard.queueDrained(),
                KeyboardLayoutOverride.translator == nil {
                 return pass                               // native: zero synthetic events
             }
@@ -3728,6 +3767,84 @@ final class TerminalTapController {
         shortcutTail.replaceSuffix(s.replace, with: s.insert)
         numberPrevRun = ""
         DebugLog.log("caret hint(tap) \(s.kind) \(id ?? "?"): bs=\(s.replace.count) ins=\(s.insert.count)")
+    }
+
+    // MARK: Cài đặt Nhập văn bản của macOS (SystemAutoText.swift)
+
+    /// Chỉ chế độ ⌫-gõ-lại (Electron: Slack, Discord, Notion…), không terminal / code
+    /// editor. Omnibox (.selection) và ô có autocomplete (.emptyReset) không đụng.
+    private func systemAutoTextAllowed(_ id: String?) -> Bool {
+        emitMode == .backspace && SystemAutoText.appAllowed(id)
+    }
+
+    /// Văn bản ngay trước con trỏ: dòng phím; trống ⇒ AX (nil = không đọc được).
+    /// `atStart` = AX báo con trỏ ở 0.
+    private func textBeforeCaretTap(max n: Int) -> (text: String?, atStart: Bool) {
+        if !shortcutTail.recent.isEmpty { return (shortcutTail.recent, false) }
+        guard let caret = AXTextEdit.readCaret() else { return (nil, false) }
+        if caret == 0 { return (nil, true) }
+        let len = min(caret, n)
+        return (AXTextEdit.readString(at: caret - len, length: len), false)
+    }
+
+    /// Phím cách / "-" thứ hai khi engine rỗng — xem TelexInputController.trySystemReplace.
+    /// Có AX text ⇒ đọc lại và chỉ làm khi khớp; AX mù ở trình duyệt ⇒ bỏ; còn lại tin
+    /// dòng phím như mọi lần tap ⌫-gõ-lại.
+    private func trySystemReplaceTap(_ space: Bool, prevSpaceNs: UInt64, prevEmDashOurs: Bool,
+                                     isRepeat: Bool, id: String?) -> Bool {
+        let st = SystemAutoTextSettings.shared.current
+        guard space ? st.period : st.dashes else { return false }
+        let before = shortcutTail.recent
+        let expect: String, insert: String
+        if space {
+            guard prevSpaceNs > 0,
+                  let prev = SystemAutoText.doubleSpacePeriod(
+                    before: before, gapNs: DispatchTime.now().uptimeNanoseconds &- prevSpaceNs,
+                    isRepeat: isRepeat) else { return false }
+            expect = String(prev) + " "; insert = ". "
+        } else {
+            switch SystemAutoText.dash(before: before, lastWasOurEmDash: prevEmDashOurs) {
+            case .none: return false
+            case .emDash: expect = String(before.suffix(2)); insert = "—"
+            case .restore: expect = "—"; insert = "---"
+            }
+        }
+        guard systemAutoTextAllowed(id), SyntheticKeyboard.queueDrained() else { return false }
+        if let caret = AXTextEdit.readCaret() {
+            let n = (expect as NSString).length
+            guard caret >= n, let text = AXTextEdit.readString(at: caret - n, length: n), text == expect else {
+                DebugLog.log("system auto-text(tap) \(id ?? "?"): screen disagrees → plain key")
+                return false
+            }
+        } else if AppState.shared.usesAxDetect(id) {
+            return false
+        }
+        SyntheticKeyboard.apply(backspaces: 1, insert: insert, mode: emitMode)
+        shortcutTail.replaceSuffix(String(before.suffix(1)), with: insert)
+        engine.forgetLastCommit()
+        lastEmDashOurs = !space && insert == "—"
+        DebugLog.log("system auto-text(tap) \(id ?? "?"): \(space ? "period" : "dash")")
+        return true
+    }
+
+    /// Phím " / ' ⇒ ngoặc cong theo kiểu macOS, nil = giữ nguyên.
+    private func smartQuoteTap(_ c: Character, id: String?) -> String? {
+        let st = SystemAutoTextSettings.shared.current
+        guard st.quotes, systemAutoTextAllowed(id) else { return nil }
+        let (text, atStart) = textBeforeCaretTap(max: 1)
+        let prev: Character?
+        if let t = text, let last = t.last { prev = last } else if atStart { prev = nil } else { return nil }
+        return SystemAutoText.smartQuote(c, prev: prev, quotes: st.quoteChars)
+    }
+
+    /// Chữ đầu từ có viết hoa không — xem TelexInputController.shouldAutoCapitalize.
+    private func shouldAutoCapitalizeTap(id: String?) -> Bool {
+        guard SystemAutoTextSettings.shared.current.capitalize else { return false }
+        if suppressAutoCap { suppressAutoCap = false; return false }
+        guard systemAutoTextAllowed(id) else { return false }
+        let (text, atStart) = textBeforeCaretTap(max: 24)
+        let multiline = atStart && FocusedRole.isMultilineText()
+        return SystemAutoText.capitalization(before: text, atTextStart: multiline) == .capitalize
     }
 
     /// ⌫ ngay sau khi nở (tap): xoá nội dung + ranh giới, gõ lại chữ đã gõ + ranh giới.
