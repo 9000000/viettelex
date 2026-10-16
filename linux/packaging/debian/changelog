@@ -1,3 +1,18 @@
+viettelex (1.0.15) UNRELEASED; urgency=medium
+
+  * Văn bản tự động (Cài đặt → Tuỳ chỉnh, mặc định tắt): thêm dấu chấm khi
+    gõ hai dấu cách, tự viết hoa đầu câu, ngoặc kép cong và gạch dài, gợi ý
+    từ (một gợi ý, Tab để nhận) kèm từ tiếng Anh và sửa lỗi gõ tiếng Anh.
+  * Công tắc "Lọc từ nhạy cảm" cho gợi ý.
+  * ---
+  * Automatic text (Settings → Customize, off by default): period on double
+    space, auto-capitalize sentences, smart quotes and dashes, word prediction
+    (one suggestion, Tab to accept) including English words and English typo
+    fixes.
+  * "Filter sensitive words" switch for suggestions.
+
+ -- VietTelex Maintainers <maintainers@viettelex.invalid>  Fri, 16 Oct 2026 17:00:00 +0700
+
 viettelex (1.0.14) UNRELEASED; urgency=medium
 
   * Có gói cho Fedora 43/44, RHEL/Rocky/Alma 9/10, Fedora Atomic
