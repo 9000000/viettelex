@@ -60,6 +60,13 @@ struct Settings {
     bool typoHints = true;            // "tpoi␣" → "tôi"
     bool toneHints = false;           // "toi di hoc." → "tôi đi học."
     bool dateHints = true;            // "hôm nay␣" → "28/09/2026", "bây giờ␣" → "21:35"
+    // Auto text (macOS follows its Text Input settings; Linux has none → VietTelex switches,
+    // all OFF by default: Linux users type in terminals / code a lot). See auto_text.h.
+    bool doubleSpacePeriod = false;   // double_space_period: "chào␣␣" → "chào. "
+    bool autoCapitalize = false;      // auto_capitalize: first letter of a sentence
+    bool smartPunctuation = false;    // smart_punctuation: " ' → “ ” ‘ ’, "--" → "—"
+    std::string quoteStyle = "curly"; // quote_style: "curly" “”‘’ | "low9" „“‚‘ | "guillemets" «»‹›
+    bool wordPrediction = false;      // word_prediction: complete the word / next word (Tab)
     // [app_modes] app id (lowercase) -> "preedit" | "surrounding" | "direct" | "off"
     std::map<std::string, std::string> appModes;
     // [experimental]

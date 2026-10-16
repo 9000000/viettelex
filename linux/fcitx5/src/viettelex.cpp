@@ -14,6 +14,7 @@
 // input panel's aux text, which Fcitx5 UIs draw in the popup at the caret.
 
 #include "viettelex/app.h"
+#include "viettelex/auto_text.h"
 #include "viettelex/caret_hints.h"
 #include "viettelex/gnome.h"
 #include "viettelex/gnome_monitor.h"
@@ -35,6 +36,7 @@
 #include <fcitx/addonfactory.h>
 #include <fcitx/addoninstance.h>
 #include <fcitx/addonmanager.h>
+#include <fcitx/candidatelist.h>
 #include <fcitx/inputcontext.h>
 #include <fcitx/inputcontextmanager.h>
 #include <fcitx/inputcontextproperty.h>
@@ -91,6 +93,25 @@ class VietTelexEngine;
 
 // Settings::preeditUnderline, refreshed with every settings load (one Fcitx5 process).
 bool g_preeditUnderline = false;
+
+// Word prediction candidate clicked in the candidate window (the engine applies it).
+std::function<void(fcitx::InputContext *, int)> g_pickCandidate;
+
+// One word-prediction candidate. Selected by a click (classicui / kimpanel call select());
+// keys never select: Tab applies the first one (Session), digits keep typing digits.
+class PredictionWord final : public fcitx::CandidateWord {
+public:
+    PredictionWord(const std::string &word, int index) : fcitx::CandidateWord(fcitx::Text(word)), index_(index) {}
+    void select(fcitx::InputContext *ic) const override {
+        if (g_pickCandidate) g_pickCandidate(ic, index_);
+    }
+
+private:
+    int index_;
+};
+
+// CapabilityFlag::Multiline (bit 35, Fcitx5 ≥ 5.1; older versions never set it).
+constexpr uint64_t kCapMultiline = 1ull << 35;
 
 // fcitx::InputContext → viettelex::InputContext
 class FcitxClient final : public vt::InputContext {
@@ -176,6 +197,20 @@ public:
     }
     void hideHint() override {
         ic_->inputPanel().setAuxDown(fcitx::Text());
+        if (ic_->inputPanel().candidateList()) ic_->inputPanel().setCandidateList(nullptr);
+        ic_->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+    }
+    // Word prediction: the native candidate window, horizontal, first candidate highlighted
+    // (= Tab), no number labels (digits are never taken from the user), aux text "Tab".
+    void showCandidates(const std::vector<std::string> &words, const std::string &aux) override {
+        auto list = std::make_unique<fcitx::CommonCandidateList>();
+        list->setLabels(std::vector<std::string>(words.size(), ""));
+        list->setPageSize(int(words.size()));
+        list->setLayoutHint(fcitx::CandidateLayoutHint::Horizontal);
+        for (size_t i = 0; i < words.size(); ++i) list->append<PredictionWord>(words[i], int(i));
+        list->setGlobalCursorIndex(0);
+        ic_->inputPanel().setCandidateList(std::move(list));
+        ic_->inputPanel().setAuxDown(fcitx::Text(aux));
         ic_->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
     }
     bool textBeforeCursor(std::string &out) override {
@@ -325,6 +360,14 @@ public:
                 }
             });
         syncConfigFromSettings();
+        g_pickCandidate = [this](fcitx::InputContext *ic, int index) {
+            try {
+                if (!ic || index < 0 || instance_->inputMethod(ic) != "viettelex") return;
+                FcitxClient client(ic, primaryReader(ic));
+                state(ic)->session.chooseHint(size_t(index), client);
+            } catch (...) {
+            }
+        };
         gnomeSession_ = vt::gnome::isGnomeWaylandSession();
         // Watch focus changes from the start: gnome-shell refuses our own
         // GetRunningApplications (GNOME ≥ 41), so the monitor learns the focused app only from
@@ -336,6 +379,7 @@ public:
     }
 
     ~VietTelexEngine() override {
+        g_pickCandidate = nullptr;
         if (gnome_) gnome_->stop();  // joins; no callback runs after this
     }
 
@@ -599,6 +643,10 @@ private:
         st->session.setDisplayMode(policy.mode, client);
         st->session.setDeleteWithKeys(policy.deleteWithKeys);
         st->session.setSurroundingEdits(policy.allowSurroundingEdits);
+        // Auto text (period / capitals / quotes / prediction): never in terminals, code
+        // editors, URL / e-mail fields; text start counts as a sentence start only multi-line.
+        st->session.setAutoTextAllowed(vt::autotext::appAllowed(st->appId) && !field.terminal && !field.urlOrEmail);
+        st->session.setMultiline((caps.toInteger() & kCapMultiline) != 0);
         // VIETTELEX_DEBUG=1 in Fcitx5's environment: why a field got its mode (journal / stderr).
         static const bool debug = std::getenv("VIETTELEX_DEBUG") != nullptr;
         if (debug) {

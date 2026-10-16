@@ -189,6 +189,87 @@ func caretSelfTest(fixtures: String) -> Int {
     eq(HintProtocol.handle("lạ\tx"), "-", "serve lệnh lạ")
     eq(HintProtocol.handle(""), "-", "serve rỗng")
 
+    // MARK: Gợi ý từ (macOS AppTests/WordPredictionTests — Predict.swift)
+    typealias L = PredictionLogic
+    typealias R = PredictionLogic.Request
+    eq(L.request(before: "xin chào bạn đư", typed: "đư", english: false),
+       R(typed: "đư", prev: "bạn", prev2: "chào", english: false), "request đang gõ")
+    eq(L.request(before: "đư", typed: "đư", english: false), R(typed: "đư", prev: nil, prev2: nil, english: false),
+       "request đầu văn bản")
+    eq(L.request(before: "abc.đư", typed: "đư", english: false), nil, "request không đứng riêng")
+    eq(L.request(before: "chào đ", typed: "đ", english: false), nil, "request 1 chữ")
+    eq(L.request(before: "chào đư", typed: "đươ", english: false), nil, "request lệch")
+    eq(L.request(before: "a1", typed: "a1", english: false), nil, "request số")
+    eq(L.request(before: "\u{FFFC}đư", typed: "đư", english: false), nil, "request chưa neo")
+    eq(L.request(before: "cảm ", typed: "", english: false), R(typed: "", prev: "cảm", prev2: nil, english: false),
+       "request từ kế tiếp")
+    eq(L.request(before: "Tôi Đang ", typed: "", english: false)?.prev, "đang", "request chữ thường")
+    eq(L.request(before: "Tôi Đang ", typed: "", english: false)?.prev2, "tôi", "request prev2")
+    eq(L.request(before: "xin chào, bạn ", typed: "", english: false),
+       R(typed: "", prev: "bạn", prev2: nil, english: false), "request dấu phẩy cắt")
+    eq(L.request(before: "dòng một\nđi ", typed: "", english: false)?.prev2, nil, "request xuống dòng cắt")
+    for b in ["hai  ", "xong. ", " ", "", "a.b "] {
+        eq(L.request(before: b, typed: "", english: false), nil, "request không «\(b)»")
+    }
+    check(L.muted(typed: "đươ", declined: "đư"), "muted tiền tố")
+    check(L.muted(typed: "Đư", declined: "đư"), "muted hoa")
+    check(!L.muted(typed: "đa", declined: "đư"), "muted khác")
+    check(!L.muted(typed: "", declined: "đư"), "muted rỗng")
+    check(!L.muted(typed: "đư", declined: nil), "muted nil")
+
+    func cands(_ before: String, typed: String = "", raw: String = "", english: Bool = false) -> [String] {
+        guard let r = L.request(before: before, typed: typed, english: english) else { return [] }
+        return PredictionModel.shared.candidates(r, raw: raw)
+    }
+    eq(cands("cảm ").first, "ơn", "next cảm → ơn")
+    check(cands("xin ").contains("chào"), "next xin: \(cands("xin "))")
+    check(cands("hôm ").contains("nay"), "next hôm: \(cands("hôm "))")
+    check(cands("đi ").count <= L.maxCandidates, "next ≤ 3")
+    eq(cands("hello ", english: true), [], "next tiếng Anh: không")
+    eq(cands("zzqx "), [], "next từ lạ")
+    let ho = cands("hồ ")
+    check(!ho.contains("chí"), "display case hồ: \(ho)")
+    let du = cands("tôi đư", typed: "đư", raw: "dduw")
+    check(du.contains("được"), "complete đư: \(du)")
+    check(du.count <= L.maxCandidates && du.allSatisfy { $0.count > 2 }, "complete thật: \(du)")
+    let up = cands("Đư", typed: "Đư", raw: "Dduw")
+    check(!up.isEmpty && up.allSatisfy { $0.first?.isUppercase == true }, "complete hoa: \(up)")
+    eq(cands("cảm ơ", typed: "ơ", raw: "ow"), [], "complete 1 chữ")
+    eq(cands("xin ch", typed: "ch", raw: "ch").first, "chào", "complete xin ch")
+    check(cands("my keyb", typed: "keyb", raw: "keyb").contains("keyboard"), "complete keyb")
+    check(cands("this is beca", typed: "beca", raw: "beca", english: true).contains("because"), "complete beca")
+    let thi = cands("thí", typed: "thí", raw: "this", english: true)
+    check(thi.allSatisfy { $0.hasPrefix("this") && $0.count > 4 }, "complete phím thô: \(thi)")
+    for (b, t) in [("đị", "đị"), ("đi", "đi"), ("fu", "fu"), ("sh", "sh"), ("vc", "vc")] {
+        let c = cands(b, typed: t, raw: t)
+        check(c.allSatisfy { !SensitiveWords.set.contains($0.lowercased()) }, "nhạy cảm «\(t)»: \(c)")
+    }
+    eq(L.answer(["được", "đường", "đưa", "đứng"], typed: "đư"), "predict\tđược\tđư\tđược \tđường\tđưa", "answer 3")
+    eq(L.answer(["ơn"], typed: ""), "predict\tơn\t\tơn ", "answer từ kế tiếp")
+    eq(L.answer([], typed: "x"), "-", "answer rỗng")
+    eq(HintProtocol.handle("predict\tcảm \t\t\t0").hasPrefix("predict\tơn\t\tơn "), true, "serve predict next")
+    eq(HintProtocol.handle("predict\tabc.đư\tđư\tdduw\t0"), "-", "serve predict không")
+    // Đo (in ra để báo cáo): thời gian một lượt đã nạp.
+    let reqs: [(String, String, String)] = [("cảm ", "", ""), ("xin ", "", ""), ("tôi đang ", "", ""), ("hôm ", "", ""),
+                                            ("tôi đư", "đư", "dduw"), ("xin ch", "ch", "ch"), ("ng", "ng", "ng"),
+                                            ("my keyb", "keyb", "keyb"), ("khô", "khô", "khoo")]
+    let clock = ContinuousClock()
+    var worst = Duration.zero
+    let t0 = clock.now
+    for _ in 0..<50 {
+        for (b, t, raw) in reqs {
+            let a = clock.now
+            _ = cands(b, typed: t, raw: raw)
+            worst = max(worst, clock.now - a)
+        }
+    }
+    let total = clock.now - t0
+    let avgUs = Double(total.components.attoseconds / 1_000_000_000_000 + total.components.seconds * 1_000_000)
+        / Double(50 * reqs.count)
+    let worstUs = worst.components.attoseconds / 1_000_000_000_000 + worst.components.seconds * 1_000_000
+    print("PREDICT per-request avg \(Int(avgUs)) µs, worst \(worstUs) µs (\(50 * reqs.count) requests)")
+    check(avgUs < 3000, "predict avg \(avgUs) µs")
+
     print("caret-suggest: \(n) ca, lệch: \(bad)")
     return bad
 }

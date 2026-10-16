@@ -243,6 +243,35 @@ EN = {
     "yesterday, now sau một từ tiếng Anh). Tab để thay.":
         "“hôm nay”, “ngày mai”, “hôm qua” → dd/mm/yyyy; “bây giờ” → hh:mm (today, tomorrow, "
         "yesterday, now after an English word). Tab replaces.",
+    # --- Văn bản tự động
+    "Văn bản tự động": "Automatic text",
+    "Mặc định tắt. Không chạy trong terminal, trình soạn code, ô địa chỉ web / "
+    "email, ô mật khẩu và khi đang gõ English.":
+        "Off by default. Never in terminals, code editors, web address / e-mail fields, password "
+        "fields, or while typing English.",
+    "Thêm dấu chấm khi gõ hai dấu cách": "Add period with double-space",
+    "Gõ hai dấu cách liền nhau sau một chữ → “. ” (giữ phím cách thì không). Chỉ ở app cho bộ gõ "
+    "đọc chữ quanh con trỏ.":
+        "Two quick spaces after a word → “. ” (not when the space bar is held). Only in apps that "
+        "let the input method read the text around the caret.",
+    "Tự viết hoa đầu câu": "Capitalize sentences automatically",
+    "Chữ đầu câu (sau . ? ! hoặc xuống dòng) tự viết hoa, Telex vẫn ghép đúng (dduwowcj → Được). "
+    "Bỏ qua viết tắt, email, địa chỉ web; xoá chữ hoa đó thì chữ kế giữ thường.":
+        "The first letter of a sentence (after . ? ! or a new line) is capitalized and Telex still "
+        "composes (dduwowcj → Được). Skips abbreviations, e-mails, web addresses; delete that "
+        "capital and the next letter stays lowercase.",
+    "Ngoặc kép cong và gạch dài": "Smart quotes and dashes",
+    "\" ' → ngoặc cong theo ngữ cảnh (don't → don’t); -- → — (gõ thêm - thì thành ---).":
+        "\" ' → curly quotes by context (don't → don’t); -- → — (one more - gives ---).",
+    "Gợi ý từ": "Word suggestions",
+    "Dừng gõ một chút → tối đa 3 từ trong ô gợi ý của bộ gõ: hoàn thành từ đang gõ hoặc từ kế "
+    "tiếp. Tab chọn từ đầu, bấm chuột chọn từ bất kỳ, Esc bỏ; không bao giờ tự thay. Cần gói "
+    "viettelex-text-tools.":
+        "Pause briefly → up to 3 words in the input method’s candidate window: completions of the "
+        "word being typed, or the next word. Tab takes the first, a click takes any, Esc "
+        "dismisses; never replaces by itself. Needs the viettelex-text-tools package.",
+    "Kiểu ngoặc kép": "Quote style",
+    "“ ” ‘ ’ (mặc định)": "“ ” ‘ ’ (default)",
     "menu Công cụ…": "Tools… menu",
     "phép tính": "math",
     "chip số": "money format",

@@ -47,6 +47,23 @@ class ParseTests(unittest.TestCase):
             self.assertIs(n["general"][k], True, k)
         self.assertIs(n["general"]["tone_hints"], False)
 
+    def test_auto_text_defaults_off_and_roundtrip(self):
+        # Linux: VietTelex switches (macOS follows its system settings) — all OFF by default.
+        n = config.normalize({})
+        for k in ("double_space_period", "auto_capitalize", "smart_punctuation", "word_prediction"):
+            self.assertIs(n["general"][k], False, k)
+        self.assertEqual(n["general"]["quote_style"], "curly")
+        out = config.update_text("[general]\nmath_results = true\n",
+                                 {("general", "word_prediction"): True, ("general", "quote_style"): "low9"})
+        self.assertIn("word_prediction = true", out)
+        self.assertIn('quote_style = "low9"', out)
+        m = config.normalize(config.parse(out))
+        self.assertIs(m["general"]["word_prediction"], True)
+        self.assertEqual(m["general"]["quote_style"], "low9")
+        bad = config.normalize(config.parse('[general]\nquote_style = "fancy"\nauto_capitalize = "yes"\n'))
+        self.assertEqual(bad["general"]["quote_style"], "curly")
+        self.assertIs(bad["general"]["auto_capitalize"], False)
+
     def test_underline_misspelled_roundtrip(self):
         out = config.update_text("[general]\npreedit_underline = false\n",
                                  {("general", "underline_misspelled"): True})

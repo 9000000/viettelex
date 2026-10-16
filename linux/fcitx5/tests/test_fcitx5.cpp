@@ -52,6 +52,7 @@ std::string preeditOf(InputContext *ic) { return ic->inputPanel().clientPreedit(
 void phase2(EventDispatcher *dispatcher, Instance *instance, ICUUID uuid);
 void phase3(EventDispatcher *dispatcher, Instance *instance, ICUUID uuid);
 void phase4(EventDispatcher *dispatcher, Instance *instance, ICUUID uuid);
+void phase5(EventDispatcher *dispatcher, Instance *instance, ICUUID uuid);
 void finish(EventDispatcher *dispatcher, Instance *instance);
 
 void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
@@ -257,6 +258,53 @@ void phase4(EventDispatcher *dispatcher, Instance *instance, ICUUID uuid) {
             tf->call<ITestFrontend::pushCommitExpectation>("36");
             tf->call<ITestFrontend::keyEvent>(uuid, Key("Tab"), false);
             EXPECT(ic->inputPanel().auxDown().empty());
+            phase5(dispatcher, instance, uuid);
+            return true;
+        });
+}
+
+// Word prediction end to end (word_prediction = true, live reload): "cảm␣" → after the
+// 300 ms pause the native candidate list shows "ơn" first (no number labels, aux "Tab"); a
+// click (CandidateWord::select) commits it + a space. Smart quotes: '"' → “.
+std::unique_ptr<EventSourceTime> g_predTimer;
+
+void phase5(EventDispatcher *dispatcher, Instance *instance, ICUUID uuid) {
+    {
+        std::ofstream(g_cfgDir + "/viettelex/config.toml.tmp")
+            << "[general]\nword_prediction = true\nsmart_punctuation = true\n";
+        std::rename((g_cfgDir + "/viettelex/config.toml.tmp").c_str(), (g_cfgDir + "/viettelex/config.toml").c_str());
+    }
+    g_polls = 0;
+    g_predTimer = instance->eventLoop().addTimeEvent(
+        CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 300000, 0,
+        [dispatcher, instance, uuid](EventSourceTime *src, uint64_t) {
+            auto *ic = instance->inputContextManager().findByUUID(uuid);
+            auto *tf = instance->addonManager().addon("testfrontend");
+            if (g_polls == 0) {  // settings reloaded (inotify): type, then poll for the list
+                ++g_polls;
+                tf->call<ITestFrontend::pushCommitExpectation>("cảm");
+                type(tf, uuid, " camr ");  // after the "36" of phase 4: a word of its own
+                EXPECT(!ic->inputPanel().candidateList());  // not before the pause
+                src->setNextInterval(50000);
+                src->setOneShot();
+                return true;
+            }
+            auto list = ic->inputPanel().candidateList();
+            if (!list && ++g_polls < 100) {  // ≤ 5 s
+                src->setNextInterval(50000);
+                src->setOneShot();
+                return true;
+            }
+            EXPECT(list && list->size() >= 1 && list->size() <= 3);
+            EXPECT(list->candidate(0).text().toString() == "ơn");
+            EXPECT(list->label(0).toString().empty());  // digits are never selection keys
+            EXPECT(ic->inputPanel().auxDown().toString() == "Tab");
+            tf->call<ITestFrontend::pushCommitExpectation>("ơn ");
+            list->candidate(0).select(ic);
+            EXPECT(!ic->inputPanel().candidateList());
+            tf->call<ITestFrontend::pushCommitExpectation>("“");
+            tf->call<ITestFrontend::keyEvent>(uuid, Key("quotedbl"), false);
+            tf->call<ITestFrontend::keyEvent>(uuid, Key("quotedbl"), true);
             finish(dispatcher, instance);
             return true;
         });

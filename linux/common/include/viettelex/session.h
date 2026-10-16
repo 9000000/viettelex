@@ -5,6 +5,7 @@
 // client API; every typing decision lives here (unit-tested with a mock context).
 #pragma once
 
+#include "viettelex/auto_text.h"
 #include "viettelex/caret_hints.h"
 #include "viettelex/keys.h"
 #include "viettelex/settings.h"
@@ -66,6 +67,16 @@ public:
     // Caret suggestion (caret_hints.h) next to the caret — Fcitx5 aux text / IBus auxiliary
     // text, drawn by the candidate popup at the caret; never part of the preedit.
     virtual void showHint(const std::string &label) { (void)label; }
+    // Word prediction (CaretSuggestion::Kind::Predict): up to 3 candidates in the framework's
+    // candidate window (Fcitx5 candidate list / IBusLookupTable), the first one highlighted —
+    // Tab takes it, a click takes any (Session::chooseHint). `aux` = the key hint ("Tab").
+    // Default: one line of aux text like other caret suggestions.
+    virtual void showCandidates(const std::vector<std::string> &words, const std::string &aux) {
+        std::string l;
+        for (size_t i = 0; i < words.size(); ++i) l += (i ? "  ·  " : "") + words[i];
+        showHint(l + "   " + aux);
+    }
+    // Hides the hint AND the candidate list.
     virtual void hideHint() {}
 };
 
@@ -155,6 +166,19 @@ public:
     // Text typed since the caret last moved, as sent to the helper (a leading newline /
     // U+FFFC = line start / unknown text before it). For tests.
     std::string typedBefore() const;
+    // A click on candidate `index` of the word-prediction list (Fcitx5 CandidateWord::select,
+    // IBus candidate_clicked). False when no prediction is shown / the text moved on.
+    bool chooseHint(size_t index, InputContext &ic);
+
+    // MARK: auto text (auto_text.h) — double-space period, sentence capitals, smart quotes and
+    // dashes, word prediction. Settings switches (applySettings), plus per field:
+    // `allowed` = not a terminal / code editor / URL or e-mail field (frontends:
+    // autotext::appAllowed + field hints); `multiline` = the field says it is multi-line
+    // (Fcitx5 CapabilityFlag::Multiline): only then the very start of the text is a sentence
+    // start (a username / search box is not capitalised — macOS FocusedRole).
+    void setAutoTextAllowed(bool allowed) { autoTextAllowed_ = allowed; }
+    void setMultiline(bool on) { multiline_ = on; }
+    bool autoTextAllowed() const { return autoTextAllowed_; }
 
 private:
     bool handleLetter(uint32_t ch, InputContext &ic);
@@ -251,18 +275,44 @@ private:
         std::string raw;   // raw keys ("" for a shortcut expansion)
     };
     enum class TailHead { Start, Newline, Unknown };
-    void afterBoundary(uint32_t ch, uint32_t keysym);
-    void requestHint(std::vector<std::string> fields, int delayMs = 0);
+    // `typed` = what the boundary key put on screen when it is not the key itself (a smart quote).
+    void afterBoundary(uint32_t ch, uint32_t keysym, const std::string *typed = nullptr);
+    void requestHint(std::vector<std::string> fields, int delayMs = 0,
+                     std::vector<std::string> fallback = std::vector<std::string>(), int fallbackDelayMs = 0);
     bool applyHint(InputContext &ic);
+    bool applyPrediction(const std::string &word, InputContext &ic);
     void declineHint(InputContext &ic);
     void dismissHint(InputContext &ic);
     void seedTail(InputContext &ic);
     void tailAppend(const std::string &s);
     void tailPop(size_t chars);
     void tailReset();
-    void updateHintsOn() { hintsOn_ = hintFlags_.any() && static_cast<bool>(hintSink_); }
+    // hintsOn_: the typed tail is kept (any caret suggestion with a helper, or any auto text
+    // feature); requests reach the helper only with a sink.
+    void updateHintsOn() {
+        const bool sink = static_cast<bool>(hintSink_);
+        hintsOn_ = (sink && (hintFlags_.any() || predict_)) || period_ || capitalize_ || smart_;
+    }
     HintFlags hintFlags_;
     bool hintsOn_ = false;
+
+    // auto text (auto_text.h)
+    bool period_ = false, capitalize_ = false, smart_ = false, predict_ = false;  // Settings
+    autotext::Quotes quotes_ = autotext::quotesFor("curly");
+    bool autoTextAllowed_ = true;
+    bool multiline_ = false;
+    bool autoTextHere() const { return autoTextAllowed_ && mode_ != DisplayMode::Direct; }
+    int64_t lastSpaceMs_ = -1;   // the previous key was a plain space typed at this time
+    bool spaceReleased_ = true;  // the space key was released since its last press (not held)
+    bool lastEmDashOurs_ = false;
+    bool autoCappedWord_ = false, suppressAutoCap_ = false;
+    std::string declinedPrediction_;
+    bool tryAutoReplace(bool space, int64_t prevSpaceMs, bool spaceHeld, bool prevEmDashOurs, InputContext &ic);
+    bool smartQuoteFor(uint32_t ch, InputContext &ic, std::string &out);
+    bool shouldCapitalize(InputContext &ic);
+    void schedulePrediction(const std::string &typed, const std::string &rawKeys);
+    std::vector<std::string> nextWordRequest();
+    std::string predictBefore() const;
     std::string engineBits_;
     std::function<void(const HintRequest &)> hintSink_;
     std::shared_ptr<std::atomic<uint64_t>> keyGen_ = std::make_shared<std::atomic<uint64_t>>(0);

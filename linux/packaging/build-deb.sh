@@ -50,6 +50,7 @@ mkdir -p "$STAGE"
     iOS/Keyboard/SwipeEnglish.swift \
     iOS/Keyboard/AdjacentKeyFixer.swift iOS/Keyboard/AutoCorrect.swift iOS/Keyboard/MathResults.swift \
     iOS/Keyboard/NumberChips.swift iOS/Keyboard/SeedData.swift \
+    iOS/Keyboard/SuggestionSupport.swift iOS/Keyboard/DisplayCase.swift iOS/Keyboard/SensitiveWords.swift \
     iOS/Keyboard/Resources/vnlexicon.bin iOS/Keyboard/Resources/vnlm.bin iOS/Keyboard/Resources/enlexicon.bin \
     iOS/KeyboardTests/Fixtures/text-tools.txt iOS/KeyboardTests/Fixtures/add-tones.txt \
     iOS/KeyboardTests/Fixtures/math-results.txt iOS/KeyboardTests/Fixtures/number-chips.txt \

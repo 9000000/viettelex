@@ -57,6 +57,11 @@ number_chips = true                 # chip số dạng tiền "1tr2 " → 1.200.
 typo_hints = true                   # sửa lỗi gõ sai "tpoi " → tôi
 tone_hints = false                  # thêm dấu cho câu không dấu "toi di hoc." → tôi đi học.
 date_hints = true                   # ngày giờ "hôm nay " → 28/09/2026, "bây giờ " → 21:35
+double_space_period = false         # Văn bản tự động (§8b): "chào  " → "chào. "
+auto_capitalize = false             # tự viết hoa đầu câu
+smart_punctuation = false           # " ' → “ ” ‘ ’, "--" → "—"
+quote_style = "curly"               # "curly" “ ” ‘ ’ | "low9" „ “ ‚ ‘ | "guillemets" « » ‹ ›
+word_prediction = false             # gợi ý từ (hoàn thành từ / từ kế tiếp) trong ô ứng viên
 
 [experimental]
 no_underline = "off"                # "off" | "forward-keys": Chromium/Electron không gạch chân (§9)
@@ -222,6 +227,35 @@ Chạy ở đâu: bộ gõ chỉ theo dõi đuôi chữ vừa gõ và xét cổn
 (MathResults, NumberChips, lexicon sửa lỗi, Thêm dấu — mã Swift chung iOS/macOS) ở
 `viettelex-text-tool --serve`: một process con sống lâu, bật ở lần kích hoạt đầu, tự thoát sau
 2 phút rảnh. Thiếu gói `viettelex-text-tools` → không có gợi ý nào.
+
+## 8b. Văn bản tự động (`double_space_period`, `auto_capitalize`, `smart_punctuation`, `quote_style`, `word_prediction`)
+
+Port bản macOS (16/10/2026: `App/Sources/SystemAutoText.swift`, `WordPrediction.swift`). macOS
+theo cài đặt Nhập văn bản của hệ thống; Linux không có cài đặt chung nên mỗi tính năng là một
+công tắc của VietTelex, **mặc định TẮT hết** (người dùng Linux hay gõ trong terminal / code).
+Tắt = một lần đọc cờ ở phím cách / chữ đầu từ / `"` `'` `-`; không theo dõi gì, không nạp dữ liệu.
+
+| Key | Mặc định | Làm gì |
+|---|---|---|
+| `double_space_period` | tắt | Dấu cách thứ hai trong 1,1 s sau chữ / số / ngoặc-nháy đóng → thay dấu cách đầu bằng `. ` (nuốt phím). Không sau dấu câu / đầu văn bản; giữ phím cách (autorepeat: hai lần nhấn không có nhả ở giữa) không tính. Chỉ nơi bộ gõ được sửa chữ quanh con trỏ (surrounding đã chứng minh); đọc lại 2 ký tự trên màn hình, lệch ⇒ dấu cách thường |
+| `auto_capitalize` | tắt | Chữ a–z đầu từ, ngay sau `. ? !` + khoảng trắng (bỏ ngoặc/nháy đóng), xuống dòng, hoặc đầu văn bản **chỉ ở ô nhiều dòng** (Fcitx5 `CapabilityFlag::Multiline`; IBus không có cờ này ⇒ không viết hoa đầu ô) → đưa chữ HOA vào engine (Telex vẫn ghép: `dduwowcj` → `Được`). Bỏ qua viết tắt (`Mr.`, `TP.`, `e.g.`…), `...`, email / URL / tên miền, tên viết tắt một chữ (`J.`). ⌫ xoá đúng chữ hoa đó ⇒ chữ đầu kế tiếp giữ thường. Ngữ cảnh từ đuôi phím đã gõ; không biết thì đọc tối đa 24 ký tự (chỉ khi surrounding đã chứng minh) |
+| `smart_punctuation` | tắt | `"` / `'` → ngoặc mở sau khoảng trắng / đầu văn bản / ngoặc mở / gạch dài, còn lại ngoặc đóng (`don't` → `don’t`) — chèn thay phím, không sửa chữ cũ (chạy cả ở Chrome); ký tự trước không biết ⇒ giữ phím thẳng. `--` → `—`, gõ `-` tiếp ngay sau `—` vừa đổi → `---`; không đổi `<!--`, `!--` và chuỗi ≥ 3 gạch. Phần gạch sửa chữ cũ ⇒ như `double_space_period` |
+| `quote_style` | `"curly"` | `"curly"` `“ ” ‘ ’`, `"low9"` `„ “ ‚ ‘`, `"guillemets"` `« » ‹ ›` (= NSUserQuotesArray macOS) |
+| `word_prediction` | tắt | Dừng gõ 0,3 s → tối đa 3 từ: **hoàn thành** từ đang gõ (≥ 2 chữ; tiếng Anh khi ngữ cảnh tiếng Anh hoặc không âm tiết Việt nào khớp, theo phím thô) hoặc **từ kế tiếp** ngay sau một dấu cách. Tab = từ đầu (+ dấu cách), click = từ bất kỳ, Esc = bỏ (không gợi ý lại khi từ vẫn bắt đầu bằng chữ đã từ chối), phím khác bỏ qua rồi đi tiếp — **phím số không chọn ứng viên**. Gợi ý cạnh con trỏ khác (§8) luôn thắng. Không bao giờ tự thay. Không học từ người dùng |
+
+Chung: không chạy trong terminal (`isTerminalApp`, ô Terminal, Direct), trình soạn code
+(`autotext::isCodeEditorApp`: VS Code + họ, Zed, Sublime, JetBrains, Kate, Builder, Geany…), ô
+URL / email, ô mật khẩu / nhạy cảm, khi đang English hoặc `[app_modes]` off.
+
+Gợi ý từ — hiển thị: ô ứng viên gốc của khung (Fcitx5 `CommonCandidateList` ngang, nhãn rỗng,
+ứng viên đầu được tô = Tab, aux "Tab"; IBus `IBusLookupTable` ngang, nhãn rỗng + aux "Tab";
+click = `CandidateWord::select` / `candidate_clicked`). Preedit: từ đang gõ là preedit nên chọn
+= commit từ + dấu cách (chạy cả ở Chrome/Firefox/Electron); Surrounding: thay đúng từ trên màn
+hình (đọc lại trước khi xoá). Tính ở `viettelex-text-tool --serve` (lệnh `predict`,
+`engine-capi/Sources/TextToolCLI/Predict.swift`: cùng mã xếp hạng iOS/macOS — VNSuggest,
+SuggestRank, SyllableLM `vnlm.bin`, SeedData, DisplayCase, SensitiveWords, SwipeEnglish
+`enlexicon.bin`); bộ gõ chỉ hẹn giờ (HintService chờ 0,3 s, phím mới = huỷ). Không biết chữ
+trước đoạn đã gõ (vừa focus ở Chrome…) ⇒ từ đầu tiên được coi là đứng riêng.
 
 ## 9. Thử nghiệm: không gạch chân ở Chromium/Electron (`[experimental] no_underline`)
 

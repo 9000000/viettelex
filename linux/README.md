@@ -158,6 +158,28 @@ switches between Vietnamese and English.
   typo fixes, date/time (on by default) and tones for unaccented sentences (off by default),
   shown in the input method's popup at the caret. Only Tab applies; any other key ignores the
   hint; never automatic, never in password fields. Needs `viettelex-text-tools`.*
+- **Văn bản tự động / Automatic text** (Tuỳ chỉnh → Văn bản tự động; **mặc định tắt hết** — bản
+  macOS theo cài đặt Nhập văn bản của hệ thống, Linux không có nên là công tắc riêng):
+  **thêm dấu chấm khi gõ hai dấu cách** (`chào␣␣` → `chào. `, giữ phím cách thì không), **tự viết
+  hoa đầu câu** (sau `. ? !` / xuống dòng; chữ hoa đưa thẳng vào Telex: `dduwowcj` → `Được`; bỏ
+  qua viết tắt, email, URL; xoá chữ hoa đó thì chữ kế giữ thường; đầu ô chỉ viết hoa ở ô nhiều
+  dòng — Fcitx5), **ngoặc kép cong và gạch dài** (`"` `'` → `“ ” ‘ ’`, `don't` → `don’t`, `--` →
+  `—`, thêm `-` → `---`; kiểu ngoặc chọn được: `“ ”` / `„ “` / `« »`), **gợi ý từ** (dừng gõ
+  0,3 s → tối đa 3 từ trong ô ứng viên của Fcitx5 / IBus: hoàn thành từ đang gõ hoặc từ kế tiếp;
+  Tab = từ đầu, click = từ bất kỳ, Esc = bỏ; phím số vẫn là số; cùng xếp hạng thanh gợi ý iOS,
+  dữ liệu có sẵn trong `viettelex-text-tools`). Không chạy trong terminal, trình soạn code (VS
+  Code, Zed, JetBrains, Kate…), ô URL/email, ô mật khẩu, khi English. Dấu chấm đúp-cách và `—`
+  sửa chữ đã gõ nên chỉ ở app cho bộ gõ đọc chữ quanh con trỏ (không ở Chrome/Firefox/Electron).
+  / *All **off by default** (macOS follows its system Text Input settings; Linux has none):
+  double-space period (not when the space bar is held), sentence capitals (fed to Telex as an
+  uppercase key, so `dduwowcj` → `Được`; abbreviations / e-mails / URLs skipped; delete the
+  capital and the next letter stays lowercase; the field start only in multi-line fields),
+  smart quotes and dashes (`“ ”` / `„ “` / `« »` style), and word suggestions (after a 0.3 s
+  pause, up to 3 words in the Fcitx5 / IBus candidate window — completion or next word; Tab =
+  first, click = any, Esc dismisses; digits stay digits; iOS suggestion-bar ranking, data
+  already in `viettelex-text-tools`). Never in terminals, code editors, URL / e-mail / password
+  fields or English mode. The double-space period and `—` edit typed text, so only in apps that
+  let the IM read the text around the caret.*
 
 ## Tương thích ứng dụng / App compatibility
 

@@ -19,6 +19,7 @@
 #include "engine.h"
 
 #include "viettelex/app.h"
+#include "viettelex/auto_text.h"
 #include "viettelex/caret_hints.h"
 #include "viettelex/gnome.h"
 #include "viettelex/gnome_monitor.h"
@@ -68,6 +69,7 @@ struct VtIBusEngine {
     // alone is not enough: IBus keeps an empty text for clients that never send one
     // (XIM, some Qt/Electron builds, terminals), so "nothing before the caret" was trusted.
     gboolean surroundingProven;
+    gboolean tableShown;  // the word-prediction lookup table is up
 };
 
 struct VtIBusEngineClass {
@@ -166,7 +168,27 @@ public:
     void showHint(const std::string &label) override {
         ibus_engine_update_auxiliary_text(e_, ibus_text_new_from_string(label.c_str()), TRUE);
     }
-    void hideHint() override { ibus_engine_hide_auxiliary_text(e_); }
+    void hideHint() override {
+        ibus_engine_hide_auxiliary_text(e_);
+        if (reinterpret_cast<VtIBusEngine *>(e_)->tableShown) {
+            reinterpret_cast<VtIBusEngine *>(e_)->tableShown = FALSE;
+            ibus_engine_hide_lookup_table(e_);
+        }
+    }
+    // Word prediction: an IBusLookupTable (horizontal, first candidate highlighted = Tab, no
+    // number labels — digits are never taken from the user); a click arrives as
+    // candidate_clicked. Aux text "Tab" next to it.
+    void showCandidates(const std::vector<std::string> &words, const std::string &aux) override {
+        IBusLookupTable *t = ibus_lookup_table_new(guint(words.size()), 0, TRUE, FALSE);
+        ibus_lookup_table_set_orientation(t, IBUS_ORIENTATION_HORIZONTAL);
+        for (size_t i = 0; i < words.size(); ++i) {
+            ibus_lookup_table_append_candidate(t, ibus_text_new_from_string(words[i].c_str()));
+            ibus_lookup_table_append_label(t, ibus_text_new_from_static_string(""));
+        }
+        ibus_engine_update_lookup_table(e_, t, TRUE);  // floating ref: the engine sinks it
+        reinterpret_cast<VtIBusEngine *>(e_)->tableShown = TRUE;
+        ibus_engine_update_auxiliary_text(e_, ibus_text_new_from_string(aux.c_str()), TRUE);
+    }
     bool textBeforeCursor(std::string &out) override {
         IBusText *text = nullptr;
         guint cursor = 0, anchor = 0;
@@ -271,6 +293,11 @@ void refreshFieldFlags(VtIBusEngine *self) {
     self->session->setDisplayMode(policy.mode, client);
     self->session->setDeleteWithKeys(policy.deleteWithKeys);
     self->session->setSurroundingEdits(policy.allowSurroundingEdits);
+    // Auto text (period / capitals / quotes / prediction): never in terminals, code editors,
+    // URL / e-mail fields. IBus has no multi-line hint: the text start is never capitalised.
+    self->session->setAutoTextAllowed(vt::autotext::appAllowed(*self->appId) && !field.terminal &&
+                                      !field.urlOrEmail);
+    self->session->setMultiline(false);
     // VIETTELEX_DEBUG=1 in ibus-daemon's environment: why a field got its mode (stderr).
     static const bool debug = std::getenv("VIETTELEX_DEBUG") != nullptr;
     if (debug)
@@ -574,6 +601,18 @@ void setContentType(IBusEngine *engine, guint purpose, guint hints) {
     IBUS_ENGINE_CLASS(vt_ibus_engine_parent_class)->set_content_type(engine, purpose, hints);
 }
 
+// Click on a word-prediction candidate (ibus-ui-gtk3, GNOME Shell's candidate popup).
+void candidateClicked(IBusEngine *engine, guint index, guint button, guint state) {
+    (void)button;
+    (void)state;
+    auto *self = reinterpret_cast<VtIBusEngine *>(engine);
+    try {
+        IBusClient client(engine);
+        self->session->chooseHint(index, client);
+    } catch (...) {
+    }
+}
+
 void propertyActivate(IBusEngine *engine, const gchar *name, guint state) {
     (void)state;
     auto *self = reinterpret_cast<VtIBusEngine *>(engine);
@@ -628,6 +667,7 @@ static void vt_ibus_engine_class_init(VtIBusEngineClass *klass) {
     ec->set_surrounding_text = setSurroundingText;
     ec->set_content_type = setContentType;
     ec->property_activate = propertyActivate;
+    ec->candidate_clicked = candidateClicked;
 }
 
 static void vt_ibus_engine_init(VtIBusEngine *self) {
@@ -639,6 +679,7 @@ static void vt_ibus_engine_init(VtIBusEngine *self) {
     self->focused = FALSE;
     self->password = FALSE;
     self->surroundingProven = FALSE;
+    self->tableShown = FALSE;
     self->purpose = IBUS_INPUT_PURPOSE_FREE_FORM;
     self->hints = 0;
     self->rememberState = TRUE;
