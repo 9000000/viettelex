@@ -325,6 +325,11 @@ final class FrontmostApp {
     private(set) var recent: [(id: String, name: String)] = []
     private static let selfID = OwnBundle.id
 
+    #if DEBUG
+    /// Test seam (ControllerHarnessTests): the frontmost app the controller routes by.
+    func _testSetBundleID(_ id: String?) { lock.withLock { _bundleID = id } }
+    #endif
+
     private init() {
         _bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         NSWorkspace.shared.notificationCenter.addObserver(

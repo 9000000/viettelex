@@ -252,7 +252,14 @@ final class SystemAutoTextSettings {
 /// lần focus đầu văn bản): ô một dòng (tên đăng nhập, ô tìm kiếm) không viết hoa, như
 /// field editor của Apple; ô nhiều dòng (TextEdit, Notes, Mail, contenteditable) có.
 enum FocusedRole {
+    #if DEBUG
+    static var _testOverride: Bool?
+    #endif
+
     static func isMultilineText() -> Bool {
+        #if DEBUG
+        if let v = _testOverride { return v }
+        #endif
         guard AXIsProcessTrusted() else { return false }
         let sys = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(sys, 0.05)
