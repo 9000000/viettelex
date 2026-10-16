@@ -377,8 +377,10 @@ void Session::applySettings(const Settings &s) {
     smart_ = s.smartPunctuation;
     predict_ = s.wordPrediction;
     filter_ = s.filterSensitive;
+    learnWords_ = s.learnWords;
     quotes_ = autotext::quotesFor(s.quoteStyle);
     if (!predict_) declinedPrediction_.clear();
+    if (!learnOn()) learn_.discard();
     if (!period_) lastSpaceMs_ = -1;
     if (!smart_) lastEmDashOurs_ = false;
     if (!capitalize_) autoCappedWord_ = suppressAutoCap_ = false;
@@ -497,7 +499,8 @@ std::vector<std::string> Session::nextWordRequest() {
         return {};
     declinedPrediction_.clear();  // a new word: the old Esc no longer applies
     std::vector<std::string> r = {"predict", predictBefore(), "", "", vt_previous_word_english(e_) ? "1" : "0"};
-    if (!filter_) r.push_back("0");  // "Lọc từ nhạy cảm" off (absent = on)
+    if (!filter_ || learnOn()) r.push_back(filter_ ? "1" : "0");  // "Lọc từ nhạy cảm" (absent = on)
+    if (learnOn()) r.push_back("1");                                // "Học từ bạn gõ" (absent = off)
     return r;
 }
 
@@ -510,7 +513,8 @@ void Session::schedulePrediction(const std::string &typed, const std::string &ra
     if (!autotext::completionWorthAsking(typed) || autotext::predictionMuted(typed, declinedPrediction_)) return;
     std::vector<std::string> r = {"predict", predictBefore() + typed, typed, rawKeys,
                                   vt_previous_word_english(e_) ? "1" : "0"};
-    if (!filter_) r.push_back("0");  // "Lọc từ nhạy cảm" off (absent = on)
+    if (!filter_ || learnOn()) r.push_back(filter_ ? "1" : "0");  // "Lọc từ nhạy cảm" (absent = on)
+    if (learnOn()) r.push_back("1");                                // "Học từ bạn gõ" (absent = off)
     requestHint(std::move(r), autotext::kPredictIdleMs);
 }
 
@@ -519,6 +523,8 @@ void Session::schedulePrediction(const std::string &typed, const std::string &ra
 // afterNumberSpace, CaretSuggestions.swift afterWord — same order: date, typo, tones).
 // Word prediction after a space comes last, as a fallback: any other suggestion wins.
 void Session::afterBoundary(uint32_t ch, uint32_t keysym, const std::string *typed) {
+    if (learnOn()) learnAtBoundary(ch, keysym);
+    else if (learn_.hasPending() || !learn_.prev1().empty()) learn_.discard();
     if (isNewlineKey(keysym)) {
         tail_.clear();
         tailHead_ = TailHead::Newline;
@@ -582,6 +588,41 @@ void Session::afterBoundary(uint32_t ch, uint32_t keysym, const std::string *typ
     if (ch == ' ' && predict_) next = nextWordRequest();
     if (!primary.empty()) requestHint(std::move(primary), delayMs, std::move(next), autotext::kPredictIdleMs);
     else if (!next.empty()) requestHint(std::move(next), autotext::kPredictIdleMs);
+}
+
+// MARK: Học từ bạn gõ
+
+// The word this Session just composed and committed at this boundary (endWord: lastEnded_, with
+// raw keys — "" for a shortcut expansion, never learned) is the last run of the typed tail; it
+// stands alone there by construction (the run starts after a space / where the tail starts).
+void Session::learnAtBoundary(uint32_t ch, uint32_t keysym) {
+    size_t s = tail_.size();
+    while (s > 0 && !isTailSpace(tail_[s - 1])) --s;
+    const std::string run = tail_.substr(s);
+    const bool ours = lastEnded_.ended && !lastEnded_.raw.empty() && lastEnded_.text == run;
+    const std::string word = ours ? run : std::string();
+    hints::LearnTracker::Event e;
+    const bool keepsLine = ch >= 0x20 && ch != 0x7f && keysym != ks::Tab && !isNewlineKey(keysym);
+    if (keepsLine) {
+        if (learn_.commit(word, ch, true, 1, e)) learnSend(e);
+        return;
+    }
+    // Enter / Tab / Esc / navigation: the word is final, the sentence context ends.
+    if (!word.empty() && learn_.commit(word, '\n', true, 1, e)) learnSend(e);
+    if (learn_.breakContext(e)) learnSend(e);
+}
+
+void Session::learnSend(const hints::LearnTracker::Event &e) {
+    if (!hintSink_) return;
+    HintRequest r;
+    r.line = hints::learnRequest(e);
+    r.oneway = true;
+    hintSink_(r);
+}
+
+void Session::learnFlush() {
+    hints::LearnTracker::Event e;
+    if (learn_.breakContext(e) && learnOn()) learnSend(e);
 }
 
 void Session::deliverHint(uint64_t gen, const CaretSuggestion &s, InputContext &ic) {
@@ -649,6 +690,11 @@ bool Session::applyPrediction(const std::string &word, InputContext &ic) {
     lastWasBoundaryChar_ = false;
     lastEnded_ = EndedWord();
     toneTracker_.reset();
+    {  // Học từ bạn gõ: an accepted prediction counts double (iOS weight 2)
+        hints::LearnTracker::Event e;
+        if (!learnOn()) learn_.discard();
+        else if (learn_.commit(word, ' ', true, 2, e)) learnSend(e);
+    }
     gluedToDigit_ = false;
     caretMoved_ = false;
     autoCappedWord_ = suppressAutoCap_ = false;
@@ -689,6 +735,7 @@ int Session::acceptedSpaceKey(const KeyEvent &ev, InputContext &ic) {
     tailPop(1);
     tailAppend(out);
     vt_forget_last_commit(e_);
+    learnFlush();  // the punctuation ends the sentence context
     lastSpaceMs_ = -1;
     lastWasBoundaryChar_ = false;
     if (out.back() == ' ') carriedSpace_ = out;
@@ -733,6 +780,10 @@ bool Session::applyHint(InputContext &ic) {
     replace(ic, int(n), s.insert, s.replace);
     tailPop(n);
     tailAppend(s.insert);
+    // Học từ bạn gõ: an accepted typo fix learns the fixed form; any other hint replaced the
+    // committed text (tones, date, number) — the held word is dropped.
+    if (s.kind == CaretSuggestion::Kind::Typo) learn_.replacePending(s.display);
+    else learn_.discard();
     vt_forget_last_commit(e_);  // ⌫ must not re-open the word that was replaced
     lastWasBoundaryChar_ = false;
     lastEnded_ = EndedWord();
@@ -814,6 +865,7 @@ void Session::focusIn() {
         }
     }
     ackDrop();
+    learnFlush();
     hint_.reset();  // the frontend hid it on focus-out (finish)
     if (hintsOn_) keyGen_->fetch_add(1);
     tailReset();
@@ -828,6 +880,7 @@ void Session::focusIn() {
 
 void Session::finish(InputContext &ic, bool commitPreedit) {
     dismissHint(ic);
+    learnFlush();  // caret moved / focus left: the held word is final, the context ends
     if (hintsOn_) keyGen_->fetch_add(1);  // answers still on their way are stale now
     tailReset();
     lastSpaceMs_ = -1;
@@ -1012,6 +1065,7 @@ bool Session::processKey(const KeyEvent &ev, InputContext &ic) {
 
     // Shortcut chords (Ctrl/Alt/Super + key): commit the word, hand the key to the app.
     if (ev.mods & (VT_MOD_CTRL | VT_MOD_ALT | VT_MOD_SUPER)) {
+        learn_.discard();  // Ctrl+Z / Ctrl+Backspace may undo / delete it: never learned
         endWord(ic, false, false);
         ackDrop();  // Ctrl+V / Ctrl+Z / Ctrl+left: the text before the caret is unknown
         vt_forget_last_commit(e_);
@@ -1023,6 +1077,7 @@ bool Session::processKey(const KeyEvent &ev, InputContext &ic) {
     }
 
     if (ev.keysym == ks::BackSpace) {
+        if (vt_is_empty(e_)) learn_.discard();  // ⌫ into the committed word: maybe being edited
         bool r = handleBackspace(ic);
         if (!r) ackPop();  // the app's own BackSpace removes one character
         lastWasBoundaryChar_ = false;
@@ -1048,6 +1103,7 @@ bool Session::processKey(const KeyEvent &ev, InputContext &ic) {
     // replaces committed text (only where the Session may edit; screen read back first).
     if (printable && (ch == ' ' ? period_ : (ch == '-' && smart_)) && !ks::isKeypad(ev.keysym) &&
         vt_is_empty(e_) && tryAutoReplace(ch == ' ', prevSpaceMs, spaceHeld, prevEmDashOurs, ic)) {
+        learnFlush();  // Học từ bạn gõ: ". " / "—" ends the sentence context
         gluedToDigit_ = false;
         lastWasBoundaryChar_ = false;
         caretMoved_ = false;

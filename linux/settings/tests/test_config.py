@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import os
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -66,6 +67,30 @@ class ParseTests(unittest.TestCase):
         bad = config.normalize(config.parse('[general]\nquote_style = "fancy"\nauto_capitalize = "yes"\n'))
         self.assertEqual(bad["general"]["quote_style"], "curly")
         self.assertIs(bad["general"]["auto_capitalize"], False)
+
+    def test_learn_words_default_and_clear(self):
+        # "Học từ bạn gõ": bật như iOS/macOS; "Xoá từ đã học" ghi kho VTL2 RỖNG hợp lệ (đúng byte
+        # mà AppTests/LearnedWordsTests đọc lại bằng UserLMCodec).
+        n = config.normalize({})
+        self.assertIs(n["general"]["learn_words"], True)
+        off = config.normalize(config.parse("[general]\nlearn_words = false\n"))
+        self.assertIs(off["general"]["learn_words"], False)
+        self.assertEqual(config.empty_learned_store(0).hex(),
+                         "56544c3201000000000000000000000000000000000000000000000000000000" "3a3b26a4")
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "viettelex", "learned-words.bin")
+            with open(os.path.join(d, "x"), "w"):
+                pass
+            os.makedirs(os.path.dirname(p))
+            with open(p, "wb") as f:
+                f.write(b"old data")
+            config.clear_learned_words(p)
+            with open(p, "rb") as f:
+                data = f.read()
+            self.assertEqual(len(data), 36)
+            self.assertEqual(data[:4], b"VTL2")
+            self.assertFalse(os.path.exists(p + ".tmp"))
 
     def test_underline_misspelled_roundtrip(self):
         out = config.update_text("[general]\npreedit_underline = false\n",

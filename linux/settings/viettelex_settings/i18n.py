@@ -273,6 +273,22 @@ EN = {
         "click takes it, Esc dismisses; never replaces by itself. Typing . , ? ! right after attaches "
         "the punctuation to the word. Needs the viettelex-text-tools package.",
     "Lọc từ nhạy cảm": "Filter sensitive words",
+    "Học từ bạn gõ": "Learn from your typing",
+    "Gợi ý từ học các từ và cặp từ bạn hay gõ (không bao giờ ở ô mật khẩu, terminal, trình soạn "
+    "code hay khi gõ English). Chỉ lưu trên máy này — không gửi qua mạng, không đồng bộ. Cần bật "
+    "Gợi ý từ. Mặc định bật.":
+        "Word suggestions learn the words and word pairs you type often (never in password fields, "
+        "terminals, code editors or while typing English). Stored only on this computer — never sent "
+        "over the network or synced. Needs Word suggestions. On by default.",
+    "Xoá từ đã học": "Clear learned words",
+    "Gợi ý từ quên mọi từ và cặp từ đã học từ những gì bạn gõ trên máy này.":
+        "Word suggestions forget every word and word pair learned from your typing on this computer.",
+    "Xoá…": "Clear…",
+    "Xoá": "Clear",
+    "Đã xoá từ đã học.": "Learned words cleared.",
+    "Xoá từ đã học?": "Clear learned words?",
+    "Gợi ý từ sẽ quên mọi từ và cặp từ đã học. Không hoàn tác được.":
+        "Word suggestions forget every learned word and word pair. This cannot be undone.",
     "Gợi ý từ và sửa lỗi gõ không chủ động đưa từ tục — gõ tay vẫn bình thường. Mặc định bật.":
         "Word suggestions and typo fixes never offer swear words — typing them yourself works as "
         "usual. On by default.",

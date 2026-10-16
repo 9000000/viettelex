@@ -23,6 +23,8 @@ constexpr unsigned kMsgSwitchChord = kWmApp + 0x74;
 // text_actions.cpp: Windows' "text suggestions on the physical keyboard" setting changed
 // (registry change notification, thread-pool wait -> main window).
 constexpr unsigned kMsgPredictSetting = kWmApp + 0x75;
+// text_actions.cpp: "Học từ bạn gõ" events from a TIP (HintJob::Learn): record them.
+constexpr unsigned kMsgLearnWork = kWmApp + 0x76;
 // (ime/src/globals.h kAppCommandMsg = WM_APP + 0x56 and main.cpp kTrayMsg = WM_APP + 0x57
 // are the other two on this window.)
 constexpr unsigned kAppCommand = kWmApp + 0x56;
@@ -30,6 +32,7 @@ constexpr unsigned kTrayCallback = kWmApp + 0x57;
 
 constexpr unsigned kMainWindowMessages[] = {kMsgUpdateChecked,   kMsgUpdateDownloaded, kMsgTextToolWork,
                                             kMsgTextToolClipDone, kMsgHintWork,        kAppCommand,
-                                            kTrayCallback,       kMsgSwitchChord,      kMsgPredictSetting};
+                                            kTrayCallback,       kMsgSwitchChord,      kMsgPredictSetting,
+                                            kMsgLearnWork};
 
 }  // namespace vtx::app

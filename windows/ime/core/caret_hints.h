@@ -212,6 +212,37 @@ enum class AcceptSpaceAct : uint8_t { Pass, Replace, Swallow };
 // first (re-read), `replacement` = what replaces the last character (our space). Clears `st`.
 AcceptSpaceAct acceptSpaceKey(AcceptedSpace& st, char32_t ch, std::u32string& expect, std::u32string& replacement);
 
+// ---------------------------------------------------------------- Học từ bạn gõ
+// App/Sources/LearnedModel.swift LearnTracker / learnable, same rules (the model itself lives in
+// VietTelex.exe — app/core/learned_words.h; the TIP only tracks committed words and sends them,
+// caret_hint_ipc.h HintJob::Learn). learnable: letters only, ≤ 12, no run of ≥ 3 equal letters.
+bool learnable(const std::u32string& w);
+// Committed words at word boundaries → learning events (lowercase word, the ≤ 2 previous words
+// of the same sentence — single spaces apart — and a weight: 1 typed, 2 an accepted prediction).
+// Each word is HELD until the next event: ⌫ right after the boundary / a hint replacing it drops
+// it, an accepted typo fix learns the fixed form.
+class LearnTracker {
+public:
+    struct Event {
+        std::u32string word, prev1, prev2;  // empty = none
+        int weight = 1;
+    };
+    // `word` committed by `boundary` (' ' keeps the sentence context, anything else cuts it).
+    // true = `out` is the previous held event, final now.
+    bool commit(const std::u32string& word, char32_t boundary, bool standsAlone, int weight, Event& out);
+    void replacePending(const std::u32string& fixed);
+    void discard();
+    bool breakContext(Event& out);  // Enter / Tab / caret moved / focus: final, context cut
+    bool hasPending() const { return pending_; }
+    const Event& pending() const { return held_; }
+    const std::u32string& prev1() const { return prev1_; }
+
+private:
+    std::u32string prev1_, prev2_;
+    bool pending_ = false;
+    Event held_;
+};
+
 // ---------------------------------------------------------------- key stream -> trigger
 enum class TriggerKind : uint8_t { None, Math, Number, Date, Typo, Tones };
 struct Trigger {

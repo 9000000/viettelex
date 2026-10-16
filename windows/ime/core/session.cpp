@@ -209,6 +209,7 @@ bool TypingSession::wantsKey(const KeyInput& k) const {
 bool TypingSession::handleKey(const KeyInput& k, TextSink& sink) {
     lastRaw_.clear();
     lastText_.clear();
+    lastWord_.clear();
     if (!engine_) return false;
     switch (k.kind) {
         case KeyKind::Char:
@@ -576,6 +577,7 @@ bool TypingSession::commitWord(TextSink& sink, KeyKind kind) {
         lastRaw_ = raw;
         lastText_ = finalText;
     }
+    if (committed && (printable || kind == KeyKind::Boundary)) lastWord_ = finalText;
     shown_.clear();
     reopenArmed_ = printable;
     if (!printable) vtx_forget_last_commit(engine_);

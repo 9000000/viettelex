@@ -312,6 +312,11 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 "After a word that isn’t Vietnamese or English (tpoi, nayd, spellnig), a likely fix (tôi, này, spelling) shows next to the cursor; press Tab to replace it. Esc stops suggesting that word." = "Sau một từ không phải tiếng Việt hay tiếng Anh (tpoi, nayd, spellnig), từ nhiều khả năng đúng (tôi, này, spelling) hiện cạnh con trỏ, bấm Tab để thay. Esc: thôi gợi ý từ đó.";
 "Filter sensitive words" = "Lọc từ nhạy cảm";
 "Word suggestions and typo fixes never offer swear words — typing them yourself works as usual." = "Gợi ý từ và sửa lỗi gõ không chủ động đưa từ tục — gõ tay vẫn bình thường.";
+"Learn from your typing" = "Học từ bạn gõ";
+"Word suggestions learn the words and word pairs you type often (never in password fields, terminals or code editors). Stored only on this Mac — never sent over the network or synced with iCloud. Works when macOS “Show inline predictive text” is on." = "Gợi ý từ học các từ và cặp từ bạn hay gõ (không bao giờ ở ô mật khẩu, terminal hay trình soạn mã). Chỉ lưu trên máy Mac này — không gửi qua mạng, không đồng bộ iCloud. Có tác dụng khi bật văn bản dự đoán nội tuyến của macOS (Cài đặt hệ thống → Bàn phím).";
+"Clear learned words…" = "Xoá từ đã học…";
+"Clear learned words?" = "Xoá từ đã học?";
+"Word suggestions forget every word and word pair learned from your typing on this Mac. It cannot be undone." = "Gợi ý từ sẽ quên mọi từ và cặp từ đã học từ những gì bạn gõ trên máy Mac này. Không hoàn tác được.";
 "Suggest tones for unaccented sentences" = "Gợi ý thêm dấu cho câu không dấu";
 "After 3+ unaccented syllables (toi di hoc), when you type . ! ? or pause after a space, the toned text (tôi đi học) shows next to the cursor; press Tab to replace it." = "Sau từ 3 âm tiết không dấu trở lên (toi di hoc), khi gõ . ! ? hoặc dừng tay sau dấu cách, câu có dấu (tôi đi học) hiện cạnh con trỏ, bấm Tab để thay.";
 "Suggest dates and times" = "Gợi ý ngày giờ";

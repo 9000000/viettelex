@@ -2,9 +2,12 @@
 // in app/core/text_action_logic.* (unit-tested), the transforms in windows/engine.
 #include "text_actions.h"
 
+#include <memory>
 #include <new>
 #include <string>
 #include <vector>
+
+#include <viettelex/text_tools.hpp>
 
 #include "app.h"
 #include "app_messages.h"
@@ -16,8 +19,11 @@
 #include "text_action_logic.h"
 #include "text_tool_ipc.h"
 #include "caret_hint_ipc.h"
+#include "learned_words.h"
 #include "typo_fix.h"
 #include "word_prediction.h"
+
+#include <shlobj.h>
 
 namespace vtx::app {
 
@@ -27,6 +33,8 @@ constexpr int kHotkeyId = 0x5654;
 constexpr UINT_PTR kTimerStart = 0x5401;  // tray path: the app we returned to has focus
 constexpr UINT_PTR kTimerTip = 0x5402;    // the TIP did not answer -> clipboard fallback
 constexpr UINT_PTR kTimerDone = 0x5403;   // the TIP took the result but never confirmed
+constexpr UINT_PTR kTimerLearnSave = 0x5404;  // Học từ bạn gõ: save 5 s after the last word
+constexpr UINT kLearnSaveDelayMs = 5000;
 // Main-window messages: app_messages.h (kMsgUpdateChecked/Downloaded share this window).
 constexpr UINT kMsgWork = kMsgTextToolWork;
 constexpr UINT kMsgClipDone = kMsgTextToolClipDone;
@@ -107,11 +115,98 @@ bool isTipWindow(HWND h) {
     return wcsncmp(title, L"VietTelexTip:", 13) == 0;
 }
 
+HintJobs& hintJobs() {
+    static HintJobs jobs(languageData());
+    return jobs;
+}
+
+// ---- Học từ bạn gõ (learned_words.h) — UI thread only -------------------------------------
+std::unique_ptr<learn::Model> g_learned;  // loaded on first use, dropped when off
+std::vector<LearnEvent> g_learnQueue;     // from WM_COPYDATA, recorded in kMsgLearnWork
+
+bool learningOn() { return g_settings.learnWords && g_settings.systemTextPrediction; }
+
+int64_t nowMs() {
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    const uint64_t t = (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+    return static_cast<int64_t>(t / 10000 - 11644473600000ull);  // 1601 -> 1970, ms
+}
+
+std::wstring learnedPath() {
+    PWSTR base = nullptr;
+    std::wstring p;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &base)) && base) p = base;
+    if (base) CoTaskMemFree(base);
+    if (p.empty()) return p;
+    return p + L"\\VietTelex\\" + learn::kFileName;
+}
+
+learn::Model* learnedModel() {
+    if (g_learned) return g_learned.get();
+    auto known = [](const std::string& w) { return hintJobs().knownWord(w); };
+    const std::wstring path = learnedPath();
+    std::vector<uint8_t> bytes;
+    if (!path.empty()) {
+        HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (f != INVALID_HANDLE_VALUE) {
+            LARGE_INTEGER sz{};
+            if (GetFileSizeEx(f, &sz) && sz.QuadPart > 0 && sz.QuadPart < (8 << 20)) {
+                bytes.resize(static_cast<size_t>(sz.QuadPart));
+                DWORD got = 0;
+                if (!ReadFile(f, bytes.data(), static_cast<DWORD>(bytes.size()), &got, nullptr) || got != bytes.size())
+                    bytes.clear();
+            }
+            CloseHandle(f);
+        }
+    }
+    if (!bytes.empty()) g_learned = learn::Model::decode(bytes.data(), bytes.size(), known);
+    if (!bytes.empty() && !g_learned) appLog("predict", "learned words: file unreadable -> starting empty");
+    if (!g_learned) g_learned = std::make_unique<learn::Model>(known, nowMs());
+    g_learned->decayIfDue(nowMs());
+    if (g_learned->changes() > 0 && g_mainWnd) SetTimer(g_mainWnd, kTimerLearnSave, kLearnSaveDelayMs, nullptr);
+    return g_learned.get();
+}
+
+void learnedSave() {
+    if (g_mainWnd) KillTimer(g_mainWnd, kTimerLearnSave);
+    if (!g_learned || g_learned->changes() == 0) return;
+    const std::wstring path = learnedPath();
+    if (path.empty()) return;
+    const std::vector<uint8_t> bytes = g_learned->encode();
+    g_learned->markSaved();
+    CreateDirectoryW(path.substr(0, path.rfind(L'\\')).c_str(), nullptr);
+    const std::wstring tmp = path + L".tmp";
+    HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return;
+    DWORD put = 0;
+    const bool ok = WriteFile(f, bytes.data(), static_cast<DWORD>(bytes.size()), &put, nullptr) && put == bytes.size() &&
+                    FlushFileBuffers(f);
+    CloseHandle(f);
+    if (!ok || !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        DeleteFileW(tmp.c_str());
+        appLog("predict", "learned words: save failed");
+    }
+}
+
+void onLearnWork() {
+    std::vector<LearnEvent> q;
+    q.swap(g_learnQueue);
+    if (q.empty() || !learningOn()) return;
+    learn::Model* m = learnedModel();
+    for (const LearnEvent& e : q)
+        m->record(text::toUtf8(text::fromUtf16(e.word)), text::toUtf8(text::fromUtf16(e.prev1)),
+                  text::toUtf8(text::fromUtf16(e.prev2)), e.weight);
+    if (g_mainWnd) SetTimer(g_mainWnd, kTimerLearnSave, kLearnSaveDelayMs, nullptr);
+}
+
 void onHintWork() {
     if (!g_hintWork.pending) return;
     g_hintWork.pending = false;
-    static HintJobs jobs(languageData());
+    HintJobs& jobs = hintJobs();
     jobs.setFilterSensitive(g_settings.filterSensitive);
+    jobs.setLearned(learningOn() && g_hintWork.msg.job == static_cast<uint32_t>(HintJob::Predict) ? learnedModel()
+                                                                                                 : nullptr);
     HintMessage reply;
     reply.request = g_hintWork.msg.request;
     reply.job = g_hintWork.msg.job;
@@ -148,6 +243,7 @@ void onPredictionSettingChanged() {
     const bool on = readSystemTextPrediction();
     if (on == g_settings.systemTextPrediction) return;
     g_settings.systemTextPrediction = on;
+    learnedSettingsChanged();  // Học từ bạn gõ follows word prediction
     saveSettings(g_settings);  // the snapshot only: the mirror is never stored under VietTelex
     appLog("predict", std::string("Windows text suggestions (physical keyboard): ") + (on ? "on" : "off"));
 }
@@ -527,6 +623,7 @@ void onWork() {
 }  // namespace
 
 void textActionsConfigure() {
+    learnedSettingsChanged();
     if (!g_mainWnd) return;
     if (g_hotkeyOn) {
         UnregisterHotKey(g_mainWnd, kHotkeyId);
@@ -571,6 +668,24 @@ void predictionWatchStop() {
 void textActionsShutdown() {
     if (g_hotkeyOn && g_mainWnd) UnregisterHotKey(g_mainWnd, kHotkeyId);
     g_hotkeyOn = false;
+    learnedSave();  // Học từ bạn gõ: what the last 5 s learned
+}
+
+void learnedClear() {
+    g_learnQueue.clear();
+    if (g_mainWnd) KillTimer(g_mainWnd, kTimerLearnSave);
+    if (g_learned) g_learned->clear(nowMs());
+    if (g_learned) g_learned->markSaved();
+    const std::wstring path = learnedPath();
+    if (!path.empty()) DeleteFileW(path.c_str());
+    appLog("predict", "learned words cleared");
+}
+
+void learnedSettingsChanged() {
+    hintJobs().setLearned(nullptr);
+    if (learningOn() || !g_learned) return;
+    learnedSave();
+    g_learned.reset();
 }
 
 bool textActionsMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result) {
@@ -587,6 +702,14 @@ bool textActionsMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result) {
                 HintMessage m;
                 if (!isTipWindow(reinterpret_cast<HWND>(wp)) || !unpackHintMessage(cds->lpData, cds->cbData, m))
                     return true;
+                if (m.job == static_cast<uint32_t>(HintJob::Learn)) {  // one-way: queue, record later
+                    if (learningOn() && g_learnQueue.size() < 512) {
+                        for (LearnEvent& e : unpackLearnEvents(m.text)) g_learnQueue.push_back(std::move(e));
+                        PostMessageW(g_mainWnd, kMsgLearnWork, 0, 0);
+                    }
+                    result = TRUE;
+                    return true;
+                }
                 g_hintWork.pending = true;
                 g_hintWork.tip = reinterpret_cast<HWND>(wp);
                 g_hintWork.msg = std::move(m);
@@ -621,11 +744,20 @@ bool textActionsMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result) {
             onPredictionSettingChanged();
             result = 0;
             return true;
+        case kMsgLearnWork:
+            onLearnWork();
+            result = 0;
+            return true;
         case kMsgClipDone:
             if (g_job.stage == Stage::Clipboard) finish(wp == 0, nullptr);
             result = 0;
             return true;
         case WM_TIMER:
+            if (wp == kTimerLearnSave) {
+                learnedSave();
+                result = 0;
+                return true;
+            }
             if (wp == kTimerStart) {
                 KillTimer(g_mainWnd, kTimerStart);
                 if (g_job.stage == Stage::Starting) dispatch();

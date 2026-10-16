@@ -329,7 +329,9 @@ final class CaretHint {
     private var predictWork: DispatchWorkItem?
     /// Click ô nổi (gợi ý từ, đường IMK) → controller áp dụng (MAIN).
     private weak var pickController: TelexInputController?
-    private let work = DispatchQueue(label: "com.viettelex.caretsuggest", qos: .userInitiated)
+    /// Hàng đợi nền nối tiếp: tính gợi ý + mô hình "Học từ bạn gõ" (LearnedWords — cùng hàng đợi
+    /// ⇒ xếp hạng đọc dữ liệu học không cần khoá).
+    let work = DispatchQueue(label: "com.viettelex.caretsuggest", qos: .userInitiated)
     /// Cờ bật/tắt: GHI trên main (reloadSetting), ĐỌC nhiều lần mỗi phím ở TAP-thread lẫn
     /// main — trước là var trơn (data race giữa hai thread). Giờ là một snapshot dưới khoá
     /// RIÊNG (`flagsLock`, không phải `lock`: không bao giờ lồng khoá NSLock không đệ quy);
@@ -338,10 +340,14 @@ final class CaretHint {
         var math = false, number = false, typo = false, tones = false, date = false
         /// "Lọc từ nhạy cảm" (AppState.filterSensitive) — gợi ý từ + sửa lỗi gõ.
         var filterSensitive = true
+        /// "Học từ bạn gõ" (AppState.learnWords — LearnedWords.swift); chỉ có tác dụng khi gợi ý
+        /// từ chạy (SystemInlinePrediction).
+        var learn = true
         static func current() -> Flags {
             Flags(math: AppState.shared.mathResults, number: AppState.shared.numberChips,
                   typo: AppState.shared.typoHints, tones: AppState.shared.toneHints,
-                  date: AppState.shared.dateHints, filterSensitive: AppState.shared.filterSensitive)
+                  date: AppState.shared.dateHints, filterSensitive: AppState.shared.filterSensitive,
+                  learn: AppState.shared.learnWords)
         }
     }
     private let flagsLock = NSLock()
@@ -571,6 +577,7 @@ final class CaretHint {
     /// TAP-thread (chuột xuống). Click ngoài ô ứng viên đang hiện ⇒ tắt. `point` toạ độ
     /// CGEvent (gốc trên-trái màn hình chính).
     func dismissForClick(at point: CGPoint) {
+        LearnedWords.shared.noteClick()      // con trỏ có thể dời: ngữ cảnh học bị cắt
         let inside = lock.withLock { () -> Bool? in
             keyGen &+= 1                      // con trỏ có thể dời: việc nền đang chờ thôi hiện
             guard pending != nil else { return nil }
@@ -627,7 +634,9 @@ final class CaretHint {
         work.async { [weak self] in
             guard let self, self.keyGeneration == gen else { return }
             let t0 = DispatchTime.now().uptimeNanoseconds
-            let words = PredictionModel.shared.candidates(req, raw: raw, filterSensitive: self.flagsSnapshot.filterSensitive)
+            let f = self.flagsSnapshot
+            let words = PredictionModel.shared.candidates(req, raw: raw, filterSensitive: f.filterSensitive,
+                                                          learned: f.learn ? LearnedWords.shared.modelForRanking() : nil)
             let us = (DispatchTime.now().uptimeNanoseconds - t0) / 1000
             guard let s = PredictionLogic.suggestion(words, typed: req.typed) else { return }
             DispatchQueue.main.async { [weak self, weak controller] in
@@ -645,6 +654,7 @@ final class CaretHint {
     func predictionDisabled() {
         predictWork?.cancel(); predictWork = nil
         work.async { if PredictionModel.shared.isLoaded { PredictionModel.shared.unload() } }
+        LearnedWords.shared.unload()
     }
 
     private func hideUI() {

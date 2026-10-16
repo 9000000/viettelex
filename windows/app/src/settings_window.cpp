@@ -47,6 +47,7 @@ using std::min;
 #include "shortcuts.h"
 #include "strings.h"
 #include "text_action_logic.h"
+#include "text_actions.h"
 #include "tip_control.h"
 #include "uninstall.h"
 #include "updater.h"
@@ -98,6 +99,7 @@ enum Id : int {
     IdPerAppWin,
     IdConflicts,
     IdDefaultInput,
+    IdClearLearned,
     IdIconTile = 6000,  // + IconChoice
 };
 
@@ -130,6 +132,7 @@ const ToggleDef kToggles[] = {
     {&Settings::autoOffFullscreen, S::AutoOffFullscreen, S::AutoOffFullscreenDesc},    // 21
     {&Settings::gameMode, S::GameMode, S::GameModeDesc},                               // 22
     {&Settings::filterSensitive, S::FilterSensitive, S::FilterSensitiveDesc},          // 23
+    {&Settings::learnWords, S::LearnWords, S::LearnWordsDesc},                         // 24
 };
 constexpr int kToggleCount = static_cast<int>(sizeof(kToggles) / sizeof(kToggles[0]));
 
@@ -515,6 +518,8 @@ std::vector<Item> pageItems(int tab) {
             v.push_back(section(S::SecHints));
             for (int i = 15; i <= 19; ++i) v.push_back(toggleItem(i));
             v.push_back(toggleItem(23));  // Lọc từ nhạy cảm (gợi ý từ + sửa lỗi gõ)
+            v.push_back(toggleItem(24));  // Học từ bạn gõ
+            v.push_back(buttonItem(S::ClearLearned, S::ClearLearnedDesc, IdClearLearned));
             // Công cụ văn bản (macOS: same place, after the spelling options; collapsible,
             // collapsed by default). With the tray icon off (the default) its menu does not
             // exist: the header says how to reach the tools instead.
@@ -926,6 +931,7 @@ void createControls() {
                     it.hwnd = makeButton(tr(perAppAction(readPerAppInput()) == PerAppAction::Enable ? S::PerAppEnableButton
                                                                                                    : S::PerAppOpenButton),
                                          it.ctlId, perAppAction(readPerAppInput()) == PerAppAction::Enable ? kBtnPrimary : kBtnSecondary);
+                else if (it.ctlId == IdClearLearned) it.hwnd = makeButton(tr(S::ClearLearnedButton), it.ctlId);
                 else it.hwnd = makeButton(tr(it.ctlId == IdCheckNow ? S::CheckButton : it.title), it.ctlId);
             }
         } else if (it.kind == ItemKind::IconPicker) {
@@ -1618,6 +1624,11 @@ void onCommand(int id, int code, HWND ctl) {
         }
         case IdCheckNow: startUpdateCheck(g_mainWnd, true); break;
         case IdUninstall: uninstallVietTelex(); break;
+        case IdClearLearned:
+            if (MessageBoxW(g_wnd, tr(S::ClearLearnedConfirm), tr(S::AppName), MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) ==
+                IDYES)
+                learnedClear();
+            break;
         case IdPerAppWin: onPerAppButton(); break;
         case IdDefaultInput: onDefaultInputButton(); break;
         default: break;

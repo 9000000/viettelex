@@ -99,6 +99,10 @@ AUTO_TEXT_SWITCHES = (
         "bao giờ tự thay. Gõ . , ? ! ngay sau đó thì dấu câu dính vào từ. Cần gói viettelex-text-tools.")),
     ("filter_sensitive", N_("Lọc từ nhạy cảm"),
      N_("Gợi ý từ và sửa lỗi gõ không chủ động đưa từ tục — gõ tay vẫn bình thường. Mặc định bật.")),
+    ("learn_words", N_("Học từ bạn gõ"),
+     N_("Gợi ý từ học các từ và cặp từ bạn hay gõ (không bao giờ ở ô mật khẩu, terminal, trình soạn "
+        "code hay khi gõ English). Chỉ lưu trên máy này — không gửi qua mạng, không đồng bộ. Cần bật "
+        "Gợi ý từ. Mặc định bật.")),
 )
 QUOTE_STYLE_CHOICES = (
     ("curly", N_("“ ” ‘ ’ (mặc định)")),
@@ -447,6 +451,12 @@ class SettingsWindow(Adw.PreferencesWindow):
                           "email, ô mật khẩu và khi đang gõ English."))
         for key, title, sub in AUTO_TEXT_SWITCHES:
             self.switch(g, "general", key, _(title), _(sub))
+        learned = row(_("Xoá từ đã học"),
+                      _("Gợi ý từ quên mọi từ và cặp từ đã học từ những gì bạn gõ trên máy này."))
+        lb = Gtk.Button(label=_("Xoá…"), valign=Gtk.Align.CENTER)
+        lb.connect("clicked", lambda _b: self.clear_learned_words())
+        learned.add_suffix(lb)
+        g.add(learned)
         self.combo(g, "general", "quote_style", _("Kiểu ngoặc kép"),
                    [(v, _(label)) for v, label in QUOTE_STYLE_CHOICES])
         page.add(g)
@@ -729,6 +739,18 @@ class SettingsWindow(Adw.PreferencesWindow):
         ctl.connect("key-pressed", pressed)
         win.add_controller(ctl)
         win.present()
+
+    def clear_learned_words(self):
+        def do():
+            try:
+                config.clear_learned_words()
+            except OSError:
+                self.toast(_("Không xoá được %s") % config.learned_words_path())
+                return
+            self.toast(_("Đã xoá từ đã học."))
+        confirm(self, _("Xoá từ đã học?"),
+                _("Gợi ý từ sẽ quên mọi từ và cặp từ đã học. Không hoàn tác được."),
+                _("Xoá"), do)
 
     def forget_app_state(self):
         path = os.path.join(config.state_dir(), "app-state")

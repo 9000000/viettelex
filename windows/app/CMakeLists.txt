@@ -2,7 +2,7 @@
 # portable core (unit-tested on any OS).
 
 add_library(vtx_app_core STATIC core/update_check.cpp core/uninstall.cpp core/setup_helper_logic.cpp core/direct_policy.cpp core/input_switch.cpp
-            core/text_action_logic.cpp core/typo_fix.cpp core/word_prediction.cpp core/onboarding.cpp core/game_logic.cpp core/macro_import.cpp)
+            core/text_action_logic.cpp core/typo_fix.cpp core/word_prediction.cpp core/learned_words.cpp core/onboarding.cpp core/game_logic.cpp core/macro_import.cpp)
 target_include_directories(vtx_app_core PUBLIC core)
 target_link_libraries(vtx_app_core PUBLIC vtx_ime_core viettelex_text)
 if(MSVC)

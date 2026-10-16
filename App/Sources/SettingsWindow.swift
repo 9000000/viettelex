@@ -166,6 +166,7 @@ final class SettingsModel: ObservableObject {
     @Published var toneHints: Bool { didSet { AppState.shared.toneHints = toneHints } }
     @Published var dateHints: Bool { didSet { AppState.shared.dateHints = dateHints } }
     @Published var filterSensitive: Bool { didSet { AppState.shared.filterSensitive = filterSensitive } }
+    @Published var learnWords: Bool { didSet { AppState.shared.learnWords = learnWords } }
     @Published var addTonesHotkey: String {
         didSet {
             AppState.shared.addTonesHotkey = addTonesHotkey
@@ -250,6 +251,7 @@ final class SettingsModel: ObservableObject {
         toneHints = AppState.shared.toneHints
         dateHints = AppState.shared.dateHints
         filterSensitive = AppState.shared.filterSensitive
+        learnWords = AppState.shared.learnWords
         addTonesHotkey = AppState.shared.addTonesHotkey
         // Giá trị lạ (không thuộc danh sách) ⇒ "off", để Picker luôn có tag khớp.
         let tools = AppState.shared.toolsPanelHotkey
@@ -856,9 +858,26 @@ struct ToolsTab: View {
                 Toggle(model.loc("Filter sensitive words"), isOn: $model.filterSensitive)
                 Text(model.loc("Word suggestions and typo fixes never offer swear words — typing them yourself works as usual."))
                     .font(.caption).foregroundStyle(.secondary)
+                // Học từ bạn gõ (LearnedWords.swift) — cạnh "Lọc từ nhạy cảm", cùng nhóm gợi ý từ.
+                Toggle(model.loc("Learn from your typing"), isOn: $model.learnWords)
+                Text(model.loc("Word suggestions learn the words and word pairs you type often (never in password fields, terminals or code editors). Stored only on this Mac — never sent over the network or synced with iCloud. Works when macOS “Show inline predictive text” is on."))
+                    .font(.caption).foregroundStyle(.secondary)
+                Button(model.loc("Clear learned words…")) { confirmClearLearned() }
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// "Xoá từ đã học…": hỏi xác nhận (Huỷ là nút mặc định) rồi xoá RAM + file (LearnedWords).
+    private func confirmClearLearned() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = model.loc("Clear learned words?")
+        alert.informativeText = model.loc("Word suggestions forget every word and word pair learned from your typing on this Mac. It cannot be undone.")
+        alert.addButton(withTitle: model.loc("Cancel"))
+        alert.addButton(withTitle: model.loc("Clear"))
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        LearnedWords.shared.clearAll()
     }
 }
 

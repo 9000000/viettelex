@@ -312,6 +312,8 @@ void TextService::applyConfig(bool force) {
         // Gợi ý từ: Windows' own setting, mirrored by VietTelex.exe into the snapshot.
         predictOn_ = s.systemTextPrediction && !config::secureMode();
         predictApp_ = hints::predictionAllowedForApp(config::exeName());
+        learnOn_ = predictOn_ && predictApp_ && s.learnWords;
+        if (!learnOn_) learn_.discard();
         if (!predictOn_) declinedPredict_.clear();
         if ((!hintsAny_ && !predictOn_) || (!predictOn_ && hint_ && hint_->kind == hints::Kind::Predict)) {
             hideHint();
@@ -702,6 +704,8 @@ UINT TextService::inputScopesAtSelection(ITfContext* ctx, TfEditCookie ec, int* 
 // ---------------------------------------------------------------- thread manager events
 
 STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) {
+    learnFlush();  // Học từ bạn gõ: the held word is final, a new field has no context
+    learnResetKeys();
     dropTextToolPending();  // a text-tool request belongs to the field it was made in
     ++keyGen_;              // caret hints belong to the field too
     hideHint();
@@ -1123,6 +1127,8 @@ constexpr UINT kMsgHintReply = WM_APP + 0x5C;  // caret hint: VietTelex.exe answ
 constexpr UINT kMsgHintPick = WM_APP + 0x5D;   // caret hint: the prediction popup was clicked
 constexpr UINT_PTR kTimerHint = 0x5648;        // caret hint: read the screen now
 constexpr UINT_PTR kTimerHintHide = 0x5649;    // caret hint: auto-hide
+constexpr UINT_PTR kTimerLearn = 0x564A;       // Học từ bạn gõ: send queued events (off the key path)
+constexpr UINT kLearnSendDelayMs = 50;
 
 void postToolReply(uint32_t request, TextToolStatus s) {
     if (HWND app = FindWindowW(kAppWindowClass, nullptr))
@@ -1169,6 +1175,9 @@ LRESULT CALLBACK TextService::toolWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp
             } else if (wp == kTimerHintHide) {
                 KillTimer(h, kTimerHintHide);
                 self->hideHint();
+            } else if (wp == kTimerLearn) {
+                KillTimer(h, kTimerLearn);
+                self->sendLearnQueue();
             }
             return 0;
         case kMsgHintRead:
@@ -1250,6 +1259,11 @@ void TextService::createToolWindow() {
 void TextService::destroyToolWindow() {
     dropTextToolPending();
     if (!toolWnd_) return;
+    if (learnOn_) {  // Học từ bạn gõ: what is held / queued goes now (the timer dies with the window)
+        learnFlush();
+        KillTimer(toolWnd_, kTimerLearn);
+        sendLearnQueue();
+    }
     SetWindowLongPtrW(toolWnd_, GWLP_USERDATA, 0);
     DestroyWindow(toolWnd_);
     toolWnd_ = nullptr;
@@ -1574,8 +1588,10 @@ void TextService::noteHintKey(const KeyInput& k, ITfContext* target, bool handle
     if (!hintsAny_ && !predictOn_) return;  // all off: this one test per key
     if (!hintsUsable() || !target) {
         hintTracker_.reset();
+        if (learn_.hasPending() || !learn_.prev1().empty()) learn_.discard();
         return;
     }
+    if (learnOn_) noteLearnKey(k, handled);
     switch (k.kind) {
         case KeyKind::Char: {
             bool scheduled = false;
@@ -1878,6 +1894,7 @@ bool TextService::acceptSpaceApply(ITfContext* ctx) {
     }
     session_.reset();
     hintTracker_.reset();
+    learnFlush();  // the punctuation ends the sentence context
     if (act == static_cast<int>(hints::AcceptSpaceAct::Replace) && !acceptRep_.empty() && acceptRep_.back() == U' ')
         acceptedSpace_.carried = acceptRep_;
     config::log(act == static_cast<int>(hints::AcceptSpaceAct::Swallow) ? "accept-space: space swallowed"
@@ -1888,6 +1905,20 @@ bool TextService::acceptSpaceApply(ITfContext* ctx) {
 void TextService::afterHintApplied(bool ok, ITfContext* c, const hints::Suggestion& s) {
     session_.reset();
     hintTracker_.reset();
+    if (ok && learnOn_) {
+        // Học từ bạn gõ: an accepted prediction counts double (iOS weight 2); an accepted typo
+        // fix learns the fixed form; any other hint replaced committed text — dropped.
+        hints::LearnTracker::Event e;
+        if (s.kind == hints::Kind::Predict) {
+            if (learn_.commit(hints::toU32(s.display), U' ', true, 2, e)) learnSend(e);
+            afterSpace_ = true;
+            prevKeyLetter_ = false;
+        } else if (s.kind == hints::Kind::Typo) {
+            learn_.replacePending(hints::toU32(s.display));
+        } else {
+            learn_.discard();
+        }
+    }
     acceptedSpace_ = hints::AcceptedSpace();
     if (ok && s.kind == hints::Kind::Predict && !s.insert.empty() && s.insert.back() == u' ')
         acceptedSpace_.inserted = hints::toU32(s.insert);
@@ -1911,6 +1942,92 @@ void TextService::declineHint() {
     else if (hint_->kind == hints::Kind::Predict && !hint_->replace.empty())
         declinedPredict_ = hints::toU32(hint_->replace);  // until the next word
     hideHint();
+}
+
+// ---------------------------------------------------------------- Học từ bạn gõ
+// Only words the typing session composed AND committed (lastCommitWord: printable boundary or
+// Enter / Tab / Esc; never a shortcut expansion, never app-typed text). Gates: word prediction
+// on (Windows' setting) + learnWords + not a code editor / terminal (learnOn_), hintsUsable()
+// (not the secure desktop, console, Direct, literal/password input scopes — the session does
+// not even compose there), not a classic ES_PASSWORD edit, Vietnamese on.
+
+void TextService::noteLearnKey(const KeyInput& k, bool handled) {
+    hints::LearnTracker::Event e;
+    switch (k.kind) {
+        case KeyKind::Char: {
+            if (session_.wordActive()) {  // a letter (or VNI mark) of the word in progress
+                if (!prevKeyLetter_) wordAlone_ = afterSpace_;
+                prevKeyLetter_ = true;
+                afterSpace_ = false;
+                return;
+            }
+            const std::u32string word = handled ? hints::toU32(session_.lastCommitWord()) : std::u32string();
+            const bool alone = wordAlone_;
+            prevKeyLetter_ = false;
+            afterSpace_ = hints::isWhitespace(k.ch);
+            wordAlone_ = true;
+            if (!vietnamese() || focusIsPasswordEdit()) return learn_.discard();
+            if (learn_.commit(word, k.ch, alone, 1, e)) learnSend(e);
+            return;
+        }
+        case KeyKind::Backspace:
+            // ⌫ right after a boundary edits committed text: the held word may be changing.
+            if (!prevKeyLetter_) learn_.discard();
+            prevKeyLetter_ = session_.wordActive();
+            return;
+        case KeyKind::Boundary: {  // Enter / Tab / Esc: the word is final, the sentence ends
+            const std::u32string word = handled ? hints::toU32(session_.lastCommitWord()) : std::u32string();
+            const bool alone = wordAlone_;
+            learnResetKeys();
+            if (!vietnamese() || focusIsPasswordEdit()) return learn_.discard();
+            if (!word.empty() && learn_.commit(word, U'\n', alone, 1, e)) learnSend(e);
+            learnFlush();
+            return;
+        }
+        case KeyKind::Navigation:
+            learnResetKeys();
+            learnFlush();
+            return;
+        case KeyKind::Chord:  // Ctrl+Z / Ctrl+Backspace may undo / delete it: never learned
+            learnResetKeys();
+            learn_.discard();
+            return;
+        case KeyKind::Modifier:
+        case KeyKind::Other: return;
+    }
+}
+
+void TextService::learnSend(const hints::LearnTracker::Event& e) {
+    if (!learnOn_ || !toolWnd_) return;
+    const LearnEvent le{hints::toU16(e.word), hints::toU16(e.prev1), hints::toU16(e.prev2), e.weight};
+    if (!appendLearnEvent(learnQueue_, le)) {
+        sendLearnQueue();  // full: send what is queued now (rare: ~20 words without a pause)
+        if (!appendLearnEvent(learnQueue_, le)) return;
+    }
+    SetTimer(toolWnd_, kTimerLearn, kLearnSendDelayMs, nullptr);
+}
+
+void TextService::learnFlush() {
+    hints::LearnTracker::Event e;
+    if (learn_.breakContext(e)) learnSend(e);
+}
+
+// From the timer (or a full queue): one WM_COPYDATA, the app only queues it.
+void TextService::sendLearnQueue() {
+    if (learnQueue_.empty()) return;
+    HintMessage m;
+    m.job = static_cast<uint32_t>(HintJob::Learn);
+    m.text.swap(learnQueue_);
+    HWND app = FindWindowW(kAppWindowClass, nullptr);
+    if (!app || !toolWnd_) return;
+    const std::vector<uint8_t> b = packHintMessage(m);
+    COPYDATASTRUCT cds;
+    cds.dwData = kCopyHintRequest;
+    cds.cbData = static_cast<DWORD>(b.size());
+    cds.lpData = const_cast<uint8_t*>(b.data());
+    DWORD_PTR r = 0;
+    SendMessageTimeoutW(app, WM_COPYDATA, reinterpret_cast<WPARAM>(toolWnd_), reinterpret_cast<LPARAM>(&cds),
+                        SMTO_ABORTIFHUNG, 250, &r);
 }
 
 // ---------------------------------------------------------------- Gợi ý từ (word prediction)

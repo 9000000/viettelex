@@ -316,6 +316,19 @@ const Pair kStrings[] = {
      L"it), or turn on “Show icon in the notification area” on the Typing page and right-click the icon."},
     // Tray menu
     {L"Chế độ game", L"Game mode"},
+    // Học từ bạn gõ
+    {L"Học từ bạn gõ", L"Learn from your typing"},
+    {L"Gợi ý từ học các từ và cặp từ bạn hay gõ (không bao giờ ở ô mật khẩu, terminal hay trình soạn code). Chỉ lưu "
+     L"trên máy này — không gửi qua mạng, không đồng bộ. Có tác dụng khi bật gợi ý văn bản cho bàn phím vật lý của "
+     L"Windows.",
+     L"Word suggestions learn the words and word pairs you type often (never in password fields, terminals or code "
+     L"editors). Stored only on this PC — never sent over the network or synced. Works when Windows text "
+     L"suggestions for the physical keyboard are on."},
+    {L"Xoá từ đã học", L"Clear learned words"},
+    {L"Gợi ý từ quên mọi từ và cặp từ đã học từ những gì bạn gõ trên máy này.",
+     L"Word suggestions forget every word and word pair learned from your typing on this PC."},
+    {L"Xoá…", L"Clear…"},
+    {L"Xoá mọi từ đã học? Không hoàn tác được.", L"Clear all learned words? This cannot be undone."},
 };
 static_assert(sizeof(kStrings) / sizeof(kStrings[0]) == static_cast<size_t>(S::Count), "string table size");
 }  // namespace

@@ -33,8 +33,10 @@
 #include <vector>
 
 #include "typo_fix.h"
+#include <viettelex/text_tools.hpp>
 
 namespace vtx { namespace addtones { struct LanguageData; } }
+namespace vtx::app::learn { class Model; }
 
 namespace vtx::app::predict {
 
@@ -102,9 +104,14 @@ class Model {
 public:
     explicit Model(const addtones::LanguageData& data);
     // Candidates (case adjusted) for `r`; `raw` = raw keys of the word being typed;
-    // `filterSensitive` = "Lọc từ nhạy cảm" (Settings::filterSensitive, default on).
+    // `filterSensitive` = "Lọc từ nhạy cảm" (Settings::filterSensitive, default on);
+    // `learned` = "Học từ bạn gõ" (learned_words.h; nullptr = off / not loaded => exactly the
+    // seed ranking). Same contract as iOS: count = seed + learned, +4 context = personal next
+    // words, next word = SuggestRank.nextFill(personal:triCount:) without the static bigram.
     std::vector<std::u32string> candidates(const Request& r, const std::u32string& raw,
-                                           bool filterSensitive = true) const;
+                                           bool filterSensitive = true, const learn::Model* learned = nullptr) const;
+    // VNSuggest.contains (lowercase UTF-8): learned words in the lexicon are suggested at once.
+    bool knownWord(const std::string& w) const { return index_.contains(text::fromUtf8(w)); }
 
     // Exposed for tests: the trigram row of SuggestRank.topNext(prev, prev2) (sensitive-filtered,
     // ≤ kRankDepth; empty without prev2 or without a trigram row — no bigram fallback) and

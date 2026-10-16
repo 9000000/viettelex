@@ -58,6 +58,7 @@ DEFAULTS = {
         "quote_style": "curly",         # curly “”‘’ | low9 „“‚‘ | guillemets «»‹›
         "word_prediction": False,       # gợi ý từ: hoàn thành từ / từ kế tiếp (Tab)
         "filter_sensitive": True,       # "Lọc từ nhạy cảm": gợi ý từ / sửa lỗi gõ không đưa từ tục
+        "learn_words": True,            # "Học từ bạn gõ": gợi ý từ học từ hay gõ (cần word_prediction)
     },
     # Thử nghiệm (SETTINGS.md §9): "forward-keys" = gõ không gạch chân ở Chrome/Electron.
     "experimental": {
@@ -83,6 +84,35 @@ def config_dir():
 def state_dir():
     base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
     return os.path.join(base, "viettelex")
+
+
+def learned_words_path():
+    """Kho "Học từ bạn gõ" của viettelex-text-tool --serve (LearnStore.swift)."""
+    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return os.path.join(base, "viettelex", "learned-words.bin")
+
+
+def empty_learned_store(last_decay_ms=0):
+    """Kho VTL2 RỖNG hợp lệ (UserLMCodec — iOS/Keyboard/UserLMTables.swift): "VTL2", u16 version 1,
+    u16 flags 0, i64 lastDecay (ms), u32 số từ / cặp / bộ ba / từ thêm tay = 0, u32 CRC32."""
+    import struct
+    import zlib
+    body = b"VTL2" + struct.pack("<HHqIIII", 1, 0, last_decay_ms, 0, 0, 0, 0)
+    return body + struct.pack("<I", zlib.crc32(body) & 0xFFFFFFFF)
+
+
+def clear_learned_words(path=None):
+    """"Xoá từ đã học": ghi đè kho bằng kho RỖNG hợp lệ (không chỉ xoá file) — process con đang
+    chạy thấy file đổi và nạp lại rỗng, không ghi đè lại dữ liệu cũ đang giữ trong RAM."""
+    import time
+    path = path or learned_words_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(empty_learned_store(int(time.time() * 1000)))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
 
 
 # ---------------------------------------------------------------- parsing

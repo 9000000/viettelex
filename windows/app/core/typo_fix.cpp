@@ -552,6 +552,12 @@ HintJobs::~HintJobs() {
     delete model_;
 }
 
+bool HintJobs::knownWord(const std::string& w) {
+    if (!data_ || !data_->ok()) return false;
+    if (!model_) model_ = new (std::nothrow) predict::Model(*data_);
+    return model_ && model_->knownWord(w);
+}
+
 std::u16string HintJobs::answer(const HintMessage& m) {
     if (!data_ || !data_->ok() || m.text.empty()) return {};
     if (m.job == static_cast<uint32_t>(HintJob::Typo)) {
@@ -571,7 +577,7 @@ std::u16string HintJobs::answer(const HintMessage& m) {
         if (!r) return {};
         if (!model_) model_ = new (std::nothrow) predict::Model(*data_);
         if (!model_) return {};
-        const auto c = model_->candidates(*r, text::fromUtf16(raw), filterSensitive_);
+        const auto c = model_->candidates(*r, text::fromUtf16(raw), filterSensitive_, learned_);
         return c.empty() ? std::u16string() : text::toUtf16(c[0]);  // one suggestion: the top one
     }
     if (m.job == static_cast<uint32_t>(HintJob::Tones)) {

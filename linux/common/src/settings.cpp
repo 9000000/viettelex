@@ -197,6 +197,7 @@ Settings parseConfig(const std::string &toml) {
             }
             else if (key == "word_prediction") setBool(s.wordPrediction, v);
             else if (key == "filter_sensitive") setBool(s.filterSensitive, v);
+            else if (key == "learn_words") setBool(s.learnWords, v);
             else if (key == "add_tones_hotkey") {
                 if (v.kind == Value::Str) s.addTonesHotkey = v.s;
             }
@@ -254,6 +255,7 @@ std::string serializeConfig(const Settings &s) {
       << "quote_style = " << quote(s.quoteStyle) << "\n"
       << "word_prediction = " << b(s.wordPrediction) << "\n"
       << "filter_sensitive = " << b(s.filterSensitive) << "\n"
+      << "learn_words = " << b(s.learnWords) << "\n"
       << "\n[experimental]\n"
       << "no_underline = " << (s.noUnderline == NoUnderline::ForwardKeys ? "\"forward-keys\"" : "\"off\"") << "\n"
       << "\n[app_modes]\n";

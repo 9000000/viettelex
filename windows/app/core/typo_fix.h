@@ -162,6 +162,7 @@ const std::vector<const char*>& seedAsciiWords();
 
 namespace vtx { struct HintMessage; }
 namespace vtx::app::predict { class Model; }
+namespace vtx::app::learn { class Model; }
 
 namespace vtx::app {
 
@@ -180,11 +181,16 @@ public:
     bool predictionLoaded() const { return model_ != nullptr; }
     // "Lọc từ nhạy cảm" (Settings::filterSensitive) for the next answers.
     void setFilterSensitive(bool on) { filterSensitive_ = on; }
+    // "Học từ bạn gõ" (learned_words.h) for the next Predict answers; nullptr = off.
+    void setLearned(const learn::Model* m) { learned_ = m; }
+    // VNSuggest.contains — the learned model's "known word" test (loads the predictor).
+    bool knownWord(const std::string& lowerUtf8);
 
 private:
     const addtones::LanguageData* data_;
     typo::LexiconSource* source_ = nullptr;
     predict::Model* model_ = nullptr;
+    const learn::Model* learned_ = nullptr;
     uint32_t flags_ = 0;
     bool filterSensitive_ = true;
 };
