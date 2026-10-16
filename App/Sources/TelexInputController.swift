@@ -2088,10 +2088,23 @@ final class TelexInputController: IMKInputController {
         let before = shortcutTail.recent
         var expect: String, replaceLen: Int, insert: String
         if space {
-            guard prevSpaceNs > 0,
-                  let prev = SystemAutoText.doubleSpacePeriod(
-                    before: before, gapNs: DispatchTime.now().uptimeNanoseconds &- prevSpaceNs,
-                    isRepeat: isRepeat) else { return false }
+            guard prevSpaceNs > 0 else { return false }
+            let gapNs = DispatchTime.now().uptimeNanoseconds &- prevSpaceNs
+            var context = before
+            // Dòng phím mất (không Trợ năng: commitComposition của AppKit sau dấu cách
+            // native vẫn xoá cụm) nhưng phím ngay trước CHẮC là dấu cách mình thấy (dấu
+            // thời gian chỉ sống tới phím kế / click) ⇒ đọc vài ký tự trước con trỏ. Chỉ
+            // ở phím cách thứ hai trong cửa sổ — không bao giờ ở đường phím thường.
+            if context.isEmpty, !isRepeat, gapNs <= SystemAutoText.doubleSpaceWindowNs,
+               SystemAutoText.appAllowed(id), Self.replacesCommittedText(id) {
+                let sel = client.selectedRange()
+                if sel.location != NSNotFound, sel.length == 0, sel.location >= 2 {
+                    let n = min(sel.location, 4)
+                    context = client.attributedSubstring(from: NSRange(location: sel.location - n, length: n))?.string ?? ""
+                }
+            }
+            guard let prev = SystemAutoText.doubleSpacePeriod(before: context, gapNs: gapNs,
+                                                             isRepeat: isRepeat) else { return false }
             expect = String(prev) + " "; replaceLen = 1; insert = ". "
         } else {
             switch SystemAutoText.dash(before: before, lastWasOurEmDash: prevEmDashOurs) {
@@ -2381,8 +2394,17 @@ final class TelexInputController: IMKInputController {
             // keystroke, which expanded a single-letter shortcut ("r"→"rồi")
             // mid-word — "t","r" became "trồi". Expansion belongs to EXPLICIT
             // boundaries only (space/punctuation/Return/Tab).
+            let hadWord = !engine.isEmpty
             boundary(client, allowShortcuts: false)
-            shortcutTail.reset()   // app tự chốt (omnibox…): không biết chắc chữ trước con trỏ
+            // App tự chốt GIỮA TỪ (omnibox…): không biết chắc chữ trước con trỏ ⇒ bỏ cụm.
+            // Engine rỗng thì không có gì để chốt: AppKit (NSTextView — TextEdit, đo
+            // 1483053e) gọi commitComposition sau MỖI phím nó tự xử lý mà IME trả lại
+            // (dấu cách, ".", "-", ⌫…) — reset ở đó xoá chính ký tự vừa thấy gõ, nên "từ␣␣"
+            // không bao giờ ra ". " và "--" không ra "—" trên TextEdit (Phil 16/10/2026).
+            // Có Trợ năng thì click / ⌘-tổ hợp / đổi ô đã reset cụm qua tap (thông báo
+            // reset) và phím điều hướng qua handle() — commit rỗng không mang tin gì thêm.
+            // Không Trợ năng: giữ reset cũ (có thể đó là dấu vết duy nhất của một click).
+            if hadWord || !Accessibility.isTrusted { shortcutTail.reset() }
             // A FORCED commit, not a boundary key: nothing was inserted after the word,
             // so the next ⌫ is deleting the word's own last letter and must not re-open
             // it (see tryReopenLastCommit).
