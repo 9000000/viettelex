@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace vtx { namespace addtones {
@@ -56,6 +57,11 @@ public:
     bool load(const uint8_t* data, size_t size);
     bool contains(std::string_view word) const;
     size_t size() const { return words_.size(); }
+    /// Word `i` (file order = sorted) and its frequency byte (0–255).
+    std::string_view word(size_t i) const { return words_[i]; }
+    int freq(size_t i) const { return static_cast<uint8_t>(words_[i].data()[-1]); }
+    /// Index of the first word not less than `w` (byte order).
+    size_t lowerBound(std::string_view w) const;
 
 private:
     std::vector<std::string_view> words_;
@@ -70,6 +76,7 @@ public:
     bool ok() const { return d_ != nullptr; }
     int count() const { return count_; }
 
+    using NextFn = void (*)(void* ctx, int next, float pmi);
     struct Row {  // one bigram row (per-row Elias–Fano)
         int lo = 0, hi = 0, l = 0, zero = 0, lowOff = 0;
         int start() const { return lo + zero; }
@@ -82,14 +89,54 @@ public:
         float pmi(int next) const;
         /// PMI of an explicit entry; 0 if missing.
         float explicitPmi(int next) const;
+        /// Every explicit entry in increasing id: body(next, pmi) (SyllableLM.Bigram.forEach).
+        template <class F> void forEach(F&& body) const {
+            forEachImpl([](void* f, int c, float v) { (*static_cast<std::remove_reference_t<F>*>(f))(c, v); },
+                const_cast<void*>(static_cast<const void*>(&body)));
+        }
 
     private:
         friend class SyllableLM;
+        void forEachImpl(NextFn fn, void* ctx) const;
         const SyllableLM* lm_ = nullptr;
         float g2_ = 0;
         Row row_;
     };
     Bigram bigram(int prev) const;
+
+    /// SyllableLM.Context — one position after (prev2, prev1): the trigram row is located
+    /// once. Word prediction (app/core/word_prediction.h) ranks with it.
+    class Context {
+    public:
+        bool hasTrigram() const { return triBase_ >= 0; }
+        int bigramSize() const { return bi_.hi - bi_.lo; }
+        /// PMI of an EXPLICIT entry: trigram s3 + uniAdj, else bigram s2 + uniAdj, else 0
+        /// (Context.explicit / explicitAll).
+        float explicitPmi(int w) const;
+        /// Only the explicit trigram entries, increasing id: body(id, s3 + uniAdj). Returns
+        /// the number of entries (0 without a trigram row).
+        template <class F> int forEachTrigram(F&& body) const {
+            return forEachTrigramImpl([](void* f, int c, float v) { (*static_cast<std::remove_reference_t<F>*>(f))(c, v); },
+                const_cast<void*>(static_cast<const void*>(&body)));
+        }
+        /// Bigram row ∪ trigram row, increasing id (Context.forEachNext): a bigram-only entry
+        /// backs off to γ3 + s2.
+        template <class F> void forEachNext(F&& body) const {
+            forEachNextImpl([](void* f, int c, float v) { (*static_cast<std::remove_reference_t<F>*>(f))(c, v); },
+                const_cast<void*>(static_cast<const void*>(&body)));
+        }
+
+    private:
+        friend class SyllableLM;
+        int forEachTrigramImpl(NextFn fn, void* ctx) const;
+        void forEachNextImpl(NextFn fn, void* ctx) const;
+        const SyllableLM* lm_ = nullptr;
+        float g2_ = 0, g3_ = 0;
+        Row bi_;
+        int64_t triBase_ = -1, triLo_ = 0, triPos_ = 0;
+    };
+    /// nil (false) when prev1 is not a valid id.
+    bool context(int prev2, int prev1, Context& out) const;
     /// s (nat) of `w` after (`prev2`, `prev1`); 0 without a context.
     float score(int prev2, int prev1, int w) const;
     float uniAdj(int w) const;
@@ -125,6 +172,16 @@ private:
     }
     template <class F> void biScan(const Row& r, F&& body) const;
     template <class F> void scan(const EF& e, int lo, int64_t pos, int n, F&& body) const;
+    // Sequential walk of one trigram row (SyllableLM.TriCursor): c = next id (kEnd = done).
+    static constexpr int kEnd = 0x7FFFFFFF;
+    struct TriCursor {
+        int64_t m = 0, base = 0, end = 0, wi = 0;
+        uint64_t w = 0;
+        int c = kEnd;
+        float v = 0;
+    };
+    TriCursor triStart(int64_t lo, int64_t pos, int64_t base) const;
+    void triNext(TriCursor& t) const;
 
     const uint8_t* d_ = nullptr;
     size_t size_ = 0;

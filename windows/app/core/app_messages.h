@@ -20,6 +20,9 @@ constexpr unsigned kMsgHintWork = kWmApp + 0x73;          // caret-hint job from
 // hook_fallback.cpp (hook thread) -> main window: the Ctrl+Shift chord completed (decide
 // there whether another keyboard is active and VietTelex must be brought in)
 constexpr unsigned kMsgSwitchChord = kWmApp + 0x74;
+// text_actions.cpp: Windows' "text suggestions on the physical keyboard" setting changed
+// (registry change notification, thread-pool wait -> main window).
+constexpr unsigned kMsgPredictSetting = kWmApp + 0x75;
 // (ime/src/globals.h kAppCommandMsg = WM_APP + 0x56 and main.cpp kTrayMsg = WM_APP + 0x57
 // are the other two on this window.)
 constexpr unsigned kAppCommand = kWmApp + 0x56;
@@ -27,6 +30,6 @@ constexpr unsigned kTrayCallback = kWmApp + 0x57;
 
 constexpr unsigned kMainWindowMessages[] = {kMsgUpdateChecked,   kMsgUpdateDownloaded, kMsgTextToolWork,
                                             kMsgTextToolClipDone, kMsgHintWork,        kAppCommand,
-                                            kTrayCallback,       kMsgSwitchChord};
+                                            kTrayCallback,       kMsgSwitchChord,      kMsgPredictSetting};
 
 }  // namespace vtx::app

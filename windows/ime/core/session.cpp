@@ -98,6 +98,15 @@ bool TypingSession::misspelled(const vtx_engine* e) const {
     return opt_.underlineMisspelled && vtx_has_spelling_error(e, opt_.autoRestore ? 1 : 0) != 0;
 }
 
+std::u16string TypingSession::rawKeys() const {
+    if (!engine_) return {};
+    uint16_t buf[VTX_MAX_TEXT + 1];
+    const int32_t n = vtx_raw_keystrokes(engine_, buf, VTX_MAX_TEXT + 1);
+    return n > 0 ? std::u16string(reinterpret_cast<const char16_t*>(buf), static_cast<size_t>(n)) : std::u16string();
+}
+
+bool TypingSession::previousWordEnglish() const { return engine_ && vtx_previous_word_english(engine_) != 0; }
+
 bool TypingSession::wordActive() const { return engine_ && (overflow_ || !vtx_is_empty(engine_)); }
 
 bool TypingSession::isWordKey(char32_t c) const {

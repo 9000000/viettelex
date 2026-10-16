@@ -309,11 +309,15 @@ void TextService::applyConfig(bool force) {
         hintsOn_.tones = s.toneHints;
         hintsOn_.date = s.dateHints;
         hintsAny_ = hintsOn_.any() && !config::secureMode();
-        if (!hintsAny_) {
+        // Gợi ý từ: Windows' own setting, mirrored by VietTelex.exe into the snapshot.
+        predictOn_ = s.systemTextPrediction && !config::secureMode();
+        predictApp_ = hints::predictionAllowedForApp(config::exeName());
+        if (!predictOn_) declinedPredict_.clear();
+        if ((!hintsAny_ && !predictOn_) || (!predictOn_ && hint_ && hint_->kind == hints::Kind::Predict)) {
             hideHint();
             dropHintWork();
-            hintTracker_.reset();
         }
+        if (!hintsAny_) hintTracker_.reset();
 
         hotkey_ = parseSwitchHotkey(s.switchHotkey);
         chord_.disarm();
@@ -1098,6 +1102,7 @@ constexpr UINT kMsgToolRead = WM_APP + 0x59;   // read session finished (possibl
 constexpr UINT kMsgToolApply = WM_APP + 0x5A;  // result arrived (WM_COPYDATA) -> replace
 constexpr UINT kMsgHintRead = WM_APP + 0x5B;   // caret hint: read session done (wParam = key generation)
 constexpr UINT kMsgHintReply = WM_APP + 0x5C;  // caret hint: VietTelex.exe answered (wParam = generation)
+constexpr UINT kMsgHintPick = WM_APP + 0x5D;   // caret hint: candidate clicked (wParam = index)
 constexpr UINT_PTR kTimerHint = 0x5648;        // caret hint: read the screen now
 constexpr UINT_PTR kTimerHintHide = 0x5649;    // caret hint: auto-hide
 
@@ -1155,6 +1160,9 @@ LRESULT CALLBACK TextService::toolWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp
         case kMsgHintReply:
             if (self && static_cast<uint32_t>(wp) == self->keyGen_) self->onHintReply();
             else if (self) self->dropHintWork();
+            return 0;
+        case kMsgHintPick:
+            if (self) self->pickHint(static_cast<size_t>(wp));
             return 0;
         case kMsgToolRead:
             if (self) self->sendTextToolSelection();
@@ -1525,14 +1533,15 @@ const char* hintKindName(hints::Kind k) {
         case hints::Kind::Typo: return "typo";
         case hints::Kind::Tones: return "tones";
         case hints::Kind::Date: return "date";
+        case hints::Kind::Predict: return "predict";
     }
     return "?";
 }
 }  // namespace
 
 bool TextService::hintsUsable() const {
-    return hintsAny_ && toolWnd_ && !config::secureMode() && !consoleHost_ && !directActive_ && !directWanted_ &&
-           host_ != HostText::Ignore && host_ != HostText::Literal && host_ != HostText::CompositionOnly &&
+    return (hintsAny_ || predictOn_) && toolWnd_ && !config::secureMode() && !consoleHost_ && !directActive_ &&
+           !directWanted_ && host_ != HostText::Ignore && host_ != HostText::Literal && host_ != HostText::CompositionOnly &&
            !session_.contextFellBack();
 }
 
@@ -1544,21 +1553,29 @@ ITfContext* TextService::keyTarget(ITfContext* ctx) const {
 // OnKeyDown otherwise).
 // `handled` = the session saw this key (its lastCommit*() describe THIS key).
 void TextService::noteHintKey(const KeyInput& k, ITfContext* target, bool handled) {
-    if (!hintsAny_) return;
+    if (!hintsAny_ && !predictOn_) return;  // all off: this one test per key
     if (!hintsUsable() || !target) {
         hintTracker_.reset();
         return;
     }
     switch (k.kind) {
         case KeyKind::Char: {
-            hints::Commit c;  // only read at a boundary (the hot path is a letter)
-            if (handled && !hints::isLetter(k.ch) && !hints::isDigit(k.ch))
-                c = hints::Commit{hints::toU32(session_.lastCommitRaw()), hints::toU32(session_.lastCommitText())};
-            const hints::Trigger t = hintTracker_.onChar(k.ch, c, hintsOn_);
-            if (t.kind != hints::TriggerKind::None) scheduleHint(t, target);
+            bool scheduled = false;
+            if (hintsAny_) {
+                hints::Commit c;  // only read at a boundary (the hot path is a letter)
+                if (handled && !hints::isLetter(k.ch) && !hints::isDigit(k.ch))
+                    c = hints::Commit{hints::toU32(session_.lastCommitRaw()), hints::toU32(session_.lastCommitText())};
+                const hints::Trigger t = hintTracker_.onChar(k.ch, c, hintsOn_);
+                if (t.kind != hints::TriggerKind::None) scheduleHint(t, target);
+                scheduled = hintStage_ != HintStage::None;
+            }
+            if (predictOn_) notePredictKey(k, target, scheduled);
             break;
         }
-        case KeyKind::Backspace: hintTracker_.onBackspace(); break;
+        case KeyKind::Backspace:
+            if (hintsAny_) hintTracker_.onBackspace();
+            if (predictOn_) notePredictKey(k, target, false);
+            break;
         case KeyKind::Modifier:
         case KeyKind::Other: break;
         default: hintTracker_.reset(); break;  // Enter, Tab, arrows, chords
@@ -1587,6 +1604,7 @@ void TextService::onHintTimer() {
     switch (hintStage_) {
         case HintStage::TypoAsk: askApp(HintJob::Typo, hints::toU16(hintTrig_.raw)); break;
         case HintStage::TonesRun: readForHint(HintStage::TonesRun, hints::kToneWindow); break;
+        case HintStage::PredictWait: readForHint(HintStage::PredictRead, hints::kPredictWindow); break;
         default: readForHint(HintStage::Show, kHintWindow); break;
     }
 }
@@ -1627,7 +1645,8 @@ void TextService::onHintRead() {
         case HintStage::Show:
             if (hintTrig_.kind == hints::TriggerKind::Math) {
                 if (auto r = hints::mathChip(before))
-                    sug = hints::Suggestion{hints::Kind::Math, hints::toU16(hints::mathLabel(*r)), u"", hints::toU16(*r)};
+                    sug = hints::Suggestion{hints::Kind::Math, hints::toU16(hints::mathLabel(*r)), u"",
+                                            hints::toU16(*r), {}};
             } else if (hintTrig_.kind == hints::TriggerKind::Number) {
                 sug = hints::moneyChip(before);
             } else if (hintTrig_.kind == hints::TriggerKind::Date) {
@@ -1644,7 +1663,7 @@ void TextService::onHintRead() {
         case HintStage::TonesRun: {
             auto run = hints::toneRun(before);
             if (!run || (!declinedTones_.empty() && run->compare(0, declinedTones_.size(), declinedTones_) == 0))
-                return dropHintWork();
+                return missHint();
             hintRun_ = *run;
             askApp(HintJob::Tones, hints::toU16(*run));
             return;
@@ -1652,10 +1671,22 @@ void TextService::onHintRead() {
         case HintStage::TonesShow:
             if (hints::standsAlone(before, hintRun_)) sug = hints::toneSuggestion(hintRun_, hintAnswer_);
             break;
+        case HintStage::PredictRead:
+            // The app builds the request from the screen (word_prediction.h request()).
+            predBefore_ = hintRead_.before;
+            askApp(HintJob::Predict, packPredictText(hintRead_.before, hints::toU16(predTyped_), predRaw_));
+            return;
+        case HintStage::PredictShow:
+            if (hintRead_.before == predBefore_) sug = hints::predictSuggestion(before, predTyped_, predCands_);
+            break;
         default: break;
     }
-    if (sug) presentHint(*sug);
-    dropHintWork();
+    if (sug) {
+        presentHint(*sug);
+        dropHintWork();
+    } else {
+        missHint();
+    }
 }
 
 void TextService::askApp(HintJob job, const std::u16string& text) {
@@ -1664,7 +1695,7 @@ void TextService::askApp(HintJob job, const std::u16string& text) {
     HintMessage m;
     m.request = hintGen_;
     m.job = static_cast<uint32_t>(job);
-    m.flags = settings_->engineFlags();
+    m.flags = job == HintJob::Predict ? (predEnglish_ ? kPredictEnglish : 0u) : settings_->engineFlags();
     m.text = text;
     const std::vector<uint8_t> b = packHintMessage(m);
     COPYDATASTRUCT cds;
@@ -1672,7 +1703,9 @@ void TextService::askApp(HintJob job, const std::u16string& text) {
     cds.cbData = static_cast<DWORD>(b.size());
     cds.lpData = const_cast<uint8_t*>(b.data());
     hintAwaitingApp_ = true;
-    hintStage_ = job == HintJob::Typo ? HintStage::TypoShow : HintStage::TonesShow;
+    hintStage_ = job == HintJob::Typo    ? HintStage::TypoShow
+                 : job == HintJob::Tones ? HintStage::TonesShow
+                                         : HintStage::PredictShow;
     DWORD_PTR r = 0;
     // The app only queues the job; SMTO_ABORTIFHUNG: a hung app never stalls this thread.
     if (!SendMessageTimeoutW(app, WM_COPYDATA, reinterpret_cast<WPARAM>(toolWnd_), reinterpret_cast<LPARAM>(&cds),
@@ -1686,7 +1719,12 @@ void TextService::askApp(HintJob job, const std::u16string& text) {
 void TextService::onHintReply() {
     if (hintGen_ != keyGen_ || !hintAwaitingApp_) return dropHintWork();
     hintAwaitingApp_ = false;
-    if (hintAnswer_.empty()) return dropHintWork();
+    if (hintAnswer_.empty()) return missHint();
+    if (hintStage_ == HintStage::PredictShow) {
+        predCands_ = splitCandidates(hints::toU16(hintAnswer_), hints::kPredictMaxCandidates);
+        if (predCands_.empty()) return dropHintWork();
+        return readForHint(HintStage::PredictShow, hints::kPredictWindow);  // re-read: screen unchanged?
+    }
     readForHint(hintStage_, hintStage_ == HintStage::TonesShow ? hints::kToneWindow : kHintWindow);
 }
 
@@ -1698,14 +1736,25 @@ void TextService::presentHint(const hints::Suggestion& s) {
         return;
     }
     hideHint();
-    std::wstring text(s.display.begin(), s.display.end());
-    if (!popup_.show(text, caret)) return;
+    if (s.kind == hints::Kind::Predict) {
+        std::vector<std::wstring> items;
+        items.emplace_back(s.display.begin(), s.display.end());
+        for (const auto& a : s.alternates) items.emplace_back(a.begin(), a.end());
+        if (!popup_.show(items, caret, toolWnd_, kMsgHintPick)) return;
+        SafeRelease(hintShownCtx_);
+        hintShownCtx_ = hintCtx_;
+        if (hintShownCtx_) hintShownCtx_->AddRef();
+    } else {
+        std::wstring text(s.display.begin(), s.display.end());
+        if (!popup_.show(text, caret)) return;
+    }
     hint_ = s;
     hintCaret_ = caret;
     const std::u16string& b = hintRead_.before;
     hintShownBefore_ = b.size() > 32 ? b.substr(b.size() - 32) : b;
     SetTimer(toolWnd_, kTimerHintHide, kHintHideMs, nullptr);
     config::log(std::string("caret hint ") + hintKindName(s.kind) + ": shown, len=" + std::to_string(s.insert.size()) +
+                (s.kind == hints::Kind::Predict ? " n=" + std::to_string(1 + s.alternates.size()) : std::string()) +
                 (hintRead_.caretOk ? " (view)" : " (win32 caret)"));
 }
 
@@ -1714,6 +1763,7 @@ void TextService::hideHint() {
     if (!hint_) return;
     hint_.reset();
     hintShownBefore_.clear();
+    SafeRelease(hintShownCtx_);
     popup_.hide();
     if (toolWnd_) KillTimer(toolWnd_, kTimerHintHide);
 }
@@ -1724,6 +1774,9 @@ void TextService::dropHintWork() {
     hintAwaitingApp_ = false;
     hintAnswer_.clear();
     hintRun_.clear();
+    predCands_.clear();
+    predictAfter_ = false;
+    SafeRelease(predCtx_);
     SafeRelease(hintCtx_);
 }
 
@@ -1745,29 +1798,51 @@ bool TextService::hintKeyTest(WPARAM wp, BOOL* eaten) {
 }
 
 // Tab: replace `replace` (just before the caret, re-read now) with `insert`. False = the
-// screen no longer matches (nothing changed; the Tab goes to the app).
-bool TextService::applyHint(ITfContext* ctx) {
+// screen no longer matches (nothing changed; the Tab goes to the app). A click on a
+// prediction candidate (`sync` false: no key handler is running) does the same in an
+// async session.
+bool TextService::applyHint(ITfContext* ctx, size_t choice, bool sync) {
     if (!hint_) return false;
-    const hints::Suggestion s = *hint_;
+    const hints::Suggestion s = hint_->kind == hints::Kind::Predict ? hints::chooseCandidate(*hint_, choice) : *hint_;
     hideHint();
-    ITfContext* target = ctx ? keyTarget(ctx) : nullptr;
+    ITfContext* target = ctx ? (sync ? keyTarget(ctx) : ctx) : nullptr;
     if (!target || composition_) return false;
+    if (!sync) {
+        Ref<TextService> self(this);
+        Ref<ITfContext> c(target);
+        return SUCCEEDED(RunEditSession(target, clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE,
+                                        [self, c, s](TfEditCookie ec) -> HRESULT {
+                                            TextService* t = self.get();
+                                            t->afterHintApplied(t->replaceForHint(c.get(), ec, s), c.get(), s);
+                                            return S_OK;
+                                        }));
+    }
     bool ok = false;
     const HRESULT hr = RunEditSession(target, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) -> HRESULT {
-        TsfTextSink sink(this, target, ec);
-        if (sink.hasSelection()) return S_OK;
-        const std::u16string before = sink.textBeforeCaret(static_cast<int>(s.replace.size()) + 2);
-        const bool valid = s.kind == hints::Kind::Math
-                               ? (!before.empty() && before.back() == u'=')
-                               : hints::standsAlone(hints::toU32(before), hints::toU32(s.replace));
-        ok = valid && sink.replaceBeforeCaret(s.replace, s.insert);
+        ok = replaceForHint(target, ec, s);
         return S_OK;
     });
-    if (hr != S_OK) ok = false;
+    afterHintApplied(ok && hr == S_OK, target, s);
+    return ok && hr == S_OK;
+}
+
+bool TextService::replaceForHint(ITfContext* c, TfEditCookie ec, const hints::Suggestion& s) {
+    TsfTextSink sink(this, c, ec);
+    if (sink.hasSelection() || composition_) return false;
+    const std::u16string before = sink.textBeforeCaret(static_cast<int>(s.replace.size()) + 2);
+    return hints::hintStillValid(s, hints::toU32(before)) && sink.replaceBeforeCaret(s.replace, s.insert);
+}
+
+void TextService::afterHintApplied(bool ok, ITfContext* c, const hints::Suggestion& s) {
     session_.reset();
     hintTracker_.reset();
     config::log(std::string("caret hint ") + hintKindName(s.kind) + (ok ? ": applied" : ": screen changed -> not applied"));
-    return ok;
+    if (ok && s.kind == hints::Kind::Predict && predictOn_) {  // macOS: next word after an accepted one
+        predTyped_.clear();
+        predRaw_.clear();
+        predEnglish_ = false;
+        schedulePredict(c);
+    }
 }
 
 // Esc: typo -> never suggest that word again (this session); tones -> not again for a run
@@ -1778,7 +1853,79 @@ void TextService::declineHint() {
         rejectedTypos_.add(hints::toU32(hint_->replace.substr(0, hint_->replace.size() - 1)));
     else if (hint_->kind == hints::Kind::Tones)
         declinedTones_ = hints::toU32(hint_->replace);
+    else if (hint_->kind == hints::Kind::Predict && !hint_->replace.empty())
+        declinedPredict_ = hints::toU32(hint_->replace);  // until the next word
     hideHint();
+}
+
+// ---------------------------------------------------------------- Gợi ý từ (word prediction)
+// Setting off: noteHintKey returns before reaching here (one bool test per key). On: per
+// letter / space / backspace only a few string copies and a 0.3 s timer (re-armed by every
+// key, so typing on reads nothing); when it fires, one async read session, one WM_COPYDATA
+// to VietTelex.exe (which ranks with its embedded data), and a re-read before showing.
+
+void TextService::notePredictKey(const KeyInput& k, ITfContext* target, bool otherScheduled) {
+    if (!predictApp_ || !target) return;
+    if (hint_ && hint_->kind != hints::Kind::Predict) return;  // other hints win
+    const bool space = k.kind == KeyKind::Char && k.ch == U' ';
+    if (k.kind == KeyKind::Char && !space && !hints::isLetter(k.ch)) return;
+    std::u32string typed;
+    std::u16string raw;
+    if (session_.wordActive()) {
+        // Completion needs the word on screen (in-place); a composition is never replaced.
+        if (composition_ || session_.wordMode() != OutputMode::InPlace) return;
+        typed = hints::toU32(session_.shown());
+        if (typed.size() < 2) return;  // completion from 2 letters (word_prediction.h kMinTyped)
+        raw = session_.rawKeys();
+    } else if (!space) {
+        return;  // next word: only right after a space
+    }
+    if (typed.empty()) declinedPredict_.clear();                    // a new word
+    else if (hints::predictMuted(typed, declinedPredict_)) return;  // Esc'd for this word
+    predTyped_ = std::move(typed);
+    predRaw_ = std::move(raw);
+    predEnglish_ = session_.previousWordEnglish();
+    if (otherScheduled) {  // that hint goes first; prediction only if it finds nothing
+        predictAfter_ = true;
+        SafeRelease(predCtx_);
+        predCtx_ = target;
+        predCtx_->AddRef();
+        return;
+    }
+    schedulePredict(target);
+}
+
+void TextService::schedulePredict(ITfContext* target) {
+    if (!target || !toolWnd_) return;
+    target->AddRef();  // dropHintWork may release the caller's reference (predCtx_)
+    dropHintWork();
+    hintTrig_ = hints::Trigger();
+    hintGen_ = keyGen_;
+    hintCtx_ = target;  // takes that reference
+    hintStage_ = HintStage::PredictWait;
+    SetTimer(toolWnd_, kTimerHint, static_cast<UINT>(hints::kPredictDelayMs), nullptr);
+}
+
+void TextService::missHint() {
+    if (predictAfter_ && predCtx_ && hintGen_ == keyGen_ && predictOn_) {
+        ITfContext* c = predCtx_;
+        predCtx_ = nullptr;  // our reference now
+        predictAfter_ = false;
+        schedulePredict(c);
+        c->Release();
+        return;
+    }
+    dropHintWork();
+}
+
+void TextService::pickHint(size_t index) {
+    if (!hint_ || hint_->kind != hints::Kind::Predict || !hintShownCtx_) return;
+    ITfContext* c = hintShownCtx_;
+    c->AddRef();
+    ++keyGen_;  // whatever was pending belongs to the text before the click
+    dropHintWork();
+    applyHint(c, index, false);
+    c->Release();
 }
 
 }  // namespace vtx::tip

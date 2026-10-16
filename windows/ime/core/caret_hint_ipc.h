@@ -10,6 +10,9 @@
 //
 // Typo: text = the raw keys of the word ("tpoi"), result = the fix ("tôi").
 // Tones: text = the unaccented run from the screen ("toi di hoc "), result = Thêm dấu.
+// Predict (gợi ý từ, app/core/word_prediction.h): text = packPredictText(before the caret,
+//   word being typed, its raw keys), flags = kPredictEnglish when the previous word was
+//   English; result = up to 3 candidates joined by kPredictSep ("" = none).
 // Up the integrity ladder only via the WM_COPYDATA filter the app already opens.
 #pragma once
 #include <cstdint>
@@ -22,8 +25,58 @@ constexpr uint32_t kCopyHintRequest = 0x56544831u;  // "VTH1" TIP -> app
 constexpr uint32_t kCopyHintReply = 0x56544832u;    // "VTH2" app -> TIP
 constexpr size_t kHintMaxLength = 400;              // UTF-16 units (tones window + slack)
 
-enum class HintJob : uint32_t { Typo = 1, Tones = 2 };
-inline bool isValidHintJob(uint32_t v) { return v == 1 || v == 2; }
+enum class HintJob : uint32_t { Typo = 1, Tones = 2, Predict = 3 };
+inline bool isValidHintJob(uint32_t v) { return v >= 1 && v <= 3; }
+
+// ---- Predict job payload. U+001F never occurs in typed text (control character).
+constexpr char16_t kPredictSep = 0x1F;
+constexpr uint32_t kPredictEnglish = 1;
+
+inline std::u16string packPredictText(const std::u16string& before, const std::u16string& typed,
+                                      const std::u16string& raw) {
+    std::u16string t;
+    t.reserve(before.size() + typed.size() + raw.size() + 2);
+    for (char16_t c : before) t.push_back(c == kPredictSep ? u' ' : c);
+    t.push_back(kPredictSep);
+    t += typed;
+    t.push_back(kPredictSep);
+    t += raw;
+    return t;
+}
+
+// False unless exactly three fields.
+inline bool unpackPredictText(const std::u16string& t, std::u16string& before, std::u16string& typed,
+                              std::u16string& raw) {
+    const size_t a = t.find(kPredictSep);
+    if (a == std::u16string::npos) return false;
+    const size_t b = t.find(kPredictSep, a + 1);
+    if (b == std::u16string::npos || t.find(kPredictSep, b + 1) != std::u16string::npos) return false;
+    before = t.substr(0, a);
+    typed = t.substr(a + 1, b - a - 1);
+    raw = t.substr(b + 1);
+    return true;
+}
+
+inline std::u16string joinCandidates(const std::vector<std::u16string>& c) {
+    std::u16string out;
+    for (size_t i = 0; i < c.size(); ++i) {
+        if (i) out.push_back(kPredictSep);
+        out += c[i];
+    }
+    return out;
+}
+
+inline std::vector<std::u16string> splitCandidates(const std::u16string& t, size_t max = 3) {
+    std::vector<std::u16string> out;
+    size_t s = 0;
+    while (s <= t.size() && out.size() < max) {
+        size_t e = t.find(kPredictSep, s);
+        if (e == std::u16string::npos) e = t.size();
+        if (e > s) out.push_back(t.substr(s, e - s));
+        s = e + 1;
+    }
+    return out;
+}
 
 struct HintMessage {
     uint32_t request = 0;

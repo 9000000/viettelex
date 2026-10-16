@@ -67,6 +67,12 @@ struct Settings {
     //     and cleared whenever VietTelex.exe starts (never left on across a reboot).
     bool autoOffFullscreen = true;
     bool gameMode = false;
+    // Gợi ý từ (word prediction, app/core/word_prediction.h): a MIRROR of the Windows
+    // setting "Show text suggestions when typing on the physical keyboard" (HKCU\Software\
+    // Microsoft\Input\Settings EnableHwkbTextPrediction; absent = OFF). No VietTelex
+    // toggle: VietTelex.exe reads the Windows value at load and when it changes, and only
+    // puts it in the snapshot — never into HKCU\Software\VietTelex (isSystemMirror()).
+    bool systemTextPrediction = false;
     // VietTelex.exe only, registry-only like addTonesHotkey (not in the snapshot, not
     // compared by operator==): the Chế độ game hotkey (game_logic.h kGameModeHotkeys,
     // default "off") and the floating V/E indicator ("auto" | "on" | "off").
@@ -89,6 +95,8 @@ struct BoolKey {
     bool Settings::*field;
 };
 const BoolKey* boolKeys(size_t* count);
+// Bool keys that mirror a Windows setting (snapshot only, not stored by VietTelex).
+bool isSystemMirror(const BoolKey& k);
 
 // Snapshot (binary, versioned, little-endian). deserialize() never throws; on any
 // malformed input it returns false and leaves `out` = defaults.

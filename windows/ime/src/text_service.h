@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace vtx::tip {
 
@@ -131,7 +132,10 @@ private:
     // enabled; a trigger arms a timer on toolWnd_ (the app inserts the key first), then an
     // async READ session takes the text before the caret + the caret rectangle; typo fixes
     // and tones go through VietTelex.exe (caret_hint_ipc.h). Tab applies in OnKeyDown.
-    enum class HintStage : uint8_t { None, Show, TypoAsk, TypoShow, TonesRun, TonesShow };
+    // Gợi ý từ (word prediction, caret_hints.h §6): PredictWait (0.3 s idle timer) ->
+    // PredictRead (read the screen) -> ask VietTelex.exe -> PredictShow (re-read, show).
+    enum class HintStage : uint8_t { None, Show, TypoAsk, TypoShow, TonesRun, TonesShow, PredictWait, PredictRead,
+                                     PredictShow };
     bool hintsUsable() const;
     ITfContext* keyTarget(ITfContext* ctx) const;  // context holding the text (parent for Edit)
     void noteHintKey(const KeyInput& k, ITfContext* target, bool handled);
@@ -144,8 +148,15 @@ private:
     void presentHint(const hints::Suggestion& s);
     void hideHint();
     void dropHintWork();
-    bool applyHint(ITfContext* ctx);
+    // `choice` = candidate index (prediction: click); `sync` = inside a key handler.
+    bool applyHint(ITfContext* ctx, size_t choice = 0, bool sync = true);
     void declineHint();
+    void missHint();  // a non-prediction hint found nothing: prediction for this key, if armed
+    void notePredictKey(const KeyInput& k, ITfContext* target, bool otherScheduled);
+    void schedulePredict(ITfContext* target);
+    void pickHint(size_t index);  // click on a prediction candidate
+    bool replaceForHint(ITfContext* c, TfEditCookie ec, const hints::Suggestion& s);
+    void afterHintApplied(bool ok, ITfContext* c, const hints::Suggestion& s);
     bool hintKeyTest(WPARAM wp, BOOL* eaten);  // true = handled (eaten set)
 
     bool initThreadMgrSink();
@@ -227,6 +238,18 @@ private:
     int hintKeyAct_ = -1;               // hints::KeyAction decided in OnTestKeyDown
     hints::Rejected rejectedTypos_;
     std::u32string declinedTones_;
+    // word prediction (Settings::systemTextPrediction = Windows' setting; off: one bool read)
+    bool predictOn_ = false;
+    bool predictApp_ = true;             // not a code editor / terminal (caret_hints.h)
+    std::u32string predTyped_;           // word being typed when armed ("" = next word)
+    std::u16string predRaw_;             // its raw keys
+    bool predEnglish_ = false;
+    std::u16string predBefore_;          // screen sent to the app (must be unchanged to show)
+    std::vector<std::u16string> predCands_;
+    std::u32string declinedPredict_;     // Esc: muted while the word starts with this
+    bool predictAfter_ = false;          // another hint was armed at this key: predict if it misses
+    ITfContext* predCtx_ = nullptr;      // owned, with predictAfter_
+    ITfContext* hintShownCtx_ = nullptr; // owned: where a shown prediction applies on click
     HintPopup popup_;
 
 };

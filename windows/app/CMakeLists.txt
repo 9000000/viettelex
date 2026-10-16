@@ -2,13 +2,17 @@
 # portable core (unit-tested on any OS).
 
 add_library(vtx_app_core STATIC core/update_check.cpp core/uninstall.cpp core/setup_helper_logic.cpp core/direct_policy.cpp core/input_switch.cpp
-            core/text_action_logic.cpp core/typo_fix.cpp core/onboarding.cpp core/game_logic.cpp core/macro_import.cpp)
+            core/text_action_logic.cpp core/typo_fix.cpp core/word_prediction.cpp core/onboarding.cpp core/game_logic.cpp core/macro_import.cpp)
 target_include_directories(vtx_app_core PUBLIC core)
 target_link_libraries(vtx_app_core PUBLIC vtx_ime_core viettelex_text)
+if(MSVC)
+  # word_prediction.cpp / seed_unigrams.inc hold Vietnamese UTF-8 literals.
+  target_compile_options(vtx_app_core PRIVATE /utf-8)
+endif()
 
 if(VTX_IME_TESTS)
   add_executable(vtx_app_tests ../ime/tests/test_main.cpp tests/app_tests.cpp tests/typo_fix_tests.cpp
-                 tests/onboarding_game_tests.cpp src/strings.cpp)  # strings.cpp: portable UI text
+                 tests/onboarding_game_tests.cpp tests/word_prediction_tests.cpp src/strings.cpp)  # strings.cpp: portable UI text
   target_include_directories(vtx_app_tests PRIVATE ../ime/tests src)
   target_link_libraries(vtx_app_tests PRIVATE vtx_app_core)
   target_compile_definitions(vtx_app_tests PRIVATE

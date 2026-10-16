@@ -17,6 +17,7 @@
 #include "text_tool_ipc.h"
 #include "caret_hint_ipc.h"
 #include "typo_fix.h"
+#include "word_prediction.h"
 
 namespace vtx::app {
 
@@ -122,6 +123,32 @@ void onHintWork() {
     DWORD_PTR r = 0;
     SendMessageTimeoutW(g_hintWork.tip, WM_COPYDATA, reinterpret_cast<WPARAM>(g_mainWnd), reinterpret_cast<LPARAM>(&cds),
                         SMTO_ABORTIFHUNG, 250, &r);
+}
+
+// ---- Gợi ý từ: Windows' text-suggestion setting (word_prediction.h) ----------------------
+HKEY g_predKey = nullptr;
+bool g_predSubtree = false;
+HANDLE g_predEvent = nullptr, g_predWait = nullptr;
+
+void armPredictionWatch() {
+    if (!g_predKey || !g_predEvent) return;
+    // One-shot: re-armed on the main thread after every change (the registration belongs to
+    // the calling thread, which must outlive it — the UI thread does).
+    RegNotifyChangeKeyValue(g_predKey, g_predSubtree, REG_NOTIFY_CHANGE_LAST_SET | REG_NOTIFY_CHANGE_NAME,
+                            g_predEvent, TRUE);
+}
+
+VOID CALLBACK onPredictionEvent(PVOID, BOOLEAN) {
+    if (g_mainWnd) PostMessageW(g_mainWnd, kMsgPredictSetting, 0, 0);
+}
+
+void onPredictionSettingChanged() {
+    armPredictionWatch();
+    const bool on = readSystemTextPrediction();
+    if (on == g_settings.systemTextPrediction) return;
+    g_settings.systemTextPrediction = on;
+    saveSettings(g_settings);  // the snapshot only: the mirror is never stored under VietTelex
+    appLog("predict", std::string("Windows text suggestions (physical keyboard): ") + (on ? "on" : "off"));
 }
 
 void finish(bool beep, const char* why) {
@@ -510,6 +537,36 @@ void textActionsConfigure() {
     if (!g_hotkeyOn) appLog("text", "add-tones hotkey " + g_settings.addTonesHotkey + ": taken by another app");
 }
 
+void predictionWatchStart() {
+    if (g_predEvent) return;
+    // The value's key does not exist until the toggle was used once: then watch its parent.
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, predict::kHwkbPredictionKey, 0, KEY_NOTIFY, &g_predKey) == ERROR_SUCCESS) {
+        g_predSubtree = false;
+    } else if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Input", 0, KEY_NOTIFY, &g_predKey) == ERROR_SUCCESS) {
+        g_predSubtree = true;
+    } else {
+        g_predKey = nullptr;
+        appLog("predict", "cannot watch the Windows text-suggestion setting (read at start only)");
+        return;
+    }
+    g_predEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // auto-reset
+    if (!g_predEvent || !RegisterWaitForSingleObject(&g_predWait, g_predEvent, onPredictionEvent, nullptr, INFINITE,
+                                                     WT_EXECUTEDEFAULT)) {
+        predictionWatchStop();
+        return;
+    }
+    armPredictionWatch();
+}
+
+void predictionWatchStop() {
+    if (g_predWait) UnregisterWaitEx(g_predWait, INVALID_HANDLE_VALUE);  // waits for a running callback
+    g_predWait = nullptr;
+    if (g_predKey) RegCloseKey(g_predKey);  // also cancels the pending notification
+    g_predKey = nullptr;
+    if (g_predEvent) CloseHandle(g_predEvent);
+    g_predEvent = nullptr;
+}
+
 void textActionsShutdown() {
     if (g_hotkeyOn && g_mainWnd) UnregisterHotKey(g_mainWnd, kHotkeyId);
     g_hotkeyOn = false;
@@ -557,6 +614,10 @@ bool textActionsMessage(UINT msg, WPARAM wp, LPARAM lp, LRESULT& result) {
             return true;
         case kMsgHintWork:
             onHintWork();
+            result = 0;
+            return true;
+        case kMsgPredictSetting:
+            onPredictionSettingChanged();
             result = 0;
             return true;
         case kMsgClipDone:

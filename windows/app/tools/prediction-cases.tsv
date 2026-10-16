@@ -1,0 +1,78 @@
+# Inputs for gen_prediction_golden.sh: before	typed	raw	english(0/1). \n = newline.
+cảm 			0
+xin 			0
+hôm 			0
+đi 			0
+tôi đang 			0
+anh 			0
+hồ 			0
+hồ chí 			0
+của 			0
+và 			0
+không 			0
+chúng ta 			0
+Tôi Đang 			0
+xin chào, bạn 			0
+dòng một\nđi 			0
+hello 			1
+zzqx 			0
+hai  			0
+xong. 			0
+hà 			0
+việt 			0
+cảm ơn 			0
+rất 			0
+đà 			0
+a.b 			0
+người 			0
+bây 			0
+làm 			0
+nhà 			0
+học 			0
+tôi đư	đư	dduw	0
+Đư	Đư	Dduw	0
+xin ch	ch	ch	0
+ng	ng	ng	0
+anh th	th	th	0
+khô	khô	khoo	0
+my keyb	keyb	keyb	0
+this is beca	beca	beca	1
+thí	thí	this	1
+cảm ơ	ơ	ow	0
+đị	đị	ddij	0
+đi	đi	ddi	0
+fu	fu	fu	0
+sh	sh	sh	0
+vc	vc	vc	0
+hôm na	na	na	0
+chúng tô	tô	too	0
+tr	tr	tr	0
+NG	NG	NG	0
+Ngh	Ngh	Ngh	0
+được kh	kh	kh	0
+ph	ph	ph	0
+qu	qu	qu	0
+gi	gi	gi	0
+hello wor	wor	wor	1
+goo	goo	goo	0
+Hel	Hel	Hel	1
+HEL	HEL	HEL	1
+ngư	ngư	nguw	0
+việt na	na	na	0
+hà nộ	nộ	nooj	0
+abc.đư	đư	dduw	0
+chào đ	đ	dd	0
+chào đư	đươ	dduwow	0
+a1	a1	a1	0
+cám ơn nh	nh	nh	0
+tôi muốn đi ch	ch	ch	0
+bạn có kh	kh	kh	0
+Hôm nay trời đ	đ	dd	0
+Hôm nay trời đẹ	đẹ	ddej	0
+em yê	yê	yee	0
+xin lỗ	lỗ	lox	0
+thank yo	yo	yo	1
+see you tom	tom	tom	1
+thế giớ	giớ	giows	0
+chúc mừng 			0
+hẹn gặp 			0
