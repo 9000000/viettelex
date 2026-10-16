@@ -45,6 +45,21 @@ struct Params {
 // = TypoFixLogic.defaults (keep identical to macOS).
 inline Params defaults() { return Params{}; }
 
+// English fixes ("spellnig" -> spelling, TypoFixLogic.EnglishParams): only when there is no
+// Vietnamese fix. One edit on the RAW keys (no Telex) that is an enlexicon word: adjacent-key
+// substitution / swap always proposable, a dropped / extra key only from insDelMinLen letters
+// (rivals below that); Vietnamese candidates (every edit) are rivals — both lexicons share the
+// 0–255 frequency scale. Words of longMinLen+ letters: a lower frequency floor (longMinFreq).
+struct EnglishParams {
+    int minFreq = 140;
+    int margin = 60;
+    int insDelMinLen = 5;
+    int longMinLen = 7;
+    int longMinFreq = 60;
+};
+// = TypoFixLogic.englishDefaults (keep identical to macOS; tuned by TypoFixEvalTests).
+inline EnglishParams englishDefaults() { return EnglishParams{}; }
+
 // AdjacentKeyFixer.physicalNeighbors: "g" -> f h t y v b, "z" -> a s x.
 const std::vector<char32_t>& physicalNeighbors(char32_t key);
 
@@ -56,6 +71,8 @@ public:
     virtual std::optional<int> frequency(const std::u32string& word) const = 0;  // nullopt = not a word
     virtual bool hasCompletion(const std::u32string& prefix) const = 0;          // still a prefix of a word
     virtual bool isKnown(const std::u32string& lower) const = 0;                 // English / chat / declined
+    // enlexicon frequency of a lowercase a–z word (nullopt = not a word / no English fixes).
+    virtual std::optional<int> englishFrequency(const std::u32string&) const { return std::nullopt; }
 };
 
 // "cũm" -> "cum": drop the five tone marks, keep letter marks (ư, â, đ…).
@@ -66,8 +83,16 @@ std::vector<Cand> candidates(const std::u32string& lower, const Source& src, uin
 // The top candidate by frequency, if it comes from a proposable edit, is common enough and
 // beats the runner-up (counted over edits ∪ rivals) by the margin.
 std::optional<Cand> pick(const std::vector<Cand>& cands, const Params& p = defaults());
-// The fix for the word typed as `raw`, or nullopt. Capital first kept.
-std::optional<std::u32string> correction(const std::u32string& raw, const Source& src, const Params& p = defaults());
+// TypoFixLogic.englishCandidates: every one-edit string of `lower` that is an English word.
+std::vector<Cand> englishCandidates(const std::u32string& lower, const Source& src);
+// TypoFixLogic.englishPick: the top of en ∪ rivals, if English, proposable, common, ahead.
+std::optional<Cand> englishPick(const std::vector<Cand>& en, const std::vector<Cand>& rivals, int typedLen,
+                                const EnglishParams& p = englishDefaults());
+// The fix for the word typed as `raw`, or nullopt. Capital first kept. A Vietnamese fix first,
+// else an English one; `filterSensitive` ("Lọc từ nhạy cảm") drops a fix that is a
+// SensitiveWords word.
+std::optional<std::u32string> correction(const std::u32string& raw, const Source& src, const Params& p = defaults(),
+                                         bool filterSensitive = true, const EnglishParams& ep = englishDefaults());
 
 // (frequency, id) pairs: frequency desc, then id asc (VNSuggest / EnglishLite order).
 void sortByFreqThenId(std::vector<std::pair<int, int>>& v);
@@ -117,6 +142,7 @@ public:
     std::optional<int> frequency(const std::u32string& w) const override { return index_.frequency(w); }
     bool hasCompletion(const std::u32string& p) const override { return index_.hasCompletion(p); }
     bool isKnown(const std::u32string& lower) const override;
+    std::optional<int> englishFrequency(const std::u32string& lower) const override;
     bool isEnglish(const std::u32string& lower) const;
     bool isChatWord(const std::u32string& lower) const { return chat_.count(lower) != 0; }
     const std::unordered_set<std::u32string>& chatWords() const { return chat_; }
@@ -152,12 +178,15 @@ public:
     HintJobs& operator=(const HintJobs&) = delete;
     std::u16string answer(const HintMessage& m);
     bool predictionLoaded() const { return model_ != nullptr; }
+    // "Lọc từ nhạy cảm" (Settings::filterSensitive) for the next answers.
+    void setFilterSensitive(bool on) { filterSensitive_ = on; }
 
 private:
     const addtones::LanguageData* data_;
     typo::LexiconSource* source_ = nullptr;
     predict::Model* model_ = nullptr;
     uint32_t flags_ = 0;
+    bool filterSensitive_ = true;
 };
 
 }  // namespace vtx::app

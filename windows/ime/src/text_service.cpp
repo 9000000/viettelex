@@ -707,6 +707,8 @@ STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) {
     hideHint();
     dropHintWork();
     hintTracker_.reset();
+    acceptedSpace_ = hints::AcceptedSpace();
+    acceptAct_ = -1;
     if (composition_) endCompositionAsync();
     session_.resetContext();
     chord_.disarm();
@@ -936,7 +938,15 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL
     if (hint_ && hintKeyTest(wp, eaten)) return S_OK;         // Tab / Esc while a caret hint shows
     KeyInput k;
     // Every key let through below asks retypeAsUs (#121): eaten here, retyped in OnKeyDown.
-    if (!prepareKey(wp, true, k)) {  // English, modifiers, games...
+    const bool prepared = prepareKey(wp, true, k);
+    if (!acceptedSpace_.empty() && !isModifierVk(static_cast<uint32_t>(wp))) {
+        if (prepared && acceptSpaceTest(k)) {  // punctuation right after an accepted prediction
+            *eaten = TRUE;
+            return S_OK;
+        }
+        acceptedSpace_ = hints::AcceptedSpace();
+    }
+    if (!prepared) {  // English, modifiers, games...
         *eaten = retypeAsUs(ctx, wp, false) ? TRUE : FALSE;
         return S_OK;
     }
@@ -989,6 +999,14 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* ctx, WPARAM wp, LPARAM, BOOL* ea
     }
     KeyInput k;
     if (!ctx) return S_OK;
+    if (acceptAct_ < 0 && !acceptedSpace_.empty() && !isModifierVk(static_cast<uint32_t>(wp))) {
+        KeyInput a;  // a host that skipped OnTestKeyDown
+        if (!(prepareKey(wp, false, a) && acceptSpaceTest(a))) acceptedSpace_ = hints::AcceptedSpace();
+    }
+    if (acceptAct_ >= 0 && acceptSpaceApply(ctx)) {
+        *eaten = TRUE;
+        return S_OK;
+    }
     if (!prepareKey(wp, true, k)) {
         *eaten = retypeAsUs(ctx, wp, true) ? TRUE : FALSE;  // #121
         return S_OK;
@@ -1826,9 +1844,53 @@ bool TextService::replaceForHint(ITfContext* c, TfEditCookie ec, const hints::Su
     return hints::hintStillValid(s, hints::toU32(before)) && sink.replaceBeforeCaret(s.replace, s.insert);
 }
 
+// The key right after Tab on a prediction ("được␣"): decide (OnTestKeyDown) …
+bool TextService::acceptSpaceTest(const KeyInput& k) {
+    acceptAct_ = -1;
+    const hints::AcceptSpaceAct act = hints::acceptSpaceKey(acceptedSpace_, k.kind == KeyKind::Char ? k.ch : 0,
+                                                            acceptExpect_, acceptRep_);
+    if (act == hints::AcceptSpaceAct::Pass || directActive_ || composition_) return false;
+    acceptAct_ = static_cast<int>(act);
+    return true;
+}
+
+// … and do it (OnKeyDown): re-read the screen, then the punctuation replaces our space and
+// the space moves after it (or the space after that is swallowed). False = the screen changed:
+// the key goes to the app as typed.
+bool TextService::acceptSpaceApply(ITfContext* ctx) {
+    const int act = acceptAct_;
+    acceptAct_ = -1;
+    ITfContext* target = keyTarget(ctx);
+    bool ok = false;
+    const std::u16string expect = hints::toU16(acceptExpect_), rep = hints::toU16(acceptRep_);
+    const HRESULT hr = RunEditSession(target, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) -> HRESULT {
+        TsfTextSink sink(this, target, ec);
+        if (sink.hasSelection() || composition_) return S_OK;
+        const std::u16string before = sink.textBeforeCaret(static_cast<int>(expect.size()) + 2);
+        if (before.size() < expect.size() || before.compare(before.size() - expect.size(), expect.size(), expect) != 0)
+            return S_OK;
+        ok = act == static_cast<int>(hints::AcceptSpaceAct::Swallow) || sink.replaceBeforeCaret(u" ", rep);
+        return S_OK;
+    });
+    if (hr != S_OK || !ok) {
+        config::log("accept-space: screen changed -> plain key");
+        return false;
+    }
+    session_.reset();
+    hintTracker_.reset();
+    if (act == static_cast<int>(hints::AcceptSpaceAct::Replace) && !acceptRep_.empty() && acceptRep_.back() == U' ')
+        acceptedSpace_.carried = acceptRep_;
+    config::log(act == static_cast<int>(hints::AcceptSpaceAct::Swallow) ? "accept-space: space swallowed"
+                                                                        : "accept-space: punctuation attached");
+    return true;
+}
+
 void TextService::afterHintApplied(bool ok, ITfContext* c, const hints::Suggestion& s) {
     session_.reset();
     hintTracker_.reset();
+    acceptedSpace_ = hints::AcceptedSpace();
+    if (ok && s.kind == hints::Kind::Predict && !s.insert.empty() && s.insert.back() == u' ')
+        acceptedSpace_.inserted = hints::toU32(s.insert);
     config::log(std::string("caret hint ") + hintKindName(s.kind) + (ok ? ": applied" : ": screen changed -> not applied"));
     if (ok && s.kind == hints::Kind::Predict && predictOn_) {  // macOS: next word after an accepted one
         predTyped_.clear();

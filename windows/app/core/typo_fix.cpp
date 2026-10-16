@@ -143,7 +143,71 @@ std::optional<Cand> pick(const std::vector<Cand>& cands, const Params& p) {
     return sorted[0];
 }
 
-std::optional<std::u32string> correction(const std::u32string& raw, const Source& src, const Params& p) {
+std::vector<Cand> englishCandidates(const std::u32string& lower, const Source& src) {
+    std::vector<Cand> out;
+    auto consider = [&](const std::u32string& w, Edit e) {
+        if (w == lower) return;
+        if (auto f = src.englishFrequency(w)) out.push_back(Cand{w, *f, e});
+    };
+    const size_t n = lower.size();
+    for (size_t i = 0; i < n; ++i)
+        for (char32_t k : physicalNeighbors(lower[i])) {
+            if (k == lower[i]) continue;
+            std::u32string c = lower;
+            c[i] = k;
+            consider(c, Edit::Sub);
+        }
+    for (size_t i = 0; i + 1 < n; ++i) {
+        if (lower[i] == lower[i + 1]) continue;
+        std::u32string c = lower;
+        std::swap(c[i], c[i + 1]);
+        consider(c, Edit::Swap);
+    }
+    if (n > 2)
+        for (size_t i = 0; i < n; ++i) {
+            if (i > 0 && lower[i] == lower[i - 1]) continue;
+            std::u32string c = lower;
+            c.erase(i, 1);
+            consider(c, Edit::Del);
+        }
+    for (size_t i = 0; i <= n; ++i)
+        for (char32_t l = U'a'; l <= U'z'; ++l) {
+            if (i > 0 && lower[i - 1] == l) continue;
+            std::u32string c = lower;
+            c.insert(c.begin() + static_cast<std::ptrdiff_t>(i), l);
+            consider(c, Edit::Ins);
+        }
+    return out;
+}
+
+std::optional<Cand> englishPick(const std::vector<Cand>& en, const std::vector<Cand>& rivals, int typedLen,
+                                const EnglishParams& p) {
+    std::map<std::u32string, Cand> best;
+    std::unordered_set<std::u32string> proposable;
+    const bool insDel = typedLen >= p.insDelMinLen;
+    auto keep = [&](const Cand& c) {
+        auto it = best.find(c.word);
+        if (it != best.end() && it->second.freq >= c.freq) return;
+        best[c.word] = c;
+    };
+    for (const Cand& c : en) {
+        if (c.edit == Edit::Sub || c.edit == Edit::Swap || insDel) proposable.insert(c.word);
+        keep(c);
+    }
+    for (const Cand& c : rivals) keep(c);
+    std::vector<Cand> sorted;
+    for (auto& kv : best) sorted.push_back(kv.second);
+    std::sort(sorted.begin(), sorted.end(), [](const Cand& a, const Cand& b) {
+        return a.freq != b.freq ? a.freq > b.freq : a.word < b.word;
+    });
+    const int minFreq = typedLen >= p.longMinLen ? std::min(p.minFreq, p.longMinFreq) : p.minFreq;
+    if (sorted.empty() || !proposable.count(sorted[0].word) || sorted[0].freq < minFreq) return std::nullopt;
+    if (sorted.size() > 1 && sorted[0].freq - sorted[1].freq < p.margin) return std::nullopt;
+    return sorted[0];
+}
+
+std::optional<std::u32string> correction(const std::u32string& raw, const Source& src, const Params& p,
+                                         bool filterSensitive, const EnglishParams& ep) {
     if (static_cast<int>(raw.size()) < p.minLen || raw.size() > 10) return std::nullopt;
     for (char32_t c : raw)
         if (!isAsciiLetter(c)) return std::nullopt;
@@ -152,8 +216,12 @@ std::optional<std::u32string> correction(const std::u32string& raw, const Source
     const std::u32string current = src.compose(lower);
     if (current != lower && src.isKnown(text::lower(current))) return std::nullopt;
     if (src.frequency(current) || src.hasCompletion(current)) return std::nullopt;
-    auto best = pick(candidates(lower, src, p.edits | p.rivals), p);
+    const std::vector<Cand> vn = candidates(lower, src, p.edits | p.rivals);
+    auto best = pick(vn, p);
+    if (!best) best = englishPick(englishCandidates(lower, src), vn, static_cast<int>(lower.size()), ep);
     if (!best) return std::nullopt;
+    // "Lọc từ nhạy cảm": never offer a swear word (no fallback to the runner-up).
+    if (filterSensitive && predict::isSensitive(best->word)) return std::nullopt;
     std::u32string w = best->word;
     if (!raw.empty() && raw[0] >= 'A' && raw[0] <= 'Z' && !w.empty()) w = text::upper(w[0]) + w.substr(1);
     return w;
@@ -394,6 +462,14 @@ bool LexiconSource::isEnglish(const std::u32string& w) const {
 
 bool LexiconSource::isKnown(const std::u32string& w) const { return isEnglish(w) || isChatWord(w); }
 
+std::optional<int> LexiconSource::englishFrequency(const std::u32string& w) const {
+    const std::string a = utf8(w);
+    const addtones::EnglishLexicon& en = data_.english;
+    const size_t i = en.lowerBound(a);
+    if (i < en.size() && en.word(i) == a) return en.freq(i);
+    return std::nullopt;
+}
+
 // ================================================================ generated data
 
 const std::vector<const char*>& seedAsciiWords() {
@@ -485,7 +561,7 @@ std::u16string HintJobs::answer(const HintMessage& m) {
             flags_ = m.flags;
             if (!source_) return {};
         }
-        auto fix = typo::correction(text::fromUtf16(m.text), *source_);
+        auto fix = typo::correction(text::fromUtf16(m.text), *source_, typo::defaults(), filterSensitive_);
         return fix ? text::toUtf16(*fix) : std::u16string();
     }
     if (m.job == static_cast<uint32_t>(HintJob::Predict)) {
@@ -495,7 +571,7 @@ std::u16string HintJobs::answer(const HintMessage& m) {
         if (!r) return {};
         if (!model_) model_ = new (std::nothrow) predict::Model(*data_);
         if (!model_) return {};
-        const auto c = model_->candidates(*r, text::fromUtf16(raw));
+        const auto c = model_->candidates(*r, text::fromUtf16(raw), filterSensitive_);
         return c.empty() ? std::u16string() : text::toUtf16(c[0]);  // one suggestion: the top one
     }
     if (m.job == static_cast<uint32_t>(HintJob::Tones)) {

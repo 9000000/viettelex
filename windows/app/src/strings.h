@@ -89,6 +89,7 @@ enum class S {
     TypoHints, TypoHintsDesc,
     ToneHints, ToneHintsDesc,
     DateHints, DateHintsDesc,
+    FilterSensitive, FilterSensitiveDesc,
     // opt-in red squiggle on the composition (Chính tả page)
     UnderlineMisspelled, UnderlineMisspelledDesc,
     // Games / fullscreen, floating V/E indicator (Kiểu gõ page)

@@ -309,7 +309,9 @@ Bấm “Sửa tự động”: VietTelex tự xoá mục bị kẹt của chín
 "Number chips" = "Chip số";
 "Type an amount with k/tr/tỷ (50k, 1tr2, 2 tỷ) and a space — the money format (1.200.000 ₫) shows next to the cursor; press Tab to replace it." = "Gõ số tiền có k/tr/tỷ (50k, 1tr2, 2 tỷ) rồi dấu cách — dạng tiền (1.200.000 ₫) hiện cạnh con trỏ, bấm Tab để thay.";
 "Suggest typo fixes" = "Gợi ý sửa lỗi gõ sai";
-"After a word that isn’t Vietnamese or English (tpoi, nayd), a likely fix (tôi, này) shows next to the cursor; press Tab to replace it. Esc stops suggesting that word." = "Sau một từ không phải tiếng Việt hay tiếng Anh (tpoi, nayd), từ nhiều khả năng đúng (tôi, này) hiện cạnh con trỏ, bấm Tab để thay. Esc: thôi gợi ý từ đó.";
+"After a word that isn’t Vietnamese or English (tpoi, nayd, spellnig), a likely fix (tôi, này, spelling) shows next to the cursor; press Tab to replace it. Esc stops suggesting that word." = "Sau một từ không phải tiếng Việt hay tiếng Anh (tpoi, nayd, spellnig), từ nhiều khả năng đúng (tôi, này, spelling) hiện cạnh con trỏ, bấm Tab để thay. Esc: thôi gợi ý từ đó.";
+"Filter sensitive words" = "Lọc từ nhạy cảm";
+"Word suggestions and typo fixes never offer swear words — typing them yourself works as usual." = "Gợi ý từ và sửa lỗi gõ không chủ động đưa từ tục — gõ tay vẫn bình thường.";
 "Suggest tones for unaccented sentences" = "Gợi ý thêm dấu cho câu không dấu";
 "After 3+ unaccented syllables (toi di hoc), when you type . ! ? or pause after a space, the toned text (tôi đi học) shows next to the cursor; press Tab to replace it." = "Sau từ 3 âm tiết không dấu trở lên (toi di hoc), khi gõ . ! ? hoặc dừng tay sau dấu cách, câu có dấu (tôi đi học) hiện cạnh con trỏ, bấm Tab để thay.";
 "Suggest dates and times" = "Gợi ý ngày giờ";

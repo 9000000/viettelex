@@ -13,6 +13,7 @@
 #include <viettelex/text_tools.hpp>
 
 #include "caret_hint_ipc.h"
+#include "caret_hints.h"
 #include "test.h"
 #include "typo_fix.h"
 #include "word_prediction.h"
@@ -63,9 +64,9 @@ const predict::Model& model() {
 }
 
 std::string cands(const std::string& before, const std::string& typed = "", const std::string& raw = "",
-                  bool english = false) {
+                  bool english = false, bool filter = true) {
     auto r = predict::request(U(before), U(typed), english);
-    return r ? join(model().candidates(*r, U(raw))) : std::string();
+    return r ? join(model().candidates(*r, U(raw), filter)) : std::string();
 }
 
 std::vector<std::string> split(const std::string& s, char sep) {
@@ -179,20 +180,21 @@ TEST(prediction_golden_matches_macos) {
     while (std::getline(f, line)) {
         if (line.empty() || line[0] == '#') continue;
         const auto c = split(line, '\t');
-        if (c.size() != 5) {
+        // before \t typed \t raw \t english \t filter ("Lọc từ nhạy cảm") \t candidates
+        if (c.size() != 6) {
             std::printf("  bad fixture line: %s\n", line.c_str());
             ++bad;
             continue;
         }
         ++n;
-        const std::string got = cands(unescapeNl(c[0]), c[1], c[2], c[3] == "1");
-        if (got != c[4]) {
+        const std::string got = cands(unescapeNl(c[0]), c[1], c[2], c[3] == "1", c[4] != "0");
+        if (got != c[5]) {
             std::printf("  golden '%s' typed '%s': got [%s] want [%s]\n", c[0].c_str(), c[1].c_str(), got.c_str(),
-                        c[4].c_str());
+                        c[5].c_str());
             ++bad;
         }
     }
-    CHECK(n >= 60);
+    CHECK(n >= 100);
     CHECK_EQ(bad, 0);
 }
 
@@ -216,23 +218,77 @@ TEST(prediction_macos_assertions) {
         for (const auto& w : split(cands(t, t, t), '|')) CHECK(w.empty() || !predict::isSensitive(U(w)));
 }
 
-// Phil 16/10/2026: "Tên " -> "gọi" was a one-word bigram guess. Next word only with two
-// context words AND a trigram row for that pair — no bigram fallback.
-TEST(prediction_next_word_needs_two_word_trigram) {
+// Phil 16/10/2026: "Tên " -> "gọi" was a one-word bigram guess. The static LM needs two
+// context words AND a trigram row; one context word only through an iOS seed pair.
+TEST(prediction_next_word_needs_two_word_trigram_or_seed) {
     CHECK_EQ(cands("Tên "), std::string());
-    CHECK_EQ(cands("cảm "), std::string());
-    CHECK_EQ(cands("xin "), std::string());
+    CHECK(split(cands("cảm "), '|')[0] == "ơn");
+    CHECK(split(cands("xin "), '|')[0] == "lỗi");
+    CHECK(split(cands("zzqx cảm "), '|')[0] == "ơn");   // no trigram row: the seed
+    CHECK(split(cands("nguyễn "), '|')[0] == "Văn");
+    CHECK(split(cands("good ", "", "", true), '|')[0] == "morning");
+    CHECK_EQ(cands("anh ", "", "", true), std::string());  // English context: English seed only
     CHECK_EQ(cands("xong, tên "), std::string());  // the comma cuts the context
-    CHECK_EQ(cands("zzqx tên "), std::string());    // a pair without a trigram row
+    CHECK_EQ(cands("zzqx tên "), std::string());    // a pair without a trigram row, no seed
     CHECK(!cands("cảm ơn ").empty());
+    CHECK(split(cands("vãi "), '|')[0] == "cả");
+    CHECK(split(cands("vãi ", "", "", false, false), '|')[0] == "lồn");  // filter off = iOS off
+    CHECK_EQ(cands("ngon "), std::string());
     predict::Request r;
     r.prev = U("tên");
+    CHECK(predict::wantsSeedNext(r));
     CHECK(!predict::wantsNextWord(r));
     r.prev2 = U("họ");
     CHECK(predict::wantsNextWord(r));
     r.english = true;
     CHECK(!predict::wantsNextWord(r));
     CHECK(model().nextWords(U("tên"), std::nullopt).empty());
+}
+
+// English in a Vietnamese context (prefersEnglish) + the space after an accepted prediction.
+TEST(prediction_english_override_and_accept_space) {
+    CHECK(split(cands("tôi gặp pé", "pé", "pers"), '|')[0] == "person");
+    CHECK(split(cands("ưởn", "ưởn", "wron"), '|')[0] == "wrong");
+    for (const char* t : {"toi", "duoc", "cam", "thin", "chan", "thanh"})
+        CHECK(cands(std::string("anh ") + t, t, t).find("thank") == std::string::npos);
+    CHECK(!predict::prefersEnglish(U("toi"), U("toi"), {}, -1, 255));          // < 4 keys
+    CHECK(!predict::prefersEnglish(U("thin"), U("thin"), {{U("thỉnh"), 126}}, -1, 196));  // margin 70 < 80
+    CHECK(predict::prefersEnglish(U("pers"), U("pé"), {{U("pết"), 8}}, -1, 168));
+    CHECK(!predict::prefersEnglish(U("chan"), U("chan"), {{U("chán"), 150}}, -1, 255));    // a common syllable
+    CHECK(S(hints::acceptSpaceReplacement(U'.')) == ". ");
+    CHECK(S(hints::acceptSpaceReplacement(U')')) == ") ");
+    CHECK(S(hints::acceptSpaceReplacement(U'/')) == "/");
+    CHECK(hints::acceptSpaceReplacement(U'"').empty() && hints::acceptSpaceReplacement(U'a').empty());
+}
+
+TEST(prediction_seed_next_matches_swift) {
+    // seed_next.inc and App/Sources/SeedNextData.swift come from Scripts/gen-seed-next.sh:
+    // every Swift row must read back the same.
+    std::ifstream f(VTX_KB_RESOURCES "/../../../App/Sources/SeedNextData.swift");
+    CHECK(f.good());
+    std::string line;
+    bool in = false;
+    int n = 0, bad = 0;
+    while (std::getline(f, line)) {
+        if (line.find("static let packed") != std::string::npos) { in = true; continue; }
+        if (!in) continue;
+        if (line.find("\"\"\"") != std::string::npos) break;
+        const std::string row = line.substr(4);
+        const auto w = split(row, ' ');
+        std::vector<std::string> want(w.begin() + 1, w.end());
+        std::string got;
+        for (const auto& x : predict::seedNext(U(w[0]))) got += (got.empty() ? "" : "|") + S(x);
+        std::string exp;
+        for (const auto& x : want) exp += (exp.empty() ? "" : "|") + x;
+        if (got != exp) {
+            std::printf("  seed next '%s': got [%s] want [%s]\n", w[0].c_str(), got.c_str(), exp.c_str());
+            ++bad;
+        }
+        ++n;
+    }
+    CHECK(n > 200);
+    CHECK_EQ(bad, 0);
+    CHECK(predict::seedNext(U("zzqx")).empty());
 }
 
 TEST(prediction_seed_matches_swift) {
@@ -275,7 +331,14 @@ TEST(prediction_ipc_answer) {
     CHECK(jobs.predictionLoaded());
     CHECK(a == u"chào");  // one suggestion: the top-ranked word only
     m.text = packPredictText(u"cảm ", u"", u"");
-    CHECK(jobs.answer(m).empty());  // one context word: no next-word guess
+    CHECK(jobs.answer(m) == u"ơn");  // one context word: the iOS seed pair
+    m.text = packPredictText(u"Tên ", u"", u"");
+    CHECK(jobs.answer(m).empty());  // no seed: no one-word guess
+    m.text = packPredictText(u"vãi ", u"", u"");
+    CHECK(jobs.answer(m) == u"cả");  // "Lọc từ nhạy cảm" on (default)
+    jobs.setFilterSensitive(false);
+    CHECK(jobs.answer(m) == u"lồn");
+    jobs.setFilterSensitive(true);
     m.text = packPredictText(u"thành phố hồ ", u"", u"");
     CHECK(jobs.answer(m) == u"Chí");
     m.flags = kPredictEnglish;  // English context: no next-word data

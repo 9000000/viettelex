@@ -58,6 +58,9 @@ struct Settings {
     bool typoHints = true;
     bool toneHints = false;
     bool dateHints = true;
+    // "Lọc từ nhạy cảm" (iOS/macOS filterSensitive, default ON): word prediction + typo fixes
+    // never offer SensitiveWords.set. Read by VietTelex.exe (HintJobs) — the TIP only shows.
+    bool filterSensitive = true;
     // Games / fullscreen (app/core/game_logic.h, ime/core/game_ipc.h).
     //   autoOffFullscreen: VietTelex stands aside (eats no key) while an exclusive-fullscreen
     //     Direct3D app/game (or a slideshow) is in the foreground. Default ON — borderless

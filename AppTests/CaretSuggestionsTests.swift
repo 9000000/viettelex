@@ -48,6 +48,32 @@ final class CaretSuggestionsTests: XCTestCase {
         XCTAssertEqual(fix("nhuwng"), nil)          // đúng: nhưng
     }
 
+    /// Tiếng Anh (Phil 16/10/2026): không có bản sửa tiếng Việt ⇒ bản sửa tiếng Anh MỘT sửa trên
+    /// phím thô, chỉ khi phổ biến và bỏ xa ứng viên thứ hai (TypoFixEvalTests đo P/R).
+    func testTypoFixesEnglish() {
+        XCTAssertEqual(fix("spellnig"), "spelling")   // đảo hai phím, từ dài: ngưỡng tần suất thấp hơn
+        XCTAssertEqual(fix("Spellnig"), "Spelling")
+        XCTAssertEqual(fix("teh"), "the")
+        XCTAssertEqual(fix("becuase"), "because")
+        XCTAssertEqual(fix("recieve"), "receive")
+        XCTAssertEqual(fix("peopel"), "people")
+        XCTAssertEqual(fix("goverment"), "government") // sót phím (từ ≥ 5 chữ)
+        XCTAssertNil(fix("hte"))                       // the 255 vs he 245 (bỏ phím): quá sát
+        XCTAssertNil(fix("kubectl"))                   // không gần từ nào
+        XCTAssertEqual(fix("tpoi"), "tôi", "tiếng Việt vẫn đi trước")
+    }
+
+    /// "Lọc từ nhạy cảm" bật ⇒ bản sửa là từ tục thì bỏ lượt; tắt ⇒ như mọi từ.
+    func testTypoFixRespectsSensitiveFilter() {
+        func c(_ on: Bool) -> String? {
+            TypoFixLogic.correction(raw: "shjt", compose: { $0 }, frequency: { _ in nil }, hasCompletion: { _ in false },
+                                    isKnown: { _ in false }, englishFrequency: { $0 == "shit" ? 200 : nil },
+                                    filterSensitive: on)
+        }
+        XCTAssertNil(c(true))
+        XCTAssertEqual(c(false), "shit")
+    }
+
     func testTypoLeavesKnownWordsAlone() {
         XCTAssertNil(fix("github"))                 // tiếng Anh
         XCTAssertNil(fix("hello"))

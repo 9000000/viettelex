@@ -195,6 +195,22 @@ std::optional<Suggestion> predictSuggestion(const std::u32string& before, const 
 bool hintStillValid(const Suggestion& s, const std::u32string& before);
 // Esc on a completion mutes it while the typed word still starts with the declined one.
 bool predictMuted(const std::u32string& typed, const std::u32string& declined);
+// The space WE inserted when a prediction was accepted ("được␣") and the very next key
+// (macOS PredictionLogic.acceptSpaceReplacement — iOS AutoSpace rules): . , ? ! ; : and the
+// closing ) ] } ” ’ » › -> that key + a space ("được. "); "/" -> "/" alone; anything else ->
+// "" (keep the space, the key goes on as usual). Straight quotes are kept (they usually open
+// the next word).
+std::u32string acceptSpaceReplacement(char32_t key);
+// State after an accepted prediction, consumed by the very next key.
+struct AcceptedSpace {
+    std::u32string inserted;  // "được " (what Tab inserted)
+    std::u32string carried;   // ". " after the punctuation moved our space (next space swallowed)
+    bool empty() const { return inserted.empty() && carried.empty(); }
+};
+enum class AcceptSpaceAct : uint8_t { Pass, Replace, Swallow };
+// The next key `ch` (0 = not a character key): what to do, `expect` = the screen tail to check
+// first (re-read), `replacement` = what replaces the last character (our space). Clears `st`.
+AcceptSpaceAct acceptSpaceKey(AcceptedSpace& st, char32_t ch, std::u32string& expect, std::u32string& replacement);
 
 // ---------------------------------------------------------------- key stream -> trigger
 enum class TriggerKind : uint8_t { None, Math, Number, Date, Typo, Tones };

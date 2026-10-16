@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -169,6 +170,9 @@ void testSettings() {
     Settings d;
     CHECK(!d.doubleSpacePeriod && !d.autoCapitalize && !d.smartPunctuation && !d.wordPrediction);  // all OFF
     CHECK_EQ(d.quoteStyle, std::string("curly"));
+    CHECK(d.filterSensitive);  // "Lọc từ nhạy cảm": ON like iOS / macOS
+    CHECK(!parseConfig("[general]\nfilter_sensitive = false\n").filterSensitive);
+    CHECK(!parseConfig(serializeConfig(parseConfig("[general]\nfilter_sensitive = false\n"))).filterSensitive);
     Settings p = parseConfig("[general]\ndouble_space_period = true\nauto_capitalize = true\n"
                              "smart_punctuation = true\nword_prediction = true\nquote_style = \"guillemets\"\n");
     CHECK(p.doubleSpacePeriod && p.autoCapitalize && p.smartPunctuation && p.wordPrediction);
@@ -616,6 +620,56 @@ void testPredictionSession() {
     CHECK(sur.reqs.empty());  // Surrounding without edits: cannot replace the word on screen
 }
 
+// Tab on a prediction inserts "word␣"; the very next key . , ? ! ; : ) attaches to the word and
+// the space moves after it, the space after that is swallowed (WordPrediction.swift
+// acceptSpaceReplacement — ControllerHarnessTests on macOS).
+void testAcceptedSpaceSession() {
+    CHECK_EQ(acceptSpaceReplacement('.'), std::string(". "));
+    CHECK_EQ(acceptSpaceReplacement(','), std::string(", "));
+    CHECK_EQ(acceptSpaceReplacement(')'), std::string(") "));
+    CHECK_EQ(acceptSpaceReplacement(0x201D), std::string("\xe2\x80\x9d "));
+    CHECK_EQ(acceptSpaceReplacement('/'), std::string("/"));
+    CHECK(acceptSpaceReplacement('"').empty() && acceptSpaceReplacement('a').empty() &&
+          acceptSpaceReplacement(' ').empty() && acceptSpaceReplacement('(').empty());
+    auto accepted = [](Settings st) {
+        auto r = std::make_unique<Rig>(st, DisplayMode::Surrounding);
+        type(r->s, r->m, "dduw");
+        r->answer(P("được", "đư"));
+        CHECK(press(r->s, r->m, ks::Tab, '\t'));
+        CHECK_EQ(r->m.doc, std::string("được "));
+        return r;
+    };
+    auto a = accepted(with(false, true, false, true));
+    type(a->s, a->m, ".");
+    CHECK_EQ(a->m.doc, std::string("được. "));
+    type(a->s, a->m, " ");
+    CHECK_EQ(a->m.doc, std::string("được. "));  // not two spaces
+    type(a->s, a->m, "ban");
+    CHECK_EQ(a->m.doc, std::string("được. Ban"));  // auto-capitalize after the moved period
+    auto b = accepted(with(false, false, false, true));
+    type(b->s, b->m, ",ok");
+    CHECK_EQ(b->m.doc, std::string("được, ok"));
+    auto c = accepted(with(false, false, false, true));
+    type(c->s, c->m, "a.");
+    CHECK_EQ(c->m.doc, std::string("được a."));  // only the very next key
+    auto d = accepted(with(false, false, false, true));
+    type(d->s, d->m, "/");
+    CHECK_EQ(d->m.doc, std::string("được/"));
+    auto e = accepted(with(true, false, false, true));
+    type(e->s, e->m, " ");
+    CHECK_EQ(e->m.doc, std::string("được. "));  // our space = the first of a double-space period
+    auto f = accepted(with(false, false, false, true));
+    f->m.doc += "x";  // the app changed the text: read back, untouched
+    type(f->s, f->m, ".");
+    CHECK_EQ(f->m.doc, std::string("được x."));
+    // "Lọc từ nhạy cảm" off: sent to the helper (absent = on).
+    Settings off = with(false, false, false, true);
+    off.filterSensitive = false;
+    Rig o(off);
+    type(o.s, o.m, "dduw");
+    CHECK_EQ(o.last(), req({"predict", "đư", "đư", "dduw", "0", "0"}));
+}
+
 // MARK: - real helper (viettelex-text-tool --serve)
 
 void testHelperEndToEnd() {
@@ -631,11 +685,18 @@ void testHelperEndToEnd() {
         mainQueue.push_back(std::move(f));
     });
     std::string ans;
-    // Next word: only two context words with a trigram row ("Tên " -> nothing, Phil 16/10/2026).
+    // Next word: a trigram row for two context words, or an iOS seed pair for one ("cảm " ->
+    // ơn); no statistical one-word guess ("Tên " -> nothing, Phil 16/10/2026).
     CHECK(svc.query(req({"predict", "Tên ", "", "", "0"}), ans));
     CHECK_EQ(ans, std::string("-"));
     CHECK(svc.query(req({"predict", "cảm ", "", "", "0"}), ans));
-    CHECK_EQ(ans, std::string("-"));
+    CHECK_EQ(ans, std::string("predict\tơn\t\tơn "));
+    CHECK(svc.query(req({"predict", "vãi ", "", "", "0", "0"}), ans));  // filter off
+    CHECK_EQ(ans, std::string("predict\tlồn\t\tlồn "));
+    CHECK(svc.query(req({"predict", "vãi ", "", "", "0"}), ans));
+    CHECK_EQ(ans, std::string("predict\tcả\t\tcả "));
+    CHECK(svc.query(req({"typo", "spellnig ", "spellnig", " ", "spellnig", "1010000110"}), ans));
+    CHECK_EQ(ans, std::string("typo\tspelling\tspellnig \tspelling "));
     CHECK(svc.query(req({"predict", "thành phố hồ ", "", "", "0"}), ans));
     CHECK_EQ(ans, std::string("predict\tChí\t\tChí "));
     CHECK(svc.query(req({"predict", "xin ch", "ch", "ch", "0"}), ans));
@@ -673,7 +734,7 @@ void testHelperEndToEnd() {
     });
     type(s, m, "teen ");
     drain(1500);
-    CHECK(!s.hint());  // "Tên ": one context word, no guess
+    CHECK(!s.hint());  // "Tên ": one context word, no seed: no guess
     type(s, m, "camr own ");
     drain(150);
     CHECK(!s.hint());  // still inside the 300 ms pause
@@ -716,6 +777,7 @@ int main() {
     testCapitalizeSession();
     testSmartPunctuationSession();
     testPredictionSession();
+    testAcceptedSpaceSession();
     testHelperEndToEnd();
     std::printf("auto text tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;

@@ -31,6 +31,7 @@ final class MacSyncStore: SyncLocal {
         Setting(canonical: "teencode", local: "teencode"),
         Setting(canonical: "autoRestore", local: "autoRestore"),
         Setting(canonical: "liveSpellCheck", local: "liveSpellCheck"),
+        Setting(canonical: "filterSensitive", local: "filterSensitive"),   // "Lọc từ nhạy cảm"
     ]
     static let managed = Set(settings.map(\.canonical))
     /// Setting dạng chuỗi, giá trị hợp lệ = `allowed` (cùng spec BackupSettings iOS — giá trị

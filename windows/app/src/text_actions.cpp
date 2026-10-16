@@ -111,6 +111,7 @@ void onHintWork() {
     if (!g_hintWork.pending) return;
     g_hintWork.pending = false;
     static HintJobs jobs(languageData());
+    jobs.setFilterSensitive(g_settings.filterSensitive);
     HintMessage reply;
     reply.request = g_hintWork.msg.request;
     reply.job = g_hintWork.msg.job;

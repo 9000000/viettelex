@@ -236,6 +236,11 @@ private:
     std::u16string hintShownBefore_;    // tail of the screen when shown (caret moved -> hide)
     RECT hintCaret_ = {0, 0, 0, 0};
     int hintKeyAct_ = -1;               // hints::KeyAction decided in OnTestKeyDown
+    hints::AcceptedSpace acceptedSpace_;  // after Tab on a prediction: the next key decides
+    int acceptAct_ = -1;                // hints::AcceptSpaceAct decided in OnTestKeyDown
+    std::u32string acceptExpect_, acceptRep_;
+    bool acceptSpaceTest(const KeyInput& k);
+    bool acceptSpaceApply(ITfContext* ctx);
     hints::Rejected rejectedTypos_;
     std::u32string declinedTones_;
     // word prediction (Settings::systemTextPrediction = Windows' setting; off: one bool read)

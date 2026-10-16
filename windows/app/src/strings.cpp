@@ -199,10 +199,10 @@ const Pair kStrings[] = {
      L"Type an amount with k/tr/tỷ (50k, 1tr2, 2 tỷ) and a space — the money format (1.200.000 ₫) shows next to the "
      L"cursor; press Tab to replace it."},
     {L"Gợi ý sửa lỗi gõ sai", L"Suggest typo fixes"},
-    {L"Sau một từ không phải tiếng Việt hay tiếng Anh (tpoi, nayd), từ nhiều khả năng đúng (tôi, này) hiện cạnh con "
-     L"trỏ, bấm Tab để thay. Esc: thôi gợi ý từ đó.",
-     L"After a word that isn’t Vietnamese or English (tpoi, nayd), a likely fix (tôi, này) shows next to the cursor; "
-     L"press Tab to replace it. Esc stops suggesting that word."},
+    {L"Sau một từ không phải tiếng Việt hay tiếng Anh (tpoi, nayd, spellnig), từ nhiều khả năng đúng (tôi, này, "
+     L"spelling) hiện cạnh con trỏ, bấm Tab để thay. Esc: thôi gợi ý từ đó.",
+     L"After a word that isn’t Vietnamese or English (tpoi, nayd, spellnig), a likely fix (tôi, này, spelling) shows "
+     L"next to the cursor; press Tab to replace it. Esc stops suggesting that word."},
     {L"Gợi ý thêm dấu cho câu không dấu", L"Suggest tones for unaccented sentences"},
     {L"Sau từ 3 âm tiết không dấu trở lên (toi di hoc), khi gõ . ! ? hoặc dừng tay sau dấu cách, câu có dấu (tôi đi "
      L"học) hiện cạnh con trỏ, bấm Tab để thay.",
@@ -214,6 +214,9 @@ const Pair kStrings[] = {
      L"Type “hôm nay”, “ngày mai”, “hôm qua” or “bây giờ” (after an English word: today, tomorrow, yesterday, now) "
      L"and a space — the date (28/09/2026) or time (21:35) shows next to the cursor; press Tab to replace the words "
      L"with it."},
+    {L"Lọc từ nhạy cảm", L"Filter sensitive words"},
+    {L"Gợi ý từ và sửa lỗi gõ không chủ động đưa từ tục — gõ tay vẫn bình thường.",
+     L"Word suggestions and typo fixes never offer swear words — typing them yourself works as usual."},
     {L"Gạch đỏ âm tiết sai chính tả khi gõ", L"Underline misspelled syllables while typing"},
     {L"Từ đang gõ được gạch đỏ khi nó không thể thành âm tiết tiếng Việt (đc, hópng, tòc). Chỉ ở ứng dụng dùng "
      L"chế độ khung soạn (composition); từ giữ nguyên phím gõ hoặc sẽ tự khôi phục (tiếng Anh) không bị gạch.",

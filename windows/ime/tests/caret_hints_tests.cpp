@@ -534,6 +534,33 @@ TEST(predict_muting_and_apps) {
     CHECK(!predictionAllowedForApp("conhost.exe"));
 }
 
+// Tab on a prediction inserts "word␣"; the very next key decides (= macOS ControllerHarnessTests).
+TEST(predict_accepted_space_next_key) {
+    CHECK(acceptSpaceReplacement(U'.') == U". ");
+    CHECK(acceptSpaceReplacement(U',') == U", ");
+    CHECK(acceptSpaceReplacement(0x201D) == std::u32string(1, 0x201D) + U" ");
+    CHECK(acceptSpaceReplacement(U'/') == U"/");
+    CHECK(acceptSpaceReplacement(U'"').empty() && acceptSpaceReplacement(U'a').empty() &&
+          acceptSpaceReplacement(U' ').empty() && acceptSpaceReplacement(U'(').empty());
+    AcceptedSpace st;
+    st.inserted = U("được ");
+    std::u32string expect, rep;
+    CHECK(acceptSpaceKey(st, U'.', expect, rep) == AcceptSpaceAct::Replace);
+    CHECK(expect == U("được ") && rep == U". " && st.empty());
+    st.carried = U". ";
+    CHECK(acceptSpaceKey(st, U' ', expect, rep) == AcceptSpaceAct::Swallow);
+    CHECK(expect == U". " && st.empty());
+    st.carried = U". ";
+    CHECK(acceptSpaceKey(st, U'b', expect, rep) == AcceptSpaceAct::Pass);  // only the next key
+    st.inserted = U("được ");
+    CHECK(acceptSpaceKey(st, U'a', expect, rep) == AcceptSpaceAct::Pass);
+    CHECK(st.empty());
+    st.inserted = U("được ");
+    CHECK(acceptSpaceKey(st, 0, expect, rep) == AcceptSpaceAct::Pass);   // Enter, arrows, ⌫…
+    st.inserted = U("được ");
+    CHECK(acceptSpaceKey(st, U' ', expect, rep) == AcceptSpaceAct::Pass);
+}
+
 TEST(predict_ipc_payload) {
     std::u16string b, t, r;
     CHECK(unpackPredictText(packPredictText(u"tôi đư", u"đư", u"dduw"), b, t, r));

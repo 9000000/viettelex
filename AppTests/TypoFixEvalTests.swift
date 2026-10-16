@@ -132,6 +132,7 @@ final class TypoFixEvalTests: XCTestCase {
     private struct Rec {
         let typed: String
         let cands: [TypoFixLogic.Cand]?     // mọi loại sửa; nil = không qua cổng
+        var en: [TypoFixLogic.Cand] = []    // ứng viên tiếng Anh (phím thô, enlexicon)
         let ok: Bool
         let want: String
     }
@@ -152,7 +153,8 @@ final class TypoFixEvalTests: XCTestCase {
             return Rec(typed: typed, cands: nil, ok: ok, want: want)
         }
         let all = TypoFixLogic.candidates(lower, compose: compose, frequency: freq, hasCompletion: hasC)
-        return Rec(typed: typed, cands: all, ok: ok, want: want)
+        let en = TypoFixLogic.englishCandidates(lower, frequency: { EnglishLite.frequency(of: $0) })
+        return Rec(typed: typed, cands: all, en: en, ok: ok, want: want)
     }
 
     private static func collectVn(_ sents: [[String]], rate: Double, seed: UInt64) -> [Rec] {
@@ -218,17 +220,22 @@ final class TypoFixEvalTests: XCTestCase {
         }
     }
 
-    private static func decide(_ r: Rec, _ p: TypoFixLogic.Params) -> TypoFixLogic.Cand? {
+    /// = TypoFixLogic.correction: bản sửa tiếng Việt, không có thì tiếng Anh (`ep` nil = tắt).
+    private static func decide(_ r: Rec, _ p: TypoFixLogic.Params,
+                               _ ep: TypoFixLogic.EnglishParams? = TypoFixLogic.englishDefaults) -> TypoFixLogic.Cand? {
         guard r.typed.count >= p.minLen, let c = r.cands else { return nil }
-        return TypoFixLogic.pick(c, p: p)
+        if let v = TypoFixLogic.pick(c, p: p) { return v }
+        guard let ep else { return nil }
+        return TypoFixLogic.englishPick(r.en, rivals: c, typedLen: r.typed.count, p: ep)
     }
 
-    private static func score(_ recs: [Rec], _ p: TypoFixLogic.Params, dump: Bool = false) -> Score {
+    private static func score(_ recs: [Rec], _ p: TypoFixLogic.Params, dump: Bool = false,
+                              english ep: TypoFixLogic.EnglishParams? = TypoFixLogic.englishDefaults) -> Score {
         var s = Score()
         for r in recs {
             s.words += 1
             if !r.ok { s.err += 1 }
-            guard let c = decide(r, p) else { continue }
+            guard let c = decide(r, p, ep) else { continue }
             s.fix += 1
             if r.ok { s.falseFix += 1 } else if SyllableLM.normalize(c.word) == r.want { s.good += 1 } else { s.wrong += 1 }
             if dump, r.ok || SyllableLM.normalize(c.word) != r.want {
@@ -256,6 +263,76 @@ final class TypoFixEvalTests: XCTestCase {
             if let log { print("\(log) giữ-nguyên \(name) gõ-đúng | \(a)"); print("\(log) giữ-nguyên \(name) lỗi-20% | \(b)") }
         }
         return tot
+    }
+
+    // MARK: Tiếng Anh ("spellnig" → spelling)
+
+    /// Câu Anh Tatoeba (iOS/KeyboardTests/Fixtures/swipe-lang-sentences.txt — độc lập với
+    /// enlexicon: Google Books/Wikipedia), tập `set` = dev | test → từ chữ thường a–z.
+    private static func englishSentenceWords(_ set: String) -> [String] {
+        let url = root.appendingPathComponent("iOS/KeyboardTests/Fixtures/swipe-lang-sentences.txt")
+        let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        var out: [String] = []
+        for line in text.split(separator: "\n") where !line.hasPrefix("#") {
+            let f = line.split(separator: "\t", omittingEmptySubsequences: false)
+            guard f.count >= 3, f[0] == set, f[1] == "en" else { continue }
+            for w in f[2].lowercased().split(whereSeparator: { !($0.isASCII && $0.isLetter) }) { out.append(String(w)) }
+        }
+        return out
+    }
+
+    /// Tập GIỮ NGUYÊN cho tiếng Anh: tên riêng, tiếng lóng/chat, mã/thuật ngữ, tên Việt không dấu.
+    private static let keepEnglish = ["kubectl", "nginx", "json", "yaml", "npm", "webpack", "async", "stdout", "sudo",
+        "chmod", "lol", "lmao", "btw", "idk", "tbh", "gonna", "wanna", "gotta", "yall", "bruh", "covid", "elon",
+        "musk", "biden", "obama", "airpods", "reddit", "linkedin", "whatsapp", "telegram", "lazada", "vinfast",
+        "phuc", "huong", "xinh", "ngoc", "dung", "tuan", "quang", "giang", "trang", "hoang", "vinh", "nghia",
+        "thuy", "oanh", "repo", "config", "localhost", "dockerfile", "readme", "todo", "fixme", "impl", "enum",
+        "struct", "func", "bool", "utf", "ascii", "jira", "figma", "notion", "slack", "zoom", "teams", "gmail",
+        "outlook", "excel", "powerpoint", "onedrive", "icloud", "hihi", "hehe", "haha", "huhu", "kaka", "keke",
+        "okie", "oki", "okela", "ukm", "uk", "uh", "um", "hmm", "yep", "nope", "yay", "wow"] + oov
+
+    private static func englishSets(_ set: String) -> (en: [Rec], keep: [Rec]) {
+        let words = englishSentenceWords(set)
+        let en = collectKeep(words, rate: 0.15, seed: 1) + collectKeep(words, rate: 0.15, seed: 2)
+        let keep4 = Array(repeating: keepEnglish, count: 4).flatMap { $0 }
+        return (en, collectKeep(keep4, rate: 0, seed: 5) + collectKeep(keep4, rate: 0.2, seed: 6))
+    }
+
+    /// Hồi quy tiếng Anh trên TEST: câu Anh lỗi 15% (2 seed) — P ≥ 95%, R ≥ 30% (trước: ~0%);
+    /// câu Việt có bật tiếng Anh vẫn P ≥ 97%; tập giữ nguyên: số gợi ý oan có trần.
+    /// Đo 16/10/2026 (TEST): tiếng Anh P 97.5% R 38.7% (không tiếng Anh: P 41.2% R 0.7%);
+    /// câu Việt P 99.6% R 25.1% (không tiếng Anh: 99.8% / 25.0%); giữ nguyên: oan 23 / 1096 (7 có từ
+    /// trước — đường tiếng Việt; tiếng Anh: "sdt" → set, "bool" → book).
+    func testEnglishPrecisionOnHeldout() throws {
+        let (en, keep) = Self.englishSets("test")
+        try XCTSkipIf(en.isEmpty, "không thấy swipe-lang-sentences.txt")
+        let base = Self.score(en, TypoFixLogic.defaults, english: nil)
+        let e = Self.score(en, TypoFixLogic.defaults), k = Self.score(keep, TypoFixLogic.defaults)
+        var vn = Score()
+        for sd: UInt64 in [1, 2] { vn.add(Self.score(Self.collectVn(Self.test, rate: 0.15, seed: sd), TypoFixLogic.defaults)) }
+        print("TYPOFIX EN TEST | không tiếng Anh: \(base)\nTYPOFIX EN TEST | tiếng Anh: \(e)\n"
+              + "TYPOFIX EN TEST | giữ nguyên: \(k)\nTYPOFIX EN TEST | câu Việt: \(vn)")
+        XCTAssertGreaterThanOrEqual(e.precision, 0.95, "\(e)")
+        XCTAssertGreaterThanOrEqual(e.recall, 0.30, "\(e)")
+        XCTAssertGreaterThanOrEqual(vn.precision, 0.97, "\(vn)")
+        XCTAssertLessThanOrEqual(k.falseFix, 30, "\(k)")
+    }
+
+    /// Lưới ngưỡng tiếng Anh trên DEV (chỉ khi TYPOFIX_EVAL=1).
+    func testEnglishTuneGridOnDev() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["TYPOFIX_EVAL"] == nil, "TYPOFIX_EVAL=1 để dò")
+        let (en, keep) = Self.englishSets("dev")
+        var vn: [Rec] = []
+        for sd: UInt64 in [1, 2] { vn += Self.collectVn(Self.dev, rate: 0.15, seed: sd) }
+        for minFreq in [120, 140, 160] { for margin in [40, 60] { for ll in [6, 7, 8, 99] { for lf in [40, 60, 100] {
+            let ep = TypoFixLogic.EnglishParams(minFreq: minFreq, margin: margin, insDelMinLen: 5,
+                                                longMinLen: ll, longMinFreq: lf)
+            let a = Self.score(en, TypoFixLogic.defaults, english: ep), k = Self.score(keep, TypoFixLogic.defaults, english: ep)
+            let v = Self.score(vn, TypoFixLogic.defaults, english: ep)
+            print(String(format: "TUNE-EN minFreq=%d margin=%d long≥%d:%d | EN P=%.1f%% R=%.1f%% | giữ oan %d nhầm %d | VN P=%.1f%% R=%.1f%%",
+                         minFreq, margin, ll, lf, 100 * a.precision, 100 * a.recall, k.falseFix, k.wrong,
+                         100 * v.precision, 100 * v.recall))
+        } } } }
     }
 
     // MARK: Test

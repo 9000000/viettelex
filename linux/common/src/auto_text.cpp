@@ -226,5 +226,17 @@ bool nextWordWorthAsking(const std::string &before) {
     return v.size() >= 2 && v.back() == ' ' && isLetter(v[v.size() - 2]);
 }
 
+std::string acceptSpaceReplacement(uint32_t ch) {
+    switch (ch) {
+    case '.': case ',': case '?': case '!': case ';': case ':':      // AutoSpace.triggers
+    case ')': case ']': case '}': case 0x201D: case 0x2019: case 0xBB: case 0x203A:
+        return encode(std::vector<uint32_t>{ch}, 0, 1) + " ";
+    case '/':
+        return "/";
+    default:
+        return std::string();
+    }
+}
+
 }  // namespace autotext
 }  // namespace viettelex

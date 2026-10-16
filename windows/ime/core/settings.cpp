@@ -34,6 +34,7 @@ const BoolKey kBoolKeys[] = {
     {"autoOffFullscreen", &Settings::autoOffFullscreen},
     {"gameMode", &Settings::gameMode},
     {"systemTextPrediction", &Settings::systemTextPrediction},
+    {"filterSensitive", &Settings::filterSensitive},
 };
 constexpr size_t kBoolCount = sizeof(kBoolKeys) / sizeof(kBoolKeys[0]);
 constexpr uint32_t kMagic = 0x53585456;  // "VTXS"

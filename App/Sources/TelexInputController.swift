@@ -343,6 +343,8 @@ final class TelexInputController: IMKInputController {
                 CaretHint.shared.dismiss()
             }
         }
+        // Dấu cách mình chèn khi nhận gợi ý từ: phím ngay sau quyết định số phận nó.
+        if acceptedSpace != nil || carriedSpace != nil, let r = handleAcceptedSpace(event, client) { return r }
         let mathTrigger = CaretHint.shared.mathEnabled
             && MathHintLogic.isTrigger(characters: event.characters, modifiers: event.modifierFlags)
         defer { if mathTrigger { CaretHint.shared.afterEquals(client: client, controller: self) } }
@@ -2214,9 +2216,52 @@ final class TelexInputController: IMKInputController {
         if s.kind == .predict { afterPredictionApplied(s, client) }
     }
 
+    /// Chữ vừa chèn khi nhận gợi ý từ ("được ") — sống tới PHÍM KẾ (PredictionLogic.AcceptSpace).
+    private var acceptedSpace: String?
+    /// Dấu câu vừa dời dấu cách ra sau ("." + " ") — phím cách kế bị nuốt (không thành 2 dấu cách).
+    private var carriedSpace: String?
+
+    /// Phím ngay sau khi nhận gợi ý từ. nil = xử lý phím như thường; true = đã xử lý (nuốt).
+    /// ĐỌC LẠI màn hình trước khi gỡ dấu cách (lệch ⇒ không đụng gì).
+    private func handleAcceptedSpace(_ event: NSEvent, _ client: IMKTextInput) -> Bool? {
+        let inserted = acceptedSpace, carried = carriedSpace
+        acceptedSpace = nil; carriedSpace = nil
+        guard engine.isEmpty, event.modifierFlags.intersection([.command, .control]).isEmpty,
+              let ch = event.characters, ch.count == 1 else { return nil }
+        func screenEnds(with tail: String) -> Int? {
+            let sel = client.selectedRange()
+            let n = (tail as NSString).length
+            guard sel.location != NSNotFound, sel.length == 0, sel.location >= n,
+                  client.attributedSubstring(from: NSRange(location: sel.location - n, length: n))?.string == tail
+            else { return nil }
+            return sel.location
+        }
+        if let c = carried {
+            guard ch == " ", screenEnds(with: c) != nil else { return nil }
+            logDecision("accept-space: space after carried punctuation swallowed")
+            return true
+        }
+        guard let ins = inserted, let out = PredictionLogic.acceptSpaceReplacement(ch),
+              Self.replacesCommittedText(AppState.shared.currentBundleID) else { return nil }
+        guard let caret = screenEnds(with: ins) else {
+            logDecision("accept-space: screen disagrees → plain key")
+            return nil
+        }
+        client.insertText(out, replacementRange: NSRange(location: caret - 1, length: 1))
+        shortcutTail.backspace()
+        shortcutTail.append(out)
+        engine.reset()
+        if out.hasSuffix(" ") { carriedSpace = String(out.prefix(1)) + " " }
+        logDecision("accept-space: punctuation attached, space " + (out.hasSuffix(" ") ? "moved after it" : "removed"))
+        return true
+    }
+
     /// Gợi ý từ vừa áp dụng (từ + dấu cách): ngữ cảnh tiếng Anh theo từ vừa chèn, rồi mời từ
     /// kế tiếp như sau một dấu cách gõ tay.
     private func afterPredictionApplied(_ s: CaretSuggestion, _ client: IMKTextInput) {
+        acceptedSpace = s.insert.hasSuffix(" ") ? s.insert : nil
+        // Dấu cách tự thêm tính là dấu cách thứ nhất của "chấm câu nhấn đúp" (cài đặt macOS).
+        if acceptedSpace != nil, SystemAutoTextSettings.shared.period { periodSpaceNs = DispatchTime.now().uptimeNanoseconds }
         let w = s.display.lowercased()
         let english = !VNSuggest.contains(w) && TypoFixLogic.isEnglish(w)
         engine.noteExternalWord(w, english: english)
@@ -2364,6 +2409,7 @@ final class TelexInputController: IMKInputController {
                 // con trỏ nên cụm gõ tắt được giữ (tap đánh dấu trong userInfo).
                 let keepTail = (note.userInfo?[TerminalTapController.keepsShortcutTailKey] as? Bool) == true
                 self?.dropComposition(cause: "resetComposition-notification", keepShortcutTail: keepTail)
+                self?.acceptedSpace = nil; self?.carriedSpace = nil   // click / điều hướng: hết hiệu lực
                 self?.fieldVerified = false
                 self?.fieldForcedMarked = false
                 self?.fieldVerifyStrikes = 0
@@ -2419,6 +2465,7 @@ final class TelexInputController: IMKInputController {
         CaretHint.shared.dismiss()
         if Self.activeController === self { Self.activeController = nil }
         if let obs = resetObserver { NotificationCenter.default.removeObserver(obs); resetObserver = nil }
+        acceptedSpace = nil; carriedSpace = nil
         // Input source switched away from VietTelex (or focus lost): the tap must not
         // transform keys, so the user really types English in terminals. BUT with
         // per-document input switching, IMK can call this on a stale client AFTER the

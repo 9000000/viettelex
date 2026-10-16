@@ -53,6 +53,9 @@ class ParseTests(unittest.TestCase):
         for k in ("double_space_period", "auto_capitalize", "smart_punctuation", "word_prediction"):
             self.assertIs(n["general"][k], False, k)
         self.assertEqual(n["general"]["quote_style"], "curly")
+        self.assertIs(n["general"]["filter_sensitive"], True, "Lọc từ nhạy cảm: bật như iOS/macOS")
+        off = config.normalize(config.parse("[general]\nfilter_sensitive = false\n"))
+        self.assertIs(off["general"]["filter_sensitive"], False)
         out = config.update_text("[general]\nmath_results = true\n",
                                  {("general", "word_prediction"): True, ("general", "quote_style"): "low9"})
         self.assertIn("word_prediction = true", out)
