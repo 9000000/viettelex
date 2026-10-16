@@ -74,8 +74,8 @@
     "notes": "Văn bản tự động (dấu chấm khi gõ hai dấu cách, viết hoa đầu câu, ngoặc cong), gợi ý từ + học từ bạn gõ, sửa lỗi gõ tiếng Anh, lọc từ nhạy cảm."
   },
   "android": {
-    "version": "1.5.8",
-    "apk": "https://github.com/ptrinh/viettelex/releases/download/android-v1.5.8/VietTelex-android-1.5.8.apk",
+    "version": "1.5.9",
+    "apk": "https://github.com/ptrinh/viettelex/releases/download/android-v1.5.9/VietTelex-android-1.5.9.apk",
     "play": "https://play.google.com/store/apps/details?id=com.viettelex.android"
   }
 }
