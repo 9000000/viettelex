@@ -200,6 +200,8 @@ final class KeyboardViewController: UIInputViewController {
     /// Test: tính lại thanh gợi ý (đường thật của mỗi phím).
     func debugUpdateSuggestions() { updateSuggestions() }
     func debugViewDidAppear() { viewDidAppear(false) }
+    /// Test: số lượt updateSuggestions (mỗi lượt = tính lại cả thanh gợi ý trên main).
+    var debugSuggestionPasses = 0
     var debugClipboardButtonVisible: Bool { keyboard.debugClipboardButtonVisible }
     #endif
 
@@ -230,6 +232,17 @@ final class KeyboardViewController: UIInputViewController {
         }
         #endif
         super.viewWillAppear(animated)
+        appearance.willAppear()
+        configureForAppearance()
+    }
+
+    /// Chuỗi callback hiện/ẩn (AppearanceCycle): chặn xé muộn + bù willAppear bị nuốt.
+    private var appearance = AppearanceCycle()
+
+    /// Toàn bộ cấu hình của một lần hiện (đọc cài đặt, trait ô, thanh gợi ý…). Chạy ở
+    /// viewWillAppear; viewDidAppear chạy lại nếu lần hiện này chưa được cấu hình (willAppear
+    /// không tới) hoặc cây view đã bị xé (didDisappear muộn) — Zalo vừa mở lại sau khi kill.
+    private func configureForAppearance() {
         // Cùng controller hiện lại sau viewDidDisappear (cây view đã xé) → dựng mới, rồi phần
         // dưới áp lại toàn bộ cấu hình như lần hiện đầu.
         if keyboard.isTornDown { installKeyboard() }
@@ -393,6 +406,7 @@ final class KeyboardViewController: UIInputViewController {
         }
         #endif
         super.viewWillDisappear(animated)
+        appearance.willDisappear()
         pasteOnce.ended()   // ẩn bàn phím: lời mời dán đang hiện coi như đã bỏ qua
         closeClipboardPanel()
         learnSettledSwipe()
@@ -438,6 +452,12 @@ final class KeyboardViewController: UIInputViewController {
     /// UIInputView cũ mãi ⇒ không xé thì mỗi lần hiện rò ~1,8 MB).
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        // didDisappear MUỘN của lần ẩn đã bị một lần hiện chen ngang ⇒ KHÔNG xé (bàn phím đang
+        // hiện sẽ rỗng tới lần mở sau).
+        guard appearance.didDisappear() else {
+            TouchLog.write("appear: late didDisappear while showing → keep view")
+            return
+        }
         swipeSuggest = nil
         addTonesCache = nil
         tearDownKeyboard()
@@ -530,7 +550,12 @@ final class KeyboardViewController: UIInputViewController {
     /// viewWillAppear). Host đổi ô trong cùng app không gọi viewWillAppear → gọi
     /// thêm ở textDidChange / selectionDidChange. KHÔNG đọc documentIdentifier.
     private var traitsRetryPending = false
-    private func refreshFieldTraits(force: Bool = false) {
+    private func refreshFieldTraits(force forced: Bool = false) {
+        // View chưa được áp cấu hình ô (KeyboardView mới dựng: thanh tắt, trong khi cache
+        // controller mặc định "bật") ⇒ áp đầy đủ như lần hiện. Trước đây lần áp bắt buộc bị lỡ
+        // (willAppear không tới / đọc trait lỗi) thì trait y hệt ⇒ không bao giờ bật thanh gợi
+        // ý lại — mất cả phiên (Zalo mở lại sau khi kill, 16/10/2026).
+        let force = forced || (keyboard.map { $0.suggestionsShownState != suggestionsActive } ?? false)
         let p = textDocumentProxy
         // iOS 27.0: đọc trait lúc proxy chưa sẵn sàng làm UIKit NÉM NSException
         // (_controllerState unrecognized selector) → bàn phím chết. Bắt lỗi, giữ trait
@@ -620,7 +645,8 @@ final class KeyboardViewController: UIInputViewController {
     /// Đối chiếu từ đang gõ với chữ thật trước con trỏ (CompositionSync.verdict):
     /// còn khớp → GIỮ (host gán lại text mỗi phím, textWillChange đến muộn); lệch /
     /// không biết (nil) → reset như trước.
-    private func syncComposition(_ event: String) {
+    @discardableResult
+    private func syncComposition(_ event: String) -> CompositionSync.Verdict {
         externalChangePending = false
         let ctx = textDocumentProxy.documentContextBeforeInput
         let composed = bridge.composedWord
@@ -638,6 +664,31 @@ final class KeyboardViewController: UIInputViewController {
             restoreUndo = nil; undoOfferActive = false
             swipeTyped = nil; swipeTypedUndo = nil
         }
+        return verdict
+    }
+
+    /// Callback host ngoài handle() là TIẾNG VỌNG của edit chính mình? Host kiểu web view
+    /// (Gmail, WKWebView) báo textWillChange/selectionDidChange/textDidChange MUỘN sau MỖI
+    /// lệnh sửa của bàn phím. Còn đang gõ dở sau khi đối chiếu (syncComposition reset nếu
+    /// lệch) ⇒ chữ trước con trỏ vẫn là từ của mình: không đổi ô, không đổi ngữ cảnh — trait,
+    /// auto-shift và gợi ý đã được handle() lên lịch cho phím đó ⇒ 0 việc thêm.
+    /// Trước đây mỗi tiếng vọng: đọc lại trait + context (auto-shift) + tính lại CẢ thanh gợi
+    /// ý đồng bộ trên main (đo 16/10/2026: ctx 0.27 → 2.45, gợi ý 1.00 → 2.02 lượt mỗi phím).
+    private var hostChangeIsOwnEcho: Bool { bridge.isComposing }
+
+    /// Thay đổi host (không phải tiếng vọng giữa từ): auto-shift + gợi ý tính lại, GỘP vào
+    /// cùng lượt hoãn với phím (gen mới bỏ lượt cũ) — nhiều callback liền nhau chỉ tính một lần,
+    /// và không chạy đồng bộ chen giữa hai phím.
+    private func scheduleContextRefresh() {
+        suggestionGen += 1
+        let gen = suggestionGen
+        DispatchQueue.main.async { [weak self] in
+            guard let self, gen == self.suggestionGen else { return }
+            self.updateAutoShift()
+        }
+        guard suggestionsActive, keyboard?.isBarCollapsed != true else { return }
+        suggestDebounceGen = gen
+        suggestDebounce.schedule(after: 0.03)
     }
 
     override func textWillChange(_ textInput: UITextInput?) {
@@ -653,12 +704,11 @@ final class KeyboardViewController: UIInputViewController {
     // hoa chữ đầu. Không tính ở textWillChange vì lúc đó context THÁO DỞ.
     override func textDidChange(_ textInput: UITextInput?) {
         TouchLog.host("textDidChange", applyingEdit: applyingEdit, composing: bridge.isComposing)
-        if !applyingEdit, !trackpadActive {
-            if externalChangePending { syncComposition("textDidChange") }
-            refreshFieldTraits()
-            updateAutoShift()
-            updateSuggestions()
-        }
+        guard !applyingEdit, !trackpadActive else { return }
+        if externalChangePending { syncComposition("textDidChange") }
+        if hostChangeIsOwnEcho { return }
+        refreshFieldTraits()
+        scheduleContextRefresh()
     }
 
     override func selectionWillChange(_ textInput: UITextInput?) {
@@ -667,10 +717,10 @@ final class KeyboardViewController: UIInputViewController {
 
     override func selectionDidChange(_ textInput: UITextInput?) {
         TouchLog.host("selectionDidChange", applyingEdit: applyingEdit, composing: bridge.isComposing)
-        if !applyingEdit, !trackpadActive {
-            if externalChangePending { syncComposition("selectionDidChange") }
-            refreshFieldTraits()
-        }
+        guard !applyingEdit, !trackpadActive else { return }
+        if externalChangePending { syncComposition("selectionDidChange") }
+        if hostChangeIsOwnEcho { return }
+        refreshFieldTraits()
     }
 
     // MARK: chế độ một tay
@@ -1175,6 +1225,13 @@ final class KeyboardViewController: UIInputViewController {
         }
         #endif
         super.viewDidAppear(animated)
+        if appearance.didAppear(tornDown: keyboard?.isTornDown ?? true) {
+            TouchLog.write("appear: didAppear without config (torn=\(keyboard?.isTornDown == true ? 1 : 0)) → configure")
+            configureForAppearance()
+        }
+        // Host khởi động lạnh: trait ô lúc viewWillAppear có thể còn là mặc định / chưa đọc
+        // được — đọc lại khi đã hiện hẳn (đổi mới cấu hình lại; y hệt thì 0 việc).
+        refreshFieldTraits()
         // Trait host đã resolve khi view vào window — sửa sáng/tối nếu lúc
         // viewWillAppear đoán sai (phím sáng trên nền tối).
         keyboard?.updateDark(AppearancePolicy.isDark(
@@ -1430,6 +1487,9 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func updateSuggestions() {
+        #if DEBUG
+        debugSuggestionPasses += 1
+        #endif
         // Bar tắt HOẶC đang thu gọn → khỏi tính toán gì hết (VNSuggest,
         // re-rank, emoji, nextWords) — tiết kiệm CPU/RAM theo đúng nghĩa.
         suggestReq += 1                  // lượt mới → kết quả nền cũ (nếu có) bỏ

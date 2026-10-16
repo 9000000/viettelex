@@ -16,6 +16,8 @@ final class KeyboardBenchTests: XCTestCase {
     final class BenchProxy: NSObject, UITextDocumentProxy {
         var text = ""
         var contextReads = 0, inserts = 0, deletes = 0
+        /// Lượt đọc trait ô (keyboardType — mỗi lượt refreshFieldTraits đọc đúng một lần) / selectedText.
+        var traitReads = 0, selectionReads = 0
         var callers: [String: Int] = [:]
         var documentContextBeforeInput: String? {
             contextReads += 1
@@ -26,7 +28,7 @@ final class KeyboardBenchTests: XCTestCase {
             return String(text.suffix(256))
         }
         var documentContextAfterInput: String? { contextReads += 1; return "" }
-        var selectedText: String? { nil }
+        var selectedText: String? { selectionReads += 1; return nil }
         var documentInputMode: UITextInputMode? { nil }
         var documentIdentifier: UUID = UUID()
         func adjustTextPosition(byCharacterOffset offset: Int) {}
@@ -36,7 +38,11 @@ final class KeyboardBenchTests: XCTestCase {
         func insertText(_ s: String) { inserts += 1; text += s }
         func deleteBackward() { deletes += 1; if !text.isEmpty { text.removeLast() } }
         var autocapitalizationType: UITextAutocapitalizationType = .sentences
-        var keyboardType: UIKeyboardType = .default
+        private var _keyboardType: UIKeyboardType = .default
+        var keyboardType: UIKeyboardType {
+            get { traitReads += 1; return _keyboardType }
+            set { _keyboardType = newValue }
+        }
         var returnKeyType: UIReturnKeyType = .default
         var keyboardAppearance: UIKeyboardAppearance = .default
         var autocorrectionType: UITextAutocorrectionType = .default
