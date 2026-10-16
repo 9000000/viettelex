@@ -108,6 +108,8 @@ object Keys {
     const val LONG_PRESS_NUMBERS = "longPressNumbers"
     /** Bool — giữ a–l, z–m ra ký hiệu, mặc định TẮT — [KeyAlternates]. */
     const val LONG_PRESS_SYMBOLS = "longPressSymbols"
+    /** String "comma" | "period" | "off" — phím cạnh dấu cách bàn chữ điện thoại ([SpaceSideKey]), mặc định "comma". */
+    const val SPACE_SIDE_KEY = "spaceSideKey"
     /** String "off" | "left" | "right" — chế độ một tay (điện thoại; tên như iOS App Group). */
     const val ONE_HAND_MODE = "oneHandMode"
     /**

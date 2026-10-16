@@ -38,6 +38,7 @@ import androidx.compose.runtime.DisposableEffect
 import android.os.SystemClock
 import com.viettelex.keyboard.KeyAlternates
 import com.viettelex.keyboard.Keys
+import com.viettelex.keyboard.SpaceSideKey
 import com.viettelex.keyboard.PlusFeature
 import com.viettelex.keyboard.PlusGate
 import java.text.Normalizer
@@ -109,6 +110,7 @@ internal data class FeatureSearchEntry(val viTitle: String, val keywords: String
             FeatureSearchEntry("Dịch trên máy", "translate dịch ngôn ngữ language ml kit plus", FeaturePage.GoTat), // l10n-key
             FeatureSearchEntry("Hàng phím số", "number row số", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Hàng số cao bằng hàng chữ", "number row tall height cao số", FeaturePage.Phim), // l10n-key
+            FeatureSearchEntry("Phím cạnh dấu cách", "dấu phẩy dấu chấm comma period key next to space", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Giữ phím hàng trên để ra số", "số giữ lâu number long press", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Giữ phím hàng 2, 3 để ra ký tự đặc biệt", "ký hiệu symbol @ # giữ lâu long press", FeaturePage.Phim), // l10n-key
             FeatureSearchEntry("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh", "space ngôn ngữ english language", FeaturePage.Phim), // l10n-key
@@ -293,6 +295,7 @@ private fun FeatureHome(onOpen: (FeaturePage) -> Unit) {
     val haptic by rememberBoolPref(Keys.HAPTIC_FEEDBACK, Prefs.D.hapticFeedback)
     val keySound by rememberBoolPref(Keys.KEY_SOUND, Prefs.D.keySound)
     val oneHand by rememberStringPref(Keys.ONE_HAND_MODE, Prefs.D.oneHandMode)
+    val sideKey by rememberStringPref(Keys.SPACE_SIDE_KEY, Prefs.D.spaceSideKey.id)
     val floating by rememberBoolPref(Keys.FLOATING_KEYBOARD, Prefs.D.floatingKeyboard)
     val hardware by rememberBoolPref(Keys.HARDWARE_TELEX, Prefs.D.hardwareTelex)
     val clipHistory by rememberBoolPref(Keys.CLIPBOARD_HISTORY, Prefs.D.clipboardHistory)
@@ -312,7 +315,8 @@ private fun FeatureHome(onOpen: (FeaturePage) -> Unit) {
         FeaturePage.GoVuot -> if (!swipe) tr("Đang tắt") else join(true to tr("Bật"), swipeEn to tr("Tiếng Anh"), swipeFuto to "Neural", none = "")
         FeaturePage.GoTat -> (if (!shortcutsOn) tr("Gõ tắt tắt") else if (shortcutCount == 0) tr("Gõ tắt bật") else tr("Gõ tắt: %d mục", shortcutCount)) +
             " · " + if (templatesOn) tr("Mẫu câu bật") else tr("Mẫu câu tắt")
-        FeaturePage.Phim -> join(numberRow to tr("Hàng số"), spaceSwipe to tr("Vuốt phím cách"),
+        FeaturePage.Phim -> join(numberRow to tr("Hàng số"),
+            (sideKey != SpaceSideKey.DEFAULT.id) to tr("Phím cạnh dấu cách"), spaceSwipe to tr("Vuốt phím cách"),
             keyCmds to tr("Vuốt sao chép/dán"),
             autoSpace to tr("Cách sau dấu câu"), haptic to tr("Rung"), keySound to tr("Âm"),
             (oneHand != "off") to tr("Một tay"), floating to tr("Thả nổi"), hardware to tr("Bàn phím cứng"), none = tr("Mặc định"))
@@ -520,6 +524,33 @@ private fun PlusLockedRow(title: String, caption: String) {
     }
 }
 
+/** "Phím cạnh dấu cách": Dấu phẩy (mặc định) / Dấu chấm / Tắt — bàn chữ điện thoại, ô thường. */
+@Composable
+private fun SpaceSideKeyRow() {
+    val c = LocalVT.current
+    var mode by rememberStringPref(Keys.SPACE_SIDE_KEY, Prefs.D.spaceSideKey.id)
+    VTRow {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(tr("Phím cạnh dấu cách"), style = VTType.body, color = c.label)
+            Text(tr("Phím hẹp bên phải phím cách trên bàn chữ (điện thoại; ô email, đường dẫn giữ nguyên). Giữ phím để chọn dấu câu khác. Tắt: phím cách rộng hơn; chạm phím cách hai lần vẫn ra dấu chấm."),
+                style = VTType.footnote, color = c.secondary)
+        }
+    }
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for ((v, t) in listOf(SpaceSideKey.COMMA.id to tr("Dấu phẩy"), SpaceSideKey.PERIOD.id to tr("Dấu chấm"),
+                SpaceSideKey.OFF.id to tr("Tắt"))) {
+            val on = SpaceSideKey.of(mode).id == v
+            Box(Modifier.weight(1f)
+                .background(if (on) c.accent else c.secondary.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                .clickable { mode = v }
+                .padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                Text(t, style = VTType.body, color = if (on) Color.White else c.label)
+            }
+        }
+    }
+}
+
 @Composable
 private fun PhimPage(onBack: () -> Unit) {
     SubPageHeader(FeaturePage.Phim.title, onBack)
@@ -533,6 +564,8 @@ private fun PhimPage(onBack: () -> Unit) {
                 tr("Phím số to bằng phím chữ (bàn phím cao thêm đúng một hàng)."))
             RowDivider()
         }
+        SpaceSideKeyRow()
+        RowDivider()
         // Hàng số bật ⇒ giữ q…p ra số vô nghĩa (KeyAlternates.numbersSettingVisible).
         if (KeyAlternates.numbersSettingVisible(numberRow)) {
             BoolToggle(Keys.LONG_PRESS_NUMBERS, Prefs.D.longPressNumbers, tr("Giữ phím hàng trên để ra số"), tr("Giữ q … p để gõ 1 … 0 (số nhỏ ở góc phím)."))

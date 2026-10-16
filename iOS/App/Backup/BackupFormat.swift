@@ -56,6 +56,7 @@ enum BackupSettings {
         Spec(key: "keySoundStyle", kind: .string("subtle", ["subtle", "wood", "mechanical", "typewriter", "bubble", "custom"])),
         Spec(key: "numberRow", kind: .bool(false)),
         Spec(key: "numberRowFullHeight", kind: .bool(false)),   // chỉ iOS dùng
+        Spec(key: "spaceSideKey", kind: .string("comma", ["comma", "period", "off"])),   // "Phím cạnh dấu cách" (SpaceSideKey)
         Spec(key: "rowHeightAdjust", kind: .int(0, -10...10)),
         Spec(key: "keyboardRaise", kind: .int(0, 0...48)),   // "Nâng bàn phím" (cùng khoá Android)
         Spec(key: "shortcutsEnabled", kind: .bool(true)),

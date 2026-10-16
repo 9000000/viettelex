@@ -119,6 +119,7 @@ struct FeatureSearchEntry: Identifiable {
             .init(viTitle: LK("Mẫu câu"), keywords: "template câu soạn sẵn snippets tắt ẩn tab ☰", page: .goTat),
             .init(viTitle: LK("Hàng phím số"), keywords: "number row số", page: .phim),
             .init(viTitle: LK("Hàng số cao bằng hàng chữ"), keywords: "number row height cao số", page: .phim),
+            .init(viTitle: LK("Phím cạnh dấu cách"), keywords: "dấu phẩy dấu chấm comma period key next to space", page: .phim),
             .init(viTitle: LK("Giữ phím ra ký tự đặc biệt"), keywords: "ký hiệu symbol @ # giữ lâu", page: .phim),
             .init(viTitle: LK("Vuốt phím cách đổi Tiếng Việt / Tiếng Anh"), keywords: "space ngôn ngữ english language", page: .phim),
             .init(viTitle: LK("Vuốt phím để sao chép/dán"), keywords: "copy paste cut sao chép dán cắt clipboard vuốt lên swipe", page: .phim),
@@ -269,6 +270,7 @@ struct TinhNangSections: View {
     @AppStorage("keySound", store: featureDefaults) private var keySound = false
     @AppStorage(PlusFeature.textToolsKey, store: featureDefaults) private var textToolsEnabled = true
     @AppStorage("oneHandMode", store: featureDefaults) private var oneHandMode = "off"
+    @AppStorage(SpaceSideKey.key, store: featureDefaults) private var spaceSideKey = SpaceSideKey.defaultValue.rawValue
     @AppStorage("clipboardHistory", store: featureDefaults) private var clipboardHistory = false
     @AppStorage("incognitoMode", store: featureDefaults) private var incognitoMode = false
     @AppStorage(ICloudSync.enabledKey, store: featureDefaults) private var iCloudSync = false
@@ -297,6 +299,7 @@ struct TinhNangSections: View {
                 + (tools ? " · " + L("Công cụ văn bản") : "")
         case .phim:
             return Self.join([(numberRow, numberRowFullHeight ? L("Hàng số cao") : L("Hàng số")),
+                              (SpaceSideKey.parse(spaceSideKey) != .defaultValue, L("Phím cạnh dấu cách")),
                               (spaceSwipeLanguage, L("Vuốt phím cách")),
                               (swipeKeyCommands, L("Vuốt sao chép/dán")),
                               (autoSpaceAfterPunct, L("Cách sau dấu câu")),
@@ -567,6 +570,8 @@ struct PhimPage: View {
     @AppStorage("autoSpaceAfterPunct", store: featureDefaults) private var autoSpaceAfterPunct = false
     /// "off" | "left" | "right" — bàn phím đọc lúc hiện (OneHand.resolve).
     @AppStorage("oneHandMode", store: featureDefaults) private var oneHandMode = "off"
+    /// "Phím cạnh dấu cách": "comma" (mặc định) | "period" | "off" — bàn phím đọc lúc hiện (SpaceSideKey).
+    @AppStorage(SpaceSideKey.key, store: featureDefaults) private var spaceSideKey = SpaceSideKey.defaultValue.rawValue
     /// Ô phóng to chữ khi bấm phím — mặc định BẬT (KeyboardView.keyPreviewKey).
     @AppStorage("keyPreviewEnabled", store: featureDefaults) private var keyPreview = true
     /// Phím sẫm khi bấm (KeyboardView.keyPressHighlightKey) — mặc định = keyPressHighlightDefault.
@@ -595,6 +600,20 @@ struct PhimPage: View {
                 }
                 // iPad có ký tự phụ vuốt xuống riêng ⇒ chỉ iPhone.
                 if isPhone {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L("Phím cạnh dấu cách"))
+                        Picker(L("Phím cạnh dấu cách"), selection: Binding(
+                            get: { SpaceSideKey.parse(spaceSideKey).rawValue },
+                            set: { spaceSideKey = $0 })) {
+                            Text(L("Dấu phẩy")).tag(SpaceSideKey.comma.rawValue)
+                            Text(L("Dấu chấm")).tag(SpaceSideKey.period.rawValue)
+                            Text(L("Tắt")).tag(SpaceSideKey.off.rawValue)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        Text(L("Phím hẹp bên phải phím cách trên bàn chữ (ô email, đường dẫn giữ nguyên). Dấu chấm: giữ phím ra dấu phẩy (khi bật giữ phím ra ký tự đặc biệt). Tắt: phím cách rộng hơn; chạm phím cách hai lần vẫn ra dấu chấm."))
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                     if !numberRow {
                         settingToggle(L("Giữ phím hàng trên để ra số"), L("Giữ q … p để gõ 1 … 0 (số nhỏ ở góc phím)."), isOn: $longPressNumbers)
                     }

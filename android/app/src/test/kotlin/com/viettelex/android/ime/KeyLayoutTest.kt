@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.viettelex.keyboard.SpaceSideKey
 
 class KeyLayoutTest {
     private val d = 1f   // dp = px
@@ -413,5 +414,51 @@ class KeyLayoutTest {
         assertEquals("123", n.first { it.kind == KeyKind.PLANE }.label)
         val t = KeyLayout.build(LayoutConfig(Plane.NUMBERS, W, H, d, InputKind.NORMAL))
         assertEquals("ABC", t.first { it.kind == KeyKind.PLANE }.label)
+    }
+
+    /**
+     * "Phím cạnh dấu cách" (16/10/2026): mỗi tuỳ chọn ⇒ hàng đáy bàn chữ điện thoại ô thường.
+     * Dấu phẩy = bố cục cũ; Dấu chấm = cùng chỗ cùng cỡ; Tắt = không phím, space ăn chỗ.
+     * Không bao giờ hàng hai phím ", ." (Phil 12/10/2026). Ô URL / email, tablet, plane số giữ nguyên.
+     */
+    @Test fun spaceSideKeyOptions() {
+        fun cfg(side: SpaceSideKey, plane: Plane = Plane.LETTERS, kind: InputKind = InputKind.NORMAL,
+                tablet: Boolean = false, one: OneHandSide = OneHandSide.OFF) =
+            LayoutConfig(plane, W, H, d, kind, tablet = tablet, oneHand = one, spaceSideKey = side)
+        fun bottom(c: LayoutConfig) = KeyLayout.build(c).filter { it.top > 3 * c.keyAreaPx / 4 - 1 }.sortedBy { it.left }
+        fun kinds(c: LayoutConfig) = bottom(c).map { if (it.kind == KeyKind.PUNCT) it.insert else it.kind.toString() }
+        val P = KeyKind.PLANE.toString(); val E = KeyKind.EMOJI.toString()
+        val S = KeyKind.SPACE.toString(); val R = KeyKind.RETURN.toString()
+        assertEquals(SpaceSideKey.COMMA, SpaceSideKey.DEFAULT)
+        assertEquals(SpaceSideKey.COMMA, LayoutConfig(Plane.LETTERS, W, H, d).spaceSideKey)
+        assertEquals(listOf(P, E, S, ",", R), kinds(cfg(SpaceSideKey.COMMA)))
+        assertEquals(listOf(P, E, S, ".", R), kinds(cfg(SpaceSideKey.PERIOD)))
+        assertEquals(listOf(P, E, S, R), kinds(cfg(SpaceSideKey.OFF)))
+        // Mặc định không đổi bố cục cũ (từng phím, từng toạ độ).
+        assertEquals(build(Plane.LETTERS).map { it.toString() }, KeyLayout.build(cfg(SpaceSideKey.COMMA)).map { it.toString() })
+        // Dấu chấm: cùng hình học với dấu phẩy.
+        val comma = bottom(cfg(SpaceSideKey.COMMA)); val period = bottom(cfg(SpaceSideKey.PERIOD))
+        for (i in comma.indices) { near(period[i].left, comma[i].left); near(period[i].right, comma[i].right) }
+        near(period[3].width, KeyLayout.PHONE_LETTERS_COMMA * W)
+        // Tắt: space rộng thêm đúng phím hẹp + 1 khe; ↵ giữ nguyên chỗ.
+        val off = bottom(cfg(SpaceSideKey.OFF))
+        near(off[2].width, comma[2].width + KeyLayout.PHONE_LETTERS_COMMA * W + KeyLayout.KEY_SPACING)
+        near(off[3].left, comma[4].left); near(off[3].right, comma[4].right)
+        // Một tay / ô tìm emoji cùng quy tắc.
+        assertEquals(listOf(P, E, S, ".", R), kinds(cfg(SpaceSideKey.PERIOD, one = OneHandSide.LEFT)))
+        assertEquals(listOf(P, E, S, R), kinds(cfg(SpaceSideKey.OFF, one = OneHandSide.RIGHT)))
+        assertTrue(KeyLayout.build(cfg(SpaceSideKey.OFF, plane = Plane.EMOJI_SEARCH)).none { it.kind == KeyKind.PUNCT })
+        // Không áp: URL / email / tablet / plane số, ký hiệu, mẫu câu — giống hệt mặc định.
+        for (side in SpaceSideKey.entries) {
+            for (c in listOf(cfg(side, kind = InputKind.URL), cfg(side, kind = InputKind.EMAIL), cfg(side, tablet = true),
+                    cfg(side, plane = Plane.NUMBERS), cfg(side, plane = Plane.SYMBOLS), cfg(side, plane = Plane.TEMPLATES),
+                    cfg(side, plane = Plane.NUMBERS, kind = InputKind.EMAIL))) {
+                assertEquals("$side ${c.plane} ${c.kind} tablet=${c.tablet}",
+                    KeyLayout.build(c.copy(spaceSideKey = SpaceSideKey.COMMA)).map { it.toString() },
+                    KeyLayout.build(c).map { it.toString() })
+                assertNull(KeyLayout.sideKey(c))
+            }
+            assertEquals(side, KeyLayout.sideKey(cfg(side)))
+        }
     }
 }

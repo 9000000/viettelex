@@ -98,6 +98,8 @@ data class KeyboardSettings(
     var longPressNumbers: Boolean = true,
     /** Giữ a–l, z–m ra ký hiệu — mặc định TẮT. Giống iOS. */
     var longPressSymbols: Boolean = false,
+    /** Phím cạnh dấu cách (bàn chữ điện thoại, ô thường) — mặc định "," ([SpaceSideKey]). */
+    var spaceSideKey: SpaceSideKey = SpaceSideKey.DEFAULT,
     /** Chế độ một tay: "off" | "left" | "right" — mặc định tắt (tablet bỏ qua). */
     var oneHandMode: String = "off",
     /** Bàn phím thả nổi (#112) — mặc định TẮT; bật ⇒ một tay + nâng bàn phím bị bỏ qua. */
@@ -171,6 +173,7 @@ data class KeyboardSettings(
             s.keyboardRaise = clampRaise((get(Keys.KEYBOARD_RAISE) as? Number)?.toInt() ?: 0)
             s.longPressNumbers = b(Keys.LONG_PRESS_NUMBERS, s.longPressNumbers)
             s.longPressSymbols = b(Keys.LONG_PRESS_SYMBOLS, s.longPressSymbols)
+            s.spaceSideKey = SpaceSideKey.of(get(Keys.SPACE_SIDE_KEY))
             s.oneHandMode = (get(Keys.ONE_HAND_MODE) as? String)?.takeIf { it == "left" || it == "right" } ?: "off"
             s.floatingKeyboard = b(Keys.FLOATING_KEYBOARD, s.floatingKeyboard)
             s.clipboardHistory = b(Keys.CLIPBOARD_HISTORY, s.clipboardHistory)

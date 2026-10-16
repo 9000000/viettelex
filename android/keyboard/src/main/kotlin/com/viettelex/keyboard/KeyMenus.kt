@@ -17,9 +17,22 @@ object CommaPopup {
     /** Bề rộng ô (dp): 10 ô ⇒ hẹp hơn ô biến thể (38) để hàng không phủ kín bề ngang điện thoại. */
     fun itemWidthDp(tablet: Boolean): Float = if (tablet) 48f else 34f
 
-    /** Lựa chọn của phím `key` ở bàn chữ; rỗng ⇒ phím khác (không hẹn giờ). */
-    fun choices(key: String, lettersPlane: Boolean): List<String> =
-        if (lettersPlane && key == ",") choices else emptyList()
+    /**
+     * Giữ "." khi "Phím cạnh dấu cách" = Dấu chấm ([SpaceSideKey.PERIOD]): cùng bộ dấu câu,
+     * "," đứng đầu (chọn sẵn — đã giữ "." thì muốn ","), "." thứ hai.
+     */
+    val periodChoices: List<String> = listOf(",", ".") + choices.drop(2)
+
+    /**
+     * Lựa chọn của phím `key` ở bàn chữ; rỗng ⇒ phím khác (không hẹn giờ). `periodKey` = phím
+     * "." này là phím cạnh space thay "," (Dấu chấm) — "." tablet / URL / email không có popup này.
+     */
+    fun choices(key: String, lettersPlane: Boolean, periodKey: Boolean = false): List<String> = when {
+        !lettersPlane -> emptyList()
+        key == "," -> choices
+        key == "." && periodKey -> periodChoices
+        else -> emptyList()
+    }
 }
 
 /** Mục menu giữ phím 😊. */

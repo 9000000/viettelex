@@ -54,9 +54,11 @@ final class KeyHitBiasTests: XCTestCase {
 
     // MARK: KeyboardView thật (iPhone 402pt) — đường hitTest / router
 
-    @MainActor private func makeKeyboard(onKey: @escaping (KeyboardView.Key) -> Void = { _ in })
+    @MainActor private func makeKeyboard(side: SpaceSideKey = .comma,
+                                         onKey: @escaping (KeyboardView.Key) -> Void = { _ in })
         -> (KeyboardView, UIView) {
         let kb = KeyboardView(needsGlobe: false, inputController: nil, onKey: onKey)
+        kb.spaceSideKey = side
         let host = UIView(frame: CGRect(x: 0, y: 0, width: 402, height: 212))
         host.addSubview(kb)
         kb.frame = host.bounds
@@ -318,5 +320,26 @@ final class KeyHitBiasTests: XCTestCase {
         kb.debugRouteUp(id, at: CGPoint(x: mf.midX + 6, y: mf.midY), time: 10.08)   // nhấc m (trôi 6pt)
         withExtendedLifetime(token) {}
         XCTAssertEqual(keys, ["m", "⌫"])
+    }
+
+    /// "Phím cạnh dấu cách" = Dấu chấm: "." được space lấn mép y như ","; Tắt: không phím để lấn.
+    @MainActor func testSpaceBarStealsPeriodSideKeyEdge() throws {
+        try XCTSkipIf(isPad)
+        let (kb, host) = makeKeyboard(side: .period)
+        _ = host
+        let space = try XCTUnwrap(kb.debugControl("Dấu cách"))
+        let dot = try XCTUnwrap(kb.debugKeyButton("."))
+        let df = kb.convert(dot.bounds, from: dot)
+        XCTAssertEqual(df.width, 402 * KeyLayout.phoneLettersComma, accuracy: 1)
+        XCTAssertTrue(kb.hitTest(CGPoint(x: df.midX, y: df.midY), with: nil) === dot)
+        XCTAssertTrue(kb.hitTest(CGPoint(x: df.minX + 0.2 * df.width, y: df.midY), with: nil) === space)
+        XCTAssertTrue(kb.hitTest(CGPoint(x: df.minX + 0.4 * df.width, y: df.midY), with: nil) === dot)
+        let (kbO, hostO) = makeKeyboard(side: .off)
+        XCTAssertNil(kbO.debugKeyButton("."))
+        XCTAssertNil(kbO.debugKeyButton(","))
+        let sp = try XCTUnwrap(kbO.debugControl("Dấu cách"))
+        let sf = kbO.convert(sp.bounds, from: sp)
+        XCTAssertTrue(kbO.hitTest(CGPoint(x: sf.maxX - 1, y: sf.midY), with: nil) === sp)
+        withExtendedLifetime(hostO) {}
     }
 }

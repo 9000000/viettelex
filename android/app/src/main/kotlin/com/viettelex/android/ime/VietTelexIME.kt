@@ -405,7 +405,8 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             settings.templatesEnabled, templates,
             th.dp(KeyLayout.keyAreaDp(th.tablet, th.landscape, settings.rowHeightAdjust, settings.numberRow,
                 settings.numberRowFullHeight)),
-            field.numberSigned, field.numberDecimal, settings.numberRow, settings.numberRowFullHeight)
+            field.numberSigned, field.numberDecimal, settings.numberRow, settings.numberRowFullHeight,
+            settings.spaceSideKey)
         kb.keyPreview = settings.keyPreview
         kb.keyPressHighlight = settings.keyPressHighlight
         kb.configureSpaceFlick(settings.spaceSwipeLanguage, session.language)

@@ -483,3 +483,30 @@ enum BalloonGeometry {
         shownFor >= minVisible ? 0 : minVisible - shownFor
     }
 }
+
+/// "Phím cạnh dấu cách" (Tính năng → Phím & cử chỉ; khoá App Group `spaceSideKey`, cùng chuỗi
+/// với Android Keys.SPACE_SIDE_KEY): phím hẹp bên phải space ở hàng đáy bàn CHỮ iPhone, ô thường.
+///  • `.comma` (mặc định, bố cục cũ): "," — giữ ra "." (khi bật giữ phím ra ký tự phụ).
+///  • `.period`: "." cùng chỗ cùng cỡ — giữ ra ",".
+///  • `.off`: không phím; space rộng thêm. Chạm space hai lần vẫn ra ". ".
+/// iPad, ô email / URL / thanh địa chỉ, plane số / ký hiệu / mẫu câu không đổi. Đọc lúc
+/// dựng hàng đáy (applyAppearance) — 0 chi phí mỗi phím.
+enum SpaceSideKey: String, CaseIterable {
+    case comma, period, off
+    static let key = "spaceSideKey"
+    static let defaultValue: SpaceSideKey = .comma
+
+    /// Ký tự của phím (nil = không có phím).
+    var char: String? {
+        switch self { case .comma: return ","; case .period: return "."; case .off: return nil }
+    }
+    /// Ký tự giữ phím ra (phím còn lại của cặp , / .).
+    var holdAlt: String? {
+        switch self { case .comma: return "."; case .period: return ","; case .off: return nil }
+    }
+    /// Giá trị lạ / thiếu ⇒ mặc định.
+    static func parse(_ raw: Any?) -> SpaceSideKey {
+        (raw as? String).flatMap(SpaceSideKey.init(rawValue:)) ?? defaultValue
+    }
+    static func load(_ d: UserDefaults?) -> SpaceSideKey { parse(d?.object(forKey: key)) }
+}

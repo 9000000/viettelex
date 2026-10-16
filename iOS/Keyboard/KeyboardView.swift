@@ -634,6 +634,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     var numberRowFullHeight = false {
         didSet { if numberRowFullHeight != oldValue { rebuild() } }
     }
+    /// "Phím cạnh dấu cách" (Phím & cử chỉ, mặc định "," — SpaceSideKey): phím hẹp bên phải space
+    /// bàn chữ iPhone ô thường. Trong chữ ký rebuild; đọc ở applyAppearance, không tốn gì mỗi phím.
+    var spaceSideKey: SpaceSideKey = .defaultValue {
+        didSet { if spaceSideKey != oldValue { rebuild() } }
+    }
 
     // MARK: giữ phím chữ ra ký tự phụ (KeyAlternates, issue #98)
     private var altNumbersSetting = true
@@ -1621,6 +1626,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         keyboardRaise = CGFloat(KeyGeometry.RowAdjust.raise(UserDefaultsProvider.shared))
         numberRowEnabled = UserDefaultsProvider.shared?.bool(forKey: Self.numberRowKey) ?? false
         numberRowFullHeight = UserDefaultsProvider.shared?.bool(forKey: KeyGeometry.numberRowFullHeightKey) ?? false
+        spaceSideKey = SpaceSideKey.load(UserDefaultsProvider.shared)
         // Bàn phím tách đôi (mặc định TẮT) — rebuild() cuối hàm áp nếu đổi.
         splitSetting = UserDefaultsProvider.shared?.bool(forKey: SplitLayout.settingKey) ?? false
         keyPreviewEnabled = Self.keyPreviewSetting(UserDefaultsProvider.shared)
@@ -1807,6 +1813,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     private var builtKind: InputKind = .normal
     private var builtNumberRow = false
     private var builtNumberRowFull = false
+    private var builtSpaceSide: SpaceSideKey = .defaultValue
     private var builtPressHighlight = KeyboardView.keyPressHighlightDefault
     /// Khe/lề dựng vào constraint lúc build (preset stock: dọc ≠ ngang) — đổi là dựng lại.
     /// (Phần cắt / đệm hàng đáy đổi tại chỗ ở applyBottomTrim — không cần dựng lại.)
@@ -1860,6 +1867,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             || builtGlobe != needsGlobe || builtKind != inputKind
             || builtNumberRow != numberRowEnabled
             || builtNumberRowFull != numberRowFullHeight
+            || builtSpaceSide != spaceSideKey
             || builtPressHighlight != keyPressHighlightEnabled
             || builtAlts != activeAlts
             || builtSplit != split
@@ -1902,6 +1910,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         builtGlobe = needsGlobe; builtKind = inputKind
         builtNumberRow = numberRowEnabled
         builtNumberRowFull = numberRowFullHeight
+        builtSpaceSide = spaceSideKey
         builtPressHighlight = keyPressHighlightEnabled
         builtAlts = activeAlts
         builtSplit = split
@@ -2811,9 +2820,10 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         return space
     }
 
-    /// Phím dấu câu hàng đáy (",", hoặc "@ ." / ". /" ô email/url…).
+    /// Phím dấu câu hàng đáy (",", hoặc "@ ." / ". /" ô email/url…). `sideKey`: phím hẹp cạnh
+    /// space bàn chữ iPhone ô thường ("Phím cạnh dấu cách") — giữ ra ký tự còn lại của cặp , / .
     private func makePunctKeys(_ puncts: [(title: String, insert: String, mult: CGFloat)],
-                               planeKey: String) -> [(btn: KeyButton, mult: CGFloat)] {
+                               planeKey: String, sideKey: SpaceSideKey? = nil) -> [(btn: KeyButton, mult: CGFloat)] {
         var punctKeys: [(btn: KeyButton, mult: CGFloat)] = []
         for p in puncts {
             let b = baseButton(title: p.title, special: false)
@@ -2829,10 +2839,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             b.addAction(UIAction { [weak self] _ in self?.hideBalloonAfterTap() },
                         for: [.touchUpInside, .touchUpOutside, .touchCancel])
             armCommit(b) { [weak self] in self?.tapped(.text(p.insert)) }
-            // Bàn chữ iPhone: giữ "," ra "." (KeyAlternates.commaHold — bảng ký tự phụ không
-            // rỗng; VoiceOver đã rỗng sẵn; iPad có phím ",/." 2 tầng riêng).
-            if !Self.isPad, p.title == ",", planeKey == "123", KeyAlternates.commaHold(alternates: activeAlts) {
-                armCommaHold(b)
+            // Bàn chữ iPhone: giữ "," ra "." / giữ "." ra "," (phím cạnh space — KeyAlternates.commaHold:
+            // bảng ký tự phụ không rỗng; VoiceOver đã rỗng sẵn; iPad có phím ",/." 2 tầng riêng).
+            if !Self.isPad, let side = sideKey, p.title == side.char, let alt = side.holdAlt, planeKey == "123",
+               KeyAlternates.commaHold(alternates: activeAlts) {
+                armCommaHold(b, alt: alt)
             }
             // Ô địa chỉ / URL / email: giữ "." ra hàng đuôi tên miền như stock (DomainPopup).
             let tlds = DomainPopup.choices(kind: inputKind, key: p.title, lettersPlane: planeKey == "123")
@@ -2889,13 +2900,17 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             case .url:   puncts = [(".", ".", 0.075), ("/", "/", 0.075)]
             // Thanh địa chỉ: stock hiện "." thay "," (gõ tên miền); iPad đã có ".?" riêng.
             case .search: puncts = padLetters ? [] : [(".", ".", 0.075)]
-            // iPad plane chữ: không phím "," riêng như stock ("!," hàng 3 đã có).
-            default:     puncts = padLetters ? [] : [(",", ",", 0.075)]
+            // iPad plane chữ: không phím "," riêng như stock ("!," hàng 3 đã có). iPhone: phím
+            // hẹp theo "Phím cạnh dấu cách" ("," / "." cùng chỗ cùng cỡ; Tắt ⇒ không phím).
+            default:     puncts = padLetters ? [] : KeyLayout.phoneLettersPuncts(spaceSideKey)
+                                                        .map { ($0, $0, KeyLayout.phoneLettersComma) }
             }
         } else {
             puncts = [(",", ",", 0.075)]
         }
-        let punctKeys = makePunctKeys(puncts, planeKey: planeKey)
+        let sideKey: SpaceSideKey? = (planeKey == "123" && !padLetters && !clearInsteadOfEmoji
+            && ![.email, .url, .search].contains(inputKind)) ? spaceSideKey : nil
+        let punctKeys = makePunctKeys(puncts, planeKey: planeKey, sideKey: sideKey)
         views += punctKeys.map(\.btn)
         // iPad: return nằm cuối hàng 2 như stock (buildLettersPad / buildPadSymbolic).
         var ret: KeyButton?
@@ -4592,9 +4607,9 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     /// Phím "," có giữ ra ".": nhãn nhỏ góc trên-phải như phím chữ; chạm hẹn giờ `holdDelay`,
     /// hết giờ mà "," còn chờ chốt ⇒ đổi thành "." (KeyAlternates.holdComma) + balloon + rung.
     /// Chốt lúc nhấc / khi ngón khác chạm như "," ⇒ từ đang gõ được chốt y hệt.
-    private func armCommaHold(_ b: KeyButton) {
+    private func armCommaHold(_ b: KeyButton, alt: String = KeyAlternates.commaAlt) {
         let l = UILabel()
-        l.text = KeyAlternates.commaAlt
+        l.text = alt
         l.font = .systemFont(ofSize: 10, weight: .medium)
         l.textColor = inkFaded(0.45)
         l.translatesAutoresizingMaskIntoConstraints = false
@@ -4610,7 +4625,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             self.commaTimer?.cancel()
             let w = DispatchWorkItem { [weak self, weak b] in
                 guard let self, let b else { return }
-                self.fireCommaHold(b)
+                self.fireCommaHold(b, alt: alt)
             }
             self.commaTimer = w
             DispatchQueue.main.asyncAfter(deadline: .now() + KeyAlternates.holdDelay, execute: w)
@@ -4622,16 +4637,16 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
     }
 
-    private func fireCommaHold(_ b: KeyButton) {
+    private func fireCommaHold(_ b: KeyButton, alt: String = KeyAlternates.commaAlt) {
         commaTimer = nil
-        let fired = KeyAlternates.holdComma(commits, id: ObjectIdentifier(b)) { [weak self] alt in
+        let fired = KeyAlternates.holdComma(commits, id: ObjectIdentifier(b), alt: alt) { [weak self] alt in
             self?.hideBalloon()
             self?.tapped(.text(alt))
         }
         guard fired else { return }
         commaFired = true
         Self.flickFeedback()
-        showBalloon(over: b, text: KeyAlternates.commaAlt, force: true)
+        showBalloon(over: b, text: alt, force: true)
     }
     private var commaTimer: DispatchWorkItem?
     private var commaFired = false
@@ -5365,7 +5380,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             withExtendedLifetime(t2) {}
         }
         if secondBeforeFire { second() }
-        if fire, armed { commaTimer?.cancel(); fireCommaHold(b) }   // như timer bắn
+        if fire, armed { commaTimer?.cancel(); fireCommaHold(b, alt: spaceSideKey.holdAlt ?? KeyAlternates.commaAlt) }   // như timer bắn
         if !secondBeforeFire { second() }
         b.sendActions(for: .touchUpInside)
         return armed
@@ -5411,13 +5426,13 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }
     private var debugCommaButton: KeyButton? {
         func find(_ v: UIView) -> KeyButton? {
-            if let b = v as? KeyButton, b.currentTitle == "," { return b }
+            if let b = v as? KeyButton, b.currentTitle == (spaceSideKey.char ?? ",") { return b }
             for s in v.subviews { if let b = find(s) { return b } }
             return nil
         }
         return find(rowsContainer)
     }
-    /// Nhãn "." nhỏ trên phím "," (nil = không có nhãn).
+    /// Nhãn "." nhỏ trên phím "," (Dấu chấm: nhãn "," trên phím "."; nil = không có nhãn).
     var debugCommaHint: String? {
         guard let b = debugCommaButton else { return nil }
         return b.subviews.compactMap { ($0 as? UILabel) }.first { $0 !== b.titleLabel }?.text

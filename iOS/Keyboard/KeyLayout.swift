@@ -189,6 +189,13 @@ enum KeyLayout {
     /// kèm KeyHitBias). Mép phải giữ nguyên (return không đổi). Plane số / mẫu câu giữ 0.083.
     static let phoneLettersComma: CGFloat = 0.071
 
+    /// Phím hẹp cạnh space hàng đáy plane CHỮ iPhone ô thường theo "Phím cạnh dấu cách":
+    /// [","] (mặc định, bố cục cũ) / ["."] (cùng chỗ cùng cỡ) / [] (Tắt — space ăn chỗ).
+    /// Không bao giờ hai phím ", ." (Phil 12/10/2026 bỏ hàng hai phím trên Android vì bóp space).
+    static func phoneLettersPuncts(_ side: SpaceSideKey) -> [String] {
+        side.char.map { [$0] } ?? []
+    }
+
     // MARK: iPad — hai kiểu bàn phím stock iPadOS 27 (đo simulator 27/09/2026)
     //  • full (Air/Pro 11", 13"): có tab + ⇪, icon/nhãn chức năng dạt góc dưới.
     //  • compact (iPad mini, cạnh ngắn màn hình < 800pt): KHÔNG tab/⇪, ⌫ cuối hàng 1,

@@ -62,11 +62,12 @@ enum KeyAlternates {
     static func commaHold(alternates: [Character: String]) -> Bool { !alternates.isEmpty }
     /// Giữ "," đủ giờ: đổi phím đang chờ chốt thành "." — vẫn chốt lúc nhấc / khi ngón khác
     /// chạm (cùng đường với ","). false nếu "," đã chốt rồi (ngón khác chạm trước khi đủ giờ).
-    static func holdComma(_ commits: KeyCommitQueue, id: ObjectIdentifier,
+    /// `alt`: ký tự thay — "." cho phím ",", "," cho phím "." ("Phím cạnh dấu cách" = Dấu chấm).
+    static func holdComma(_ commits: KeyCommitQueue, id: ObjectIdentifier, alt: String = commaAlt,
                           fire: @escaping (String) -> Void) -> Bool {
         guard commits.isArmed(id) else { return false }
         commits.disarm(id)
-        commits.arm(id) { fire(commaAlt) }
+        commits.arm(id) { fire(alt) }
         return true
     }
 

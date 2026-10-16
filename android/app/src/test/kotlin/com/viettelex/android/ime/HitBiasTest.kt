@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.viettelex.keyboard.SpaceSideKey
 
 /**
  * Ưu tiên phím ở mép chung (HitBias, Phil 06/10/2026) — song sinh iOS KeyHitBiasTests:
@@ -151,5 +152,23 @@ class HitBiasTest {
         assertEquals(null, KeyLayout.gutterOwner(keys, m.centerX, y, d)) // lõi m
         assertEquals(null, KeyLayout.gutterOwner(keys, 365f, 100f, d))   // khe trên, nửa của l
         assertEquals(null, KeyLayout.gutterOwner(keys, back.right + 17f, y, d))
+    }
+
+    /** "Phím cạnh dấu cách" (16/10/2026): "." thay "," được space lấn y hệt; Tắt ⇒ không có gì để lấn. */
+    @Test fun spaceSideKeyOptions() {
+        val dotKeys = KeyLayout.build(LayoutConfig(Plane.LETTERS, W, H, d, spaceSideKey = SpaceSideKey.PERIOD))
+        val space = dotKeys.first { it.kind == KeyKind.SPACE }
+        val dot = dotKeys.first { it.kind == KeyKind.PUNCT && it.label == "." }
+        assertSame(space, hit(dotKeys, dot.left + 0.29f * dot.width, dot.centerY))
+        assertSame(dot, hit(dotKeys, dot.left + 0.31f * dot.width, dot.centerY))
+        assertSame(space, hit(dotKeys, dot.left + 0.38f * dot.width, dot.centerY, 100L))
+        assertSame(dot, hit(dotKeys, dot.centerX, dot.centerY, 50L))
+        val off = KeyLayout.build(LayoutConfig(Plane.LETTERS, W, H, d, spaceSideKey = SpaceSideKey.OFF))
+        val offSpace = off.first { it.kind == KeyKind.SPACE }
+        val ret = off.first { it.kind == KeyKind.RETURN }
+        assertTrue(off.none { it.kind == KeyKind.PUNCT })
+        // Space kề ↵: mép phải space vẫn là space, ↵ không nhường ai.
+        assertSame(offSpace, hit(off, offSpace.right - 1f, offSpace.centerY, 50L))
+        assertSame(ret, hit(off, ret.left + 1f, ret.centerY, 50L))
     }
 }

@@ -1,5 +1,7 @@
 package com.viettelex.android.ime
 
+import com.viettelex.keyboard.SpaceSideKey
+
 /**
  * Hình học bàn phím — port 1:1 các constraint UIStackView của iOS KeyboardView
  * (spec §6.1, §6.3, §6.4). THUẦN (không Android API) để unit-test; mọi toạ độ là
@@ -99,6 +101,8 @@ data class LayoutConfig(
     val editTranslate: Boolean = false,
     /** Hàng số cao bằng hàng chữ (Settings, mặc định tắt ⇒ phím số 0.8×) — [keyAreaPx] đã tính theo nó. */
     val numberRowFull: Boolean = false,
+    /** "Phím cạnh dấu cách" (Settings, mặc định ",") — chỉ bàn chữ điện thoại ô thường, [KeyLayout.sideKey]. */
+    val spaceSideKey: SpaceSideKey = SpaceSideKey.DEFAULT,
 )
 
 object KeyLayout {
@@ -175,15 +179,25 @@ object KeyLayout {
         if (!suggestionsEnabled) 0f else if (collapsed) COLLAPSED_STRIP else OPEN_STRIP
 
     /**
-     * Hàng đáy có phím "." cạnh space? Plane chữ ô thường ĐIỆN THOẠI: KHÔNG — một bố cục duy
-     * nhất kiểu iPhone [?123][😊][space rộng][, hẹp][↵] (issue #113; Phil 12/10/2026 bỏ công tắc
-     * "Hiện phím dấu chấm" — bật nó ra hàng ", ." dồn góc, space bé). "." = giữ "," (chọn sẵn
-     * ".", CommaPopup), space đôi → ". ", hoặc plane 123. Luôn có: ô URL / email (giữ "." ra
-     * đuôi tên miền), tablet (dư chỗ), plane số / ký hiệu / mẫu câu.
+     * Hàng đáy có phím "." RIÊNG (thêm vào, ngoài phím hẹp cạnh space)? Plane chữ ô thường ĐIỆN
+     * THOẠI: KHÔNG — một phím hẹp duy nhất kiểu iPhone [?123][😊][space rộng][, hẹp][↵] (issue
+     * #113; Phil 12/10/2026 bỏ công tắc "Hiện phím dấu chấm" — hàng ", ." dồn góc, space bé —
+     * KHÔNG đưa lại hàng hai phím). Phím hẹp đó là "," / "." / không có theo "Phím cạnh dấu
+     * cách" ([sideKey], 16/10/2026). Luôn có: ô URL / email (giữ "." ra đuôi tên miền), tablet
+     * (dư chỗ), plane số / ký hiệu / mẫu câu.
      */
     fun hasPeriodKey(c: LayoutConfig): Boolean =
         c.plane != Plane.LETTERS || c.tablet ||
             c.kind == InputKind.URL || c.kind == InputKind.EMAIL
+
+    /**
+     * Tuỳ chọn "Phím cạnh dấu cách" CÓ HIỆU LỰC cho layout này: bàn chữ ĐIỆN THOẠI ô thường ⇒
+     * [LayoutConfig.spaceSideKey]; còn lại (tablet, ô URL / email, plane số / ký hiệu / mẫu
+     * câu) ⇒ null — bố cục cố định như cũ. View dùng để biết phím "." có popup dấu câu không.
+     */
+    fun sideKey(c: LayoutConfig): SpaceSideKey? =
+        if (c.plane == Plane.LETTERS && !c.tablet && c.kind != InputKind.URL && c.kind != InputKind.EMAIL)
+            c.spaceSideKey else null
 
     private val ROW1 = "qwertyuiop"
     private val ROW2 = "asdfghjkl"
@@ -309,7 +323,7 @@ object KeyLayout {
     /**
      * Hàng đáy kiểu Gboard: [?123|ABC 0.15][, 0.10][🌐 0.10?][😊|🗑 0.10][space còn lại][. 0.10?]
      * [enter 0.15] ("." theo [hasPeriodKey]). Bàn chữ ô thường: "," sang phải space như iOS —
-     * điện thoại [?123][🌐?][😊][space][, 0.085][enter] (bố cục DUY NHẤT, không tuỳ chọn);
+     * điện thoại [?123][🌐?][😊][space][, 0.085][enter] (phím hẹp "," | "." | không có theo [sideKey]);
      * tablet [?123][🌐?][😊][space][,][.][enter][ẩn 0.07]. Ô email: "," ⇒ "@"; ô URL: "," ⇒ "/" (issue #113: không
      * phím ".com" riêng — space rộng như stock, đuôi tên miền ở giữ "." — DomainPopup).
      * Hệ số nhân với bề ngang CẢ hàng.
@@ -338,7 +352,11 @@ object KeyLayout {
         slots += if (clearInsteadOfEmoji) Slot(KeyKind.CLEAR, "", "", 0.10f)
                  else Slot(KeyKind.EMOJI, "", "", 0.10f)
         slots += Slot(KeyKind.SPACE, "", " ", -1f)
-        if (commaRight) slots += Slot(KeyKind.PUNCT, ",", ",", if (c.tablet) 0.10f else PHONE_LETTERS_COMMA)
+        // Điện thoại: phím hẹp theo "Phím cạnh dấu cách" ("," / "." cùng chỗ cùng cỡ; Tắt ⇒ không phím, space ăn chỗ).
+        if (commaRight) {
+            if (c.tablet) slots += Slot(KeyKind.PUNCT, ",", ",", 0.10f)
+            else sideKey(c)?.char?.let { slots += Slot(KeyKind.PUNCT, it, it, PHONE_LETTERS_COMMA) }
+        }
         if (hasPeriodKey(c)) slots += Slot(KeyKind.PUNCT, ".", ".", 0.10f)
         slots += Slot(KeyKind.RETURN, c.returnLabel, "\n", 0.15f)
         if (c.tablet) slots += Slot(KeyKind.DISMISS, "", "", 0.07f)

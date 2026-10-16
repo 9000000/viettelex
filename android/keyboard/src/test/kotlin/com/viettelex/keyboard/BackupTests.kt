@@ -128,7 +128,8 @@ class BackupTests {
             "keyboardTransparency" to 250, "keyLabelTransparency" to 35,
             BackupPrefs.SHORTCUTS_KEY to "# VietTelex — bảng gõ tắt\nko: không\n")
         val p = BackupPrefs.snapshot({ prefs[it] }, listOf(TemplateItem("", "a")), null)
-        assertEquals(45, p.settings!!.size)
+        assertEquals(46, p.settings!!.size)
+        assertEquals("comma", p.settings!![Keys.SPACE_SIDE_KEY])   // phím cạnh dấu cách: mặc định ","
         assertEquals("en", p.settings!![Keys.TRANSLATE_TARGET])   // Dịch trên máy: mặc định English
         assertEquals(false, p.settings!![Keys.NUMBER_ROW_FULL_HEIGHT])   // mặc định tắt
         assertEquals(true, p.settings!![Keys.TEXT_TOOLS_ENABLED])   // chưa đặt ⇒ BẬT (mặc định)

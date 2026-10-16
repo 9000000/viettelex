@@ -141,6 +141,7 @@ final class KeyAlternatesTests: XCTestCase {
     // MARK: KeyboardView (iPhone)
 
     @MainActor private func makeKeyboard(numbers: Bool, symbols: Bool, numberRow: Bool = false,
+                                         side: SpaceSideKey = .comma,
                                          log: @escaping (String) -> Void) -> (KeyboardView, UIView) {
         let kb = KeyboardView(needsGlobe: false, inputController: nil) { k in
             switch k {
@@ -154,6 +155,7 @@ final class KeyAlternatesTests: XCTestCase {
         host.addSubview(kb)
         kb.frame = host.bounds
         kb.numberRowEnabled = numberRow
+        kb.spaceSideKey = side
         kb.configureKeyAlternates(numbers: numbers, symbols: symbols)
         kb.layoutIfNeeded()
         return (kb, host)
@@ -372,5 +374,117 @@ final class KeyAlternatesTests: XCTestCase {
             XCTAssertNil(kb.debugCommaHint)
         }
         withExtendedLifetime(host) {}
+    }
+
+    // MARK: "Phím cạnh dấu cách" (16/10/2026) — Dấu phẩy (mặc định) / Dấu chấm / Tắt
+
+    func testSpaceSideKeyPure() {
+        XCTAssertEqual(SpaceSideKey.defaultValue, .comma)
+        XCTAssertEqual(SpaceSideKey.parse(nil), .comma)
+        XCTAssertEqual(SpaceSideKey.parse("dot"), .comma)
+        XCTAssertEqual(SpaceSideKey.parse(3), .comma)
+        XCTAssertEqual(SpaceSideKey.parse("period"), .period)
+        XCTAssertEqual(SpaceSideKey.parse("off"), .off)
+        XCTAssertEqual(SpaceSideKey.key, "spaceSideKey")   // cùng khoá Android Keys.SPACE_SIDE_KEY
+        XCTAssertEqual(KeyLayout.phoneLettersPuncts(.comma), [","])
+        XCTAssertEqual(KeyLayout.phoneLettersPuncts(.period), ["."])
+        XCTAssertEqual(KeyLayout.phoneLettersPuncts(.off), [])
+        XCTAssertEqual(SpaceSideKey.comma.holdAlt, ".")
+        XCTAssertEqual(SpaceSideKey.period.holdAlt, ",")
+        XCTAssertNil(SpaceSideKey.off.holdAlt)
+        // Sao lưu: có Spec, mặc định "comma", chỉ 3 giá trị.
+        let spec = BackupSettings.all.first { $0.key == SpaceSideKey.key }
+        XCTAssertNotNil(spec)
+        if case .string(let def, let allowed)? = spec?.kind {
+            XCTAssertEqual(def, "comma")
+            XCTAssertEqual(Set(allowed), Set(SpaceSideKey.allCases.map(\.rawValue)))
+        } else { XCTFail("spaceSideKey phải là .string") }
+    }
+
+    func testHoldCommaCustomAlt() {
+        let q = KeyCommitQueue(), id = ObjectIdentifier(q)
+        var out = ""
+        q.arm(id) { out += "." }
+        XCTAssertTrue(KeyAlternates.holdComma(q, id: id, alt: ",") { out += $0 })
+        q.release(id)
+        XCTAssertEqual(out, ",")
+    }
+
+    @MainActor private func punctsRightOfSpace(_ kb: KeyboardView) -> [String] {
+        let row = kb.debugRowLabels().last ?? []
+        guard let si = row.firstIndex(of: "Dấu cách") else { return ["?"] }
+        return row[(si + 1)...].filter { [",", ".", "@", "/"].contains($0) }
+    }
+
+    @MainActor func testSpaceSideKeyBottomRow() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "iPad không đổi")
+        let (kb, host) = makeKeyboard(numbers: true, symbols: false) { _ in }
+        XCTAssertEqual(kb.spaceSideKey, .comma, "mặc định = bố cục cũ")
+        XCTAssertEqual(punctsRightOfSpace(kb), [","])
+        let row0 = kb.debugRowLabels().last ?? []
+        let space0 = try XCTUnwrap(kb.debugControl("Dấu cách"))
+        let commaW = try XCTUnwrap(kb.debugKeyButton(",")).bounds.width
+        XCTAssertEqual(commaW, 390 * KeyLayout.phoneLettersComma, accuracy: 1)
+        let spaceW0 = space0.bounds.width
+
+        let (kbP, hostP) = makeKeyboard(numbers: true, symbols: false, side: .period) { _ in }
+        XCTAssertEqual(punctsRightOfSpace(kbP), ["."])
+        XCTAssertEqual((kbP.debugRowLabels().last ?? []).count, row0.count, "cùng số phím")
+        let dot = try XCTUnwrap(kbP.debugKeyButton("."))
+        XCTAssertEqual(dot.bounds.width, commaW, accuracy: 0.5, "cùng cỡ phím ','")
+        XCTAssertEqual(try XCTUnwrap(kbP.debugControl("Dấu cách")).bounds.width, spaceW0, accuracy: 0.5)
+
+        let (kbO, hostO) = makeKeyboard(numbers: true, symbols: false, side: .off) { _ in }
+        XCTAssertEqual(punctsRightOfSpace(kbO), [])
+        XCTAssertNil(kbO.debugKeyButton(","))
+        XCTAssertNil(kbO.debugKeyButton("."))
+        XCTAssertEqual((kbO.debugRowLabels().last ?? []).count, row0.count - 1)
+        XCTAssertGreaterThan(try XCTUnwrap(kbO.debugControl("Dấu cách")).bounds.width, spaceW0 + commaW - 1)
+        // Đổi tuỳ chọn khi đang hiện ⇒ dựng lại hàng đáy.
+        kb.spaceSideKey = .off
+        XCTAssertEqual(punctsRightOfSpace(kb), [])
+        kb.spaceSideKey = .period
+        XCTAssertEqual(punctsRightOfSpace(kb), ["."])
+        withExtendedLifetime((hostP, hostO)) {}
+
+        // Ô email / URL / thanh địa chỉ: giữ nguyên dù tuỳ chọn nào.
+        for side in SpaceSideKey.allCases {
+            kb.spaceSideKey = side
+            kb.configureInputKind(.email); kb.layoutIfNeeded()
+            XCTAssertEqual(punctsRightOfSpace(kb), ["@", "."], "\(side)")
+            kb.configureInputKind(.url); kb.layoutIfNeeded()
+            XCTAssertEqual(punctsRightOfSpace(kb), [".", "/"], "\(side)")
+            kb.configureInputKind(.search); kb.layoutIfNeeded()
+            XCTAssertEqual(punctsRightOfSpace(kb), ["."], "\(side)")
+            kb.configureInputKind(.normal); kb.layoutIfNeeded()
+        }
+        withExtendedLifetime(host) {}
+    }
+
+    /// Dấu chấm: giữ "." ra "," (nhãn "," nhỏ góc phím), chạm thường ra ".".
+    @MainActor func testPeriodSideKeyHoldTypesComma() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad)
+        var out: [String] = []
+        let (kb, host) = makeKeyboard(numbers: true, symbols: false, side: .period) { out.append($0) }
+        XCTAssertEqual(kb.debugCommaHint, ",")
+        XCTAssertTrue(kb.debugCommaHold())
+        XCTAssertEqual(out, ["T,"])
+        out = []
+        kb.debugCommaHold(fire: false)
+        XCTAssertEqual(out, ["T."])
+        out = []
+        kb.debugCommaHold(secondTouch: "a")
+        XCTAssertEqual(out, ["T,", "La"])
+        // Giữ phím ra ký tự phụ tắt ⇒ "." thường, không nhãn.
+        out = []
+        let (kb2, host2) = makeKeyboard(numbers: false, symbols: false, side: .period) { out.append($0) }
+        XCTAssertNil(kb2.debugCommaHint)
+        XCTAssertFalse(kb2.debugCommaHold())
+        XCTAssertEqual(out, ["T."])
+        // Tắt ⇒ không có phím để giữ.
+        kb2.spaceSideKey = .off
+        kb2.layoutIfNeeded()
+        XCTAssertFalse(kb2.debugCommaHold())
+        withExtendedLifetime((host, host2)) {}
     }
 }

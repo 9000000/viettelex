@@ -55,6 +55,7 @@ object BackupSettings {
         Spec(Keys.KEY_SOUND_STYLE, SettingKind.Choice(KeySoundStyle.DEFAULT.id, KeySoundStyle.IDS)),
         Spec(Keys.NUMBER_ROW, SettingKind.Bool(false)),
         Spec(Keys.NUMBER_ROW_FULL_HEIGHT, SettingKind.Bool(false)),
+        Spec(Keys.SPACE_SIDE_KEY, SettingKind.Choice(SpaceSideKey.DEFAULT.id, SpaceSideKey.IDS)),
         Spec(Keys.ROW_HEIGHT_ADJUST, SettingKind.IntRange(0, -10..10)),
         Spec(Keys.KEYBOARD_RAISE, SettingKind.IntRange(0, 0..KeyboardSettings.KEYBOARD_RAISE_MAX)),
         Spec(Keys.FLOATING_KEYBOARD, SettingKind.Bool(false)),

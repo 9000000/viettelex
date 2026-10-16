@@ -23,6 +23,32 @@ class KeyMenusTests {
         assertTrue(DomainPopup.choices(DomainPopup.Field.NORMAL, ",", lettersPlane = true).isEmpty())
     }
 
+    /** "Phím cạnh dấu cách" = Dấu chấm: giữ "." ra cùng bộ dấu câu, "," chọn sẵn, "." thứ hai. */
+    @Test fun periodSideKeyChoices() {
+        val p = CommaPopup.choices(".", lettersPlane = true, periodKey = true)
+        assertEquals(listOf(",", ".", "?", "!", ":", ";", "'", "\"", "-", "…"), p)
+        assertEquals(",", p[CommaPopup.PRESELECT])
+        assertEquals(CommaPopup.choices.toSet(), p.toSet())
+        // "." không phải phím cạnh space (tablet / ô URL, email) ⇒ không popup này; "," vẫn như cũ.
+        assertTrue(CommaPopup.choices(".", lettersPlane = true, periodKey = false).isEmpty())
+        assertTrue(CommaPopup.choices(".", lettersPlane = false, periodKey = true).isEmpty())
+        assertEquals(CommaPopup.choices, CommaPopup.choices(",", lettersPlane = true, periodKey = true))
+    }
+
+    @Test fun spaceSideKeyParsing() {
+        assertEquals(SpaceSideKey.COMMA, SpaceSideKey.of(null))
+        assertEquals(SpaceSideKey.COMMA, SpaceSideKey.of("dot"))
+        assertEquals(SpaceSideKey.COMMA, SpaceSideKey.of(3))
+        assertEquals(SpaceSideKey.PERIOD, SpaceSideKey.of("period"))
+        assertEquals(SpaceSideKey.OFF, SpaceSideKey.of("off"))
+        assertEquals(setOf("comma", "period", "off"), SpaceSideKey.IDS)
+        assertEquals(SpaceSideKey.PERIOD, KeyboardSettings.load { if (it == Keys.SPACE_SIDE_KEY) "period" else null }.spaceSideKey)
+        assertEquals(SpaceSideKey.COMMA, KeyboardSettings.load { null }.spaceSideKey)
+        // Sao lưu: có trong Spec, mặc định "comma", giá trị lạ bỏ qua.
+        val spec = BackupSettings.all.first { it.key == Keys.SPACE_SIDE_KEY }
+        assertEquals(SettingKind.Choice("comma", setOf("comma", "period", "off")), spec.kind)
+    }
+
     /** "," cạnh phải space (điện thoại 390 dp: tâm ≈ 0.73 W) ⇒ hàng loe sang trái, ô "," gần ngón. */
     private val itemW = CommaPopup.itemWidthDp(tablet = false)
     private val keyX = 285f

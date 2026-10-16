@@ -12,6 +12,7 @@ import android.view.View
 import android.view.animation.DecelerateInterpolator
 import com.viettelex.android.R
 import com.viettelex.keyboard.CommaPopup
+import com.viettelex.keyboard.SpaceSideKey
 import com.viettelex.keyboard.DomainPopup
 import com.viettelex.keyboard.EmojiKeyAction
 import com.viettelex.keyboard.EmojiKeyMenu
@@ -416,6 +417,8 @@ class KeyboardView(
     // Popup bật (không TalkBack): giữ "," = popup dấu câu (CommaPopup); hai hành vi cũ dưới chỉ còn cho TalkBack.
     /** "," bàn chữ có popup dấu câu (không TalkBack). */
     private fun isCommaPopup(k: LaidKey) = popoversEnabled && plane == Plane.LETTERS && k.kind == KeyKind.PUNCT && k.label == ","
+    /** "." cạnh space (Dấu chấm) có popup dấu câu ("," chọn sẵn) — như [isCommaPopup]. */
+    private fun isPeriodPopup(k: LaidKey) = periodSideKey && popoversEnabled && plane == Plane.LETTERS && k.kind == KeyKind.PUNCT && k.label == "."
     private fun isVoiceComma(k: LaidKey) = !popoversEnabled && voiceAvailable && plane == Plane.LETTERS && k.kind == KeyKind.PUNCT && k.label == ","
     // --- giữ "," ra "." (KeyAlternates.commaHold: bảng ký tự phụ không rỗng) — chỉ khi "," KHÔNG
     // phải phím giọng nói (có IME giọng nói ⇒ giữ nguyên hành động cũ, không ra ".") ---
@@ -565,8 +568,9 @@ class KeyboardView(
     fun configure(returnLabel: String, kind: InputKind, needsGlobe: Boolean, showLogo: Boolean,
                   templatesEnabled: Boolean, templates: List<TemplateItem>, keyAreaPx: Float,
                   numberSigned: Boolean = false, numberDecimal: Boolean = false, numberRow: Boolean = false,
-                  numberRowFull: Boolean = false) {
+                  numberRowFull: Boolean = false, spaceSideKey: SpaceSideKey = SpaceSideKey.DEFAULT) {
         this.numberRow = numberRow
+        this.spaceSideKey = spaceSideKey
         this.numberRowFull = numberRowFull
         this.numberSigned = numberSigned
         this.numberDecimal = numberDecimal
@@ -649,9 +653,13 @@ class KeyboardView(
     private var numberDecimal = false
     private var numberRow = false
     private var numberRowFull = false
+    /** "Phím cạnh dấu cách" (Settings) — trong chữ ký layout, đọc lúc dựng (0 chi phí mỗi phím). */
+    private var spaceSideKey = SpaceSideKey.DEFAULT
+    /** Layout đang hiện có phím "." cạnh space thay "," (Dấu chấm) ⇒ giữ "." ra popup dấu câu. */
+    private var periodSideKey = false
     /** Chế độ một tay (IME chỉ đặt khác OFF trên điện thoại). */
     var oneHand = OneHandSide.OFF; private set
-    private fun signature() = "$returnLabel|$inputKind|$needsGlobe|$width|$keyAreaPx|$numberSigned|$numberDecimal|$numberRow|$numberRowFull|$oneHand|$textToolsEnabled|$translateEnabled"
+    private fun signature() = "$returnLabel|$inputKind|$needsGlobe|$width|$keyAreaPx|$numberSigned|$numberDecimal|$numberRow|$numberRowFull|$spaceSideKey|$oneHand|$textToolsEnabled|$translateEnabled"
 
     private fun rebuild() {
         if (width == 0) return
@@ -660,11 +668,12 @@ class KeyboardView(
         balloon.clearPress()              // khung phím sẫm cũ không còn đúng
         val sig = signature()
         if (sig != builtSig) { planeCache.clear(); builtSig = sig }
-        keys = planeCache.getOrPut(plane) {
-            KeyLayout.build(LayoutConfig(plane, width.toFloat(), keyAreaPx, d, inputKind, needsGlobe,
-                theme.tablet, returnLabel, numberSigned, numberDecimal, numberRow, oneHand,
-                editTools = textToolsEnabled, numberRowFull = numberRowFull, editTranslate = translateEnabled))
-        }
+        val cfg = LayoutConfig(plane, width.toFloat(), keyAreaPx, d, inputKind, needsGlobe,
+            theme.tablet, returnLabel, numberSigned, numberDecimal, numberRow, oneHand,
+            editTools = textToolsEnabled, numberRowFull = numberRowFull, editTranslate = translateEnabled,
+            spaceSideKey = spaceSideKey)
+        keys = planeCache.getOrPut(plane) { KeyLayout.build(cfg) }
+        periodSideKey = KeyLayout.sideKey(cfg) == SpaceSideKey.PERIOD
         railSpan = if (OneHand.appliesTo(plane)) OneHand.rail(width.toFloat(), oneHand) else null
         a11y.invalidateRoot()             // TalkBack tắt ⇒ trả về ngay (manager không bật)
         spaceKey = keys.firstOrNull { it.kind == KeyKind.SPACE }
@@ -853,6 +862,7 @@ class KeyboardView(
                 // Gợi ý giữ lâu kiểu Gboard ở góc trên-phải phím ",": "." (popup dấu câu); TalkBack: 🎤.
                 if (isVoiceComma(k)) icon(c, ImeIcons.MIC, k.right - hintInset, k.top + hintInset, 10f, theme.ink, (contentAlpha * 0.55f).toInt())
                 else if (isPeriodComma(k) || isCommaPopup(k)) drawLabel(c, KeyAlternates.COMMA_ALT, k.right - hintInset + theme.dp(2f), k.top + hintInset, hintPaint, hintOff, (contentAlpha * 0.55f).toInt())
+                else if (isPeriodPopup(k)) drawLabel(c, ",", k.right - hintInset + theme.dp(2f), k.top + hintInset, hintPaint, hintOff, (contentAlpha * 0.55f).toInt())
             }
             KeyKind.PLANE, KeyKind.MORE -> drawLabel(c, k.label, cx, cy, controlPaint, controlOff, contentAlpha)
             KeyKind.SHIFT -> {
@@ -1661,7 +1671,7 @@ class KeyboardView(
                     InputKind.URL -> DomainPopup.Field.URL
                     InputKind.EMAIL -> DomainPopup.Field.EMAIL
                     else -> DomainPopup.Field.NORMAL
-                }, k.label, lettersPlane = true).ifEmpty { CommaPopup.choices(k.label, lettersPlane = true) }
+                }, k.label, lettersPlane = true).ifEmpty { CommaPopup.choices(k.label, lettersPlane = true, periodKey = periodSideKey) }
             Plane.NUMBERS, Plane.SYMBOLS -> KeyVariants.variants(k.label, symbolPlane = true,
                 numericField = inputKind.padPlane != null)
             else -> emptyList()
@@ -1675,7 +1685,7 @@ class KeyboardView(
         dropPopover()
         popHold = DomainPopup.Hold(choices)
         popPid = pid; popKey = k; popX = x; popY = y
-        popVariants = plane != Plane.LETTERS || k.label == ","     // ô hẹp, chữ lớn như biến thể ký tự
+        popVariants = plane != Plane.LETTERS || k.label == "," || isPeriodPopup(k)    // ô hẹp, chữ lớn như biến thể ký tự
         postDelayed(popRun, KeyAlternates.HOLD_MS)
     }
 
@@ -1686,7 +1696,7 @@ class KeyboardView(
         val n = h.choices.size
         val wDp = width / d
         // "," bàn chữ: 10 ô ⇒ ô hẹp hơn để hàng loe từ phím (cạnh phải space) sang trái gọn.
-        val comma = plane == Plane.LETTERS && k.label == ","
+        val comma = plane == Plane.LETTERS && (k.label == "," || isPeriodPopup(k))
         val itemW = minOf(if (comma) CommaPopup.itemWidthDp(theme.tablet)
             else if (popVariants) (if (theme.tablet) 56f else 38f) else (if (theme.tablet) 68f else 56f),
             (wDp - 4f) / n)
