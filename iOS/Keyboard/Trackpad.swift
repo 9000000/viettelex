@@ -1,7 +1,7 @@
 // Trackpad (giữ phím cách) — logic THUẦN (không UIKit), pinned by TrackpadTests.
 // Cùng thuật toán/ngưỡng cử chỉ với Android (android/.../ime/Trackpad.kt).
 //
-// • Ngang: mỗi 9pt = 1 ký tự (cảm giác stock). Dọc: mỗi 24pt = 1 dòng.
+// • Ngang: mỗi 6pt = 1 ký tự (bản cũ 9pt — người dùng chê chậm hơn phím hệ thống). Dọc: mỗi 24pt = 1 dòng.
 // • Hai trục ĐỘC LẬP như stock (kéo chéo đi cả hai), lọc theo HƯỚNG kéo: hướng = EMA
 //   véc-tơ dời (α 0.3/sự kiện). Hướng gần ngang (|dy| < 0.4·|dx|, ~22°) ⇒ bỏ dy — kéo
 //   ngang hơi chéo không nhảy dòng; gần dọc ⇒ bỏ dx — rung ngang khi kéo dọc không dời
@@ -18,7 +18,7 @@ struct TrackpadGesture {
     /// `count` có dấu: ngang âm = trái; dọc âm = lên.
     struct Step: Equatable { let axis: Axis; let count: Int }
 
-    static let hStep = 9.0, vStep = 24.0
+    static let hStep = 6.0, vStep = 24.0
     /// Tỉ lệ trục phụ / trục chính (theo hướng kéo) dưới ngưỡng này ⇒ bỏ trục phụ (~22°).
     static let offAxis = 0.4
     /// Trọng số sự kiện mới trong EMA hướng kéo.

@@ -9,7 +9,7 @@ import kotlin.math.roundToInt
  * (đơn vị dp — KeyboardView chia density trước) + thời gian, trả bước di con trỏ.
  * Cùng thuật toán/ngưỡng với iOS `TrackpadGesture` (iOS/Keyboard/Trackpad.swift).
  *
- * - Ngang: mỗi [H_STEP] dp = 1 ký tự (cảm giác stock ~9pt).
+ * - Ngang: mỗi [H_STEP] dp = 1 ký tự (bản cũ 9 — người dùng chê chậm hơn phím hệ thống).
  * - Dọc: mỗi [V_STEP] dp = 1 dòng.
  * - Hai trục ĐỘC LẬP như stock (kéo chéo đi cả hai), lọc theo HƯỚNG kéo: hướng = EMA
  *   véc-tơ dời ([DIR_ALPHA]/sự kiện). Hướng gần ngang (|dy| < [OFF_AXIS]·|dx|, ~22°) ⇒
@@ -79,7 +79,7 @@ class TrackpadGesture {
     }
 
     companion object {
-        const val H_STEP = 9f
+        const val H_STEP = 6f
         const val V_STEP = 24f
         /** Tỉ lệ trục phụ / trục chính (theo hướng kéo) dưới ngưỡng này ⇒ bỏ trục phụ. */
         const val OFF_AXIS = 0.4

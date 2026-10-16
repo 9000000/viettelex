@@ -16,9 +16,9 @@ class TrackpadTest {
     }
 
     @Test fun slowHorizontalIsExactPerCharacter() {
-        // 3 dp mỗi 50 ms = 60 dp/s: 90 dp ⇒ đúng 10 ký tự, từng bước 1.
+        // 3 dp mỗi 50 ms = 60 dp/s: 90 dp ⇒ đúng 15 ký tự (6 dp/ký tự), từng bước 1.
         val steps = drag((1..30).map { it * 3f to 0f }, 50)
-        assertEquals(10, steps.sumOf { it.count })
+        assertEquals(15, steps.sumOf { it.count })
         steps.forEach { assertEquals(Axis.H, it.axis); assertEquals(1, it.count) }
     }
 
@@ -26,20 +26,25 @@ class TrackpadTest {
         // 30 dp mỗi 16 ms ≈ 1875 dp/s ⇒ ×5.
         val steps = drag((1..6).map { it * 30f to 0f }, 16)
         assertEquals(Axis.H, steps.last().axis)
-        assertEquals(20, steps.last().count)            // 4 ô (dư 30+33+36 cộng dồn) × 5
-        assertTrue(steps.sumOf { it.count } > 180 / 9)
+        assertEquals(25, steps.last().count)            // 5 ô (30 dp / 6) × 5
+        assertTrue(steps.sumOf { it.count } > 180 / 6)
+    }
+
+    /** Hồi quy: người dùng chê con trỏ (giữ phím cách) chậm hơn phím hệ thống ⇒ 6 dp/ký tự. */
+    @Test fun defaultHorizontalStepIsFasterThanOld() {
+        assertTrue(TrackpadGesture.H_STEP <= 6f)
     }
 
     @Test fun leftIsNegative() {
         val steps = drag((1..10).map { -it * 3f to 0f }, 50)
-        assertEquals(-3, steps.sumOf { it.count })
+        assertEquals(-5, steps.sumOf { it.count })
     }
 
     @Test fun slightlyDiagonalHorizontalNeverChangesLine() {
         // Kéo ngang 300 dp, trôi xuống 60 dp (> 2 dòng) — vẫn không bước dọc nào.
         val steps = drag((1..100).map { it * 3f to it * 0.6f }, 30)
         steps.forEach { assertEquals(Axis.H, it.axis) }
-        assertEquals(300 / 9, steps.sumOf { it.count })
+        assertEquals(300 / 6, steps.sumOf { it.count })
     }
 
     @Test fun verticalDragMovesLinesDespiteJitter() {
@@ -70,26 +75,26 @@ class TrackpadTest {
     }
 
     @Test fun diagonalDragMovesBothAxes() {
-        // 45°, 3 dp / 30 ms mỗi trục (không tăng tốc): 300 dp ⇒ ~33 ký tự + ~12 dòng lên.
+        // 45°, 3 dp / 30 ms mỗi trục (không tăng tốc): 300 dp ⇒ ~50 ký tự + ~12 dòng lên.
         val steps = drag((1..100).map { it * 3f to -it * 3f }, 30)
-        assertTrue(steps.sum(Axis.H) in 32..33)
+        assertTrue(steps.sum(Axis.H) in 49..50)
         assertTrue(steps.sum(Axis.V) in -12..-11)
     }
 
     @Test fun turningFromHorizontalToVerticalInOneDrag() {
         val pts = (1..30).map { it * 3f to 0f } + (1..24).map { 90f to it * 4f }
         val steps = drag(pts, 50)
-        assertEquals(10, steps.sum(Axis.H))
+        assertEquals(15, steps.sum(Axis.H))
         assertTrue(steps.sum(Axis.V) in 3..4)
         val firstV = steps.indexOfFirst { it.axis == Axis.V }
         assertTrue(steps.drop(firstV).all { it.axis == Axis.V })
-        // Dọc rồi quay ngang: vài dp đầu còn mang hướng dọc (bỏ), sau đó 9 dp = 1 ký tự.
+        // Dọc rồi quay ngang: vài dp đầu còn mang hướng dọc (bỏ), sau đó 6 dp = 1 ký tự.
         val g = TrackpadGesture()
         g.begin(0f, 0f, 0)
         assertEquals(Axis.V, g.move(0f, 30f, 100)!!.axis)
         assertNull(g.move(4f, 30f, 200))
         assertNull(g.move(8f, 30f, 300))
-        assertNull(g.move(12f, 30f, 400))
+        assertEquals(TrackpadGesture.Step(Axis.H, 1), g.move(12f, 30f, 400))
         assertEquals(TrackpadGesture.Step(Axis.H, 1), g.move(16f, 30f, 500))
     }
 

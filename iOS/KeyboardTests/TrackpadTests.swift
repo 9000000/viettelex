@@ -18,29 +18,34 @@ final class TrackpadGestureTests: XCTestCase {
     }
 
     func testSlowHorizontalIsExactPerCharacter() {
-        // 3pt / 50ms = 60 pt/s: 90pt ⇒ đúng 10 ký tự, mỗi bước 1.
+        // 3pt / 50ms = 60 pt/s: 90pt ⇒ đúng 15 ký tự (6pt/ký tự), mỗi bước 1.
         let steps = drag((1...30).map { (Double($0) * 3, 0) }, dt: 0.05)
-        XCTAssertEqual(steps.reduce(0) { $0 + $1.count }, 10)
+        XCTAssertEqual(steps.reduce(0) { $0 + $1.count }, 15)
         XCTAssertTrue(steps.allSatisfy { $0.axis == .horizontal && $0.count == 1 })
     }
 
     func testFastHorizontalAccelerates() {
-        // 30pt / 16ms ≈ 1875 pt/s ⇒ ×5; bước cuối 4 ô (dư cộng dồn) × 5.
+        // 30pt / 16ms ≈ 1875 pt/s ⇒ ×5; bước cuối 5 ô (30pt / 6) × 5.
         let steps = drag((1...6).map { (Double($0) * 30, 0) }, dt: 0.016)
-        XCTAssertEqual(steps.last, .init(axis: .horizontal, count: 20))
-        XCTAssertGreaterThan(steps.reduce(0) { $0 + $1.count }, 180 / 9)
+        XCTAssertEqual(steps.last, .init(axis: .horizontal, count: 25))
+        XCTAssertGreaterThan(steps.reduce(0) { $0 + $1.count }, 180 / 6)
+    }
+
+    /// Hồi quy: người dùng chê con trỏ (giữ phím cách) chậm hơn phím hệ thống ⇒ 6pt/ký tự.
+    func testDefaultHorizontalStepIsFasterThanOld() {
+        XCTAssertLessThanOrEqual(TrackpadGesture.hStep, 6)
     }
 
     func testLeftIsNegative() {
         let steps = drag((1...10).map { (-Double($0) * 3, 0) }, dt: 0.05)
-        XCTAssertEqual(steps.reduce(0) { $0 + $1.count }, -3)
+        XCTAssertEqual(steps.reduce(0) { $0 + $1.count }, -5)
     }
 
     func testSlightlyDiagonalHorizontalNeverChangesLine() {
         // Ngang 300pt, trôi xuống 60pt (> 2 dòng, ~11°): không bước dọc nào, ngang đủ.
         let steps = drag((1...100).map { (Double($0) * 3, Double($0) * 0.6) }, dt: 0.03)
         XCTAssertTrue(steps.allSatisfy { $0.axis == .horizontal })
-        XCTAssertEqual(sum(steps, .horizontal), 300 / 9)
+        XCTAssertEqual(sum(steps, .horizontal), 300 / 6)
     }
 
     func testVerticalDragMovesLinesDespiteJitter() {
@@ -60,10 +65,10 @@ final class TrackpadGestureTests: XCTestCase {
     }
 
     func testDiagonalDragMovesBothAxes() {
-        // 45°, 3pt/30ms mỗi trục (≈100 pt/s, không tăng tốc): 300pt ⇒ ~33 ký tự + ~12 dòng.
+        // 45°, 3pt/30ms mỗi trục (≈100 pt/s, không tăng tốc): 300pt ⇒ ~50 ký tự + ~12 dòng.
         let steps = drag((1...100).map { (Double($0) * 3, -Double($0) * 3) }, dt: 0.03)
-        XCTAssertGreaterThanOrEqual(sum(steps, .horizontal), 32)
-        XCTAssertLessThanOrEqual(sum(steps, .horizontal), 33)
+        XCTAssertGreaterThanOrEqual(sum(steps, .horizontal), 49)
+        XCTAssertLessThanOrEqual(sum(steps, .horizontal), 50)
         XCTAssertGreaterThanOrEqual(sum(steps, .vertical), -12)
         XCTAssertLessThanOrEqual(sum(steps, .vertical), -11)
     }
@@ -74,18 +79,18 @@ final class TrackpadGestureTests: XCTestCase {
         var pts = (1...30).map { (Double($0) * 3, 0.0) }
         pts += (1...24).map { (90.0, Double($0) * 4) }
         let steps = drag(pts, dt: 0.05)
-        XCTAssertEqual(sum(steps, .horizontal), 10)
+        XCTAssertEqual(sum(steps, .horizontal), 15)
         XCTAssertGreaterThanOrEqual(sum(steps, .vertical), 3)
         XCTAssertLessThanOrEqual(sum(steps, .vertical), 4)
         XCTAssertEqual(steps.firstIndex { $0.axis == .vertical }.map { i in
             steps[i...].allSatisfy { $0.axis == .vertical } }, true)
-        // Dọc rồi quay ngang: vài pt đầu còn mang hướng dọc (bỏ), sau đó 9pt = 1 ký tự.
+        // Dọc rồi quay ngang: vài pt đầu còn mang hướng dọc (bỏ), sau đó 6pt = 1 ký tự.
         var g = TrackpadGesture()
         g.begin(x: 0, y: 0, t: 0)
         XCTAssertEqual(g.move(x: 0, y: 30, t: 0.1)?.axis, .vertical)
         XCTAssertNil(g.move(x: 4, y: 30, t: 0.2))
         XCTAssertNil(g.move(x: 8, y: 30, t: 0.3))
-        XCTAssertNil(g.move(x: 12, y: 30, t: 0.4))
+        XCTAssertEqual(g.move(x: 12, y: 30, t: 0.4), .init(axis: .horizontal, count: 1))
         XCTAssertEqual(g.move(x: 16, y: 30, t: 0.5), .init(axis: .horizontal, count: 1))
     }
 
