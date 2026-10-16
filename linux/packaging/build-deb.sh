@@ -55,6 +55,7 @@ mkdir -p "$STAGE"
     iOS/Keyboard/Resources/vnlexicon.bin iOS/Keyboard/Resources/vnlm.bin iOS/Keyboard/Resources/enlexicon.bin \
     iOS/KeyboardTests/Fixtures/text-tools.txt iOS/KeyboardTests/Fixtures/add-tones.txt \
     iOS/KeyboardTests/Fixtures/math-results.txt iOS/KeyboardTests/Fixtures/number-chips.txt \
+    windows/app/tests/fixtures/word-prediction.tsv windows/app/tests/fixtures/learned-words.bin \
     android/telexcore/src/test/resources/golden.tsv.gz ) | tar -xf - -C "$STAGE"
 cp -a "$HERE/debian" "$STAGE/debian"
 # Symlink trong linux/ trỏ ra ngoài cây đã dàn (thêm file iOS mới mà quên liệt kê ở trên) ⇒ dừng
