@@ -56,6 +56,15 @@ final class TelexInputController: IMKInputController {
     /// ⌫ ngay sau khi nở gõ tắt → trả lại chữ đã gõ (một lần, chỉ in-place, verify màn
     /// hình). Bị tiêu thụ bởi BẤT KỲ phím thật nào tới sau.
     private var shortcutUndo: ShortcutUndo?
+    /// Cài đặt Nhập văn bản của macOS (SystemAutoText.swift): uptime ns của dấu cách vừa
+    /// đi qua (0 = phím trước không phải dấu cách) — dấu chấm khi nhấn đúp phím cách;
+    /// "—" vừa đổi từ "--" (gõ "-" tiếp ⇒ trả "---"); chữ đầu từ vừa được viết hoa tự
+    /// động (⌫ nó ⇒ chữ đầu kế tiếp không viết hoa — user đã từ chối). Mọi phím thật
+    /// tiêu thụ hai cờ đầu.
+    private var periodSpaceNs: UInt64 = 0
+    private var lastEmDashOurs = false
+    private var autoCappedWord = false
+    private var suppressAutoCap = false
     /// boundary() vừa nở gõ tắt: (chữ trên màn hình trước khi nở, nội dung). Caller
     /// biết ký tự ranh giới nên là nơi dựng shortcutUndo.
     private var expandedAtBoundary: (typed: String, expansion: String)?
@@ -430,6 +439,9 @@ final class TelexInputController: IMKInputController {
         // (sau khi đã lọc echo của chính mình ở trên) đều tiêu thụ nó.
         let pendingShortcutUndo = shortcutUndo
         shortcutUndo = nil
+        let prevSpaceNs = periodSpaceNs
+        let prevEmDashOurs = lastEmDashOurs
+        periodSpaceNs = 0; lastEmDashOurs = false
 
         if NavKeyWitness.consume(keycode: Int64(event.keyCode)) {
             logDecision("nav key swallowed by app → composition dropped before this key")
@@ -701,6 +713,8 @@ final class TelexInputController: IMKInputController {
                 }
             }
             let action = engine.backspace()
+            // ⌫ xoá đúng chữ hoa tự động ⇒ user từ chối: chữ đầu kế tiếp giữ nguyên.
+            if autoCappedWord, engine.isEmpty { suppressAutoCap = true; autoCappedWord = false }
             // OVERFLOW (word longer than the engine's 32-char capacity): backspace()
             // returns .passthrough and the app must delete natively — the engine's view
             // is a stale 32-char prefix of what is on screen. Must be decided BEFORE
@@ -867,7 +881,7 @@ final class TelexInputController: IMKInputController {
         // they must reach the engine instead of ending the word. In Telex a digit is a
         // boundary as before (field report issue #28, 2026-07-27: VNI did nothing in the
         // app because every digit was consumed here — engine-level VNI tests all passed).
-        guard let chars = effectiveCharacters(event), let ch = chars.first, let ascii = ch.asciiValue,
+        guard let chars = effectiveCharacters(event), var ch = chars.first, let ascii = ch.asciiValue,
               isWordKey(ascii, vniMode: engine.vniMode,
                         bracketVowels: engine.bracketVowels,
                         keypad: isKeypadDigitKeyCode(Int(event.keyCode))) else {
@@ -878,6 +892,17 @@ final class TelexInputController: IMKInputController {
             let boundaryText = effectiveCharacters(event)
             let boundaryChar = boundaryText?.utf8.first
             let wasEdge = edgeTapWord
+            autoCappedWord = false; suppressAutoCap = false
+            // Dấu chấm khi nhấn đúp phím cách / "--" → "—" (cài đặt macOS): phím thứ hai
+            // tới khi từ đã chốt (engine rỗng) — thay ký tự ĐÃ CHỐT qua replacementRange.
+            if engine.isEmpty, !markedNow, !wasEdge,
+               boundaryChar == UInt8(ascii: " ") || boundaryChar == UInt8(ascii: "-"),
+               boundaryText?.count == 1,
+               trySystemReplace(boundaryChar == UInt8(ascii: " "), prevSpaceNs: prevSpaceNs,
+                                prevEmDashOurs: prevEmDashOurs, isRepeat: event.isARepeat, client, id: id) {
+                spMode = "system-auto-text"
+                return true
+            }
             // Gõ tắt (khớp iOS/Android): khoá chữ chỉ nở ở khoảng trắng / dấu câu kết thúc
             // từ ("ko1", "ko-", "ko@" giữ nguyên), khoá ký hiệu chỉ ở khoảng trắng; phím
             // không chèn ký tự (mũi tên, F-key) không nở. Từ dính sau số / . _ - / # @
@@ -914,7 +939,13 @@ final class TelexInputController: IMKInputController {
                 }
                 numberPrevRun = run
             }
-            if let s = inserted { shortcutTail.append(s) } else { shortcutTail.reset() }
+            // Ngoặc kép cong (cài đặt macOS): chèn “ ” ‘ ’ thay phím " ' sau khi từ đã chốt.
+            let smartQuote = (boundaryChar == UInt8(ascii: "\"") || boundaryChar == UInt8(ascii: "'"))
+                && !(rewrote && wasEdge) ? smartQuoteText(boundaryText, client, id: id) : nil
+            if let s = smartQuote ?? inserted { shortcutTail.append(s) } else { shortcutTail.reset() }
+            if inserted == " ", SystemAutoTextSettings.shared.period {
+                periodSpaceNs = DispatchTime.now().uptimeNanoseconds
+            }
             if let x = expandedAtBoundary, !markedNow, !wasEdge {
                 // Một ký tự in được vừa theo sau nội dung nở ⇒ ⌫ kế tiếp được hoàn tác.
                 shortcutUndo = ShortcutUndo.make(typed: x.typed, expansion: x.expansion, boundary: inserted)
@@ -931,6 +962,11 @@ final class TelexInputController: IMKInputController {
                 SyntheticKeyboard.postBoundaryCopy(of: cg)
                 return true
             }
+            if let q = smartQuote {
+                client.insertText(q, replacementRange: kNoRange)
+                spMode = "system-auto-text"
+                return true
+            }
             if let remapped = remappedInsert(event) {
                 client.insertText(remapped, replacementRange: kNoRange)
                 return true
@@ -938,6 +974,7 @@ final class TelexInputController: IMKInputController {
             return false
         }
 
+        var capFirstKey = false
         // First key of a new word: anchor the caret once (never again mid-word).
         // If the app can't report a caret here (some Electron apps: Claude), fall
         // back to per-op selectedRange (still in-place, no underline) rather than
@@ -987,6 +1024,10 @@ final class TelexInputController: IMKInputController {
             if AppState.shared.manualMode(id) == .inPlace {
                 logDecision("word-start pin-inPlace caret=\(sel.location == NSNotFound ? -1 : sel.location) selLen=\(sel.length) edge=\(edgeTapWord)")
             }
+            // Viết hoa đầu câu (cài đặt macOS): quyết MỘT lần ở chữ đầu từ, bằng chữ đưa
+            // vào engine (Telex vẫn ghép: "Dduwowcj" → "Được"), không sửa lại sau.
+            capFirstKey = ascii >= 97 && ascii <= 122 && !edgeTapWord
+                && shouldAutoCapitalize(caret: sel.location == NSNotFound ? nil : sel.location, client, id: id)
         }
 
         // Overlay launcher's first word key (#110): the tap may already have typed the
@@ -1009,6 +1050,12 @@ final class TelexInputController: IMKInputController {
             tryReEditWord(caret: anchor, client, id: id)
         }
 
+        // Re-edit/handoff vừa seed engine ⇒ phím này không còn là chữ đầu từ.
+        if engine.isEmpty { autoCappedWord = false }
+        if capFirstKey, engine.isEmpty {
+            ch = SystemAutoText.capitalized(ch)
+            autoCappedWord = true
+        }
         let action = engine.feed(ch)
         // OVERFLOW in a MARKED app: feed() returned .passthrough WITHOUT recording the
         // key, so re-setting the marked text (unchanged 32-char prefix) while consuming
@@ -1464,6 +1511,7 @@ final class TelexInputController: IMKInputController {
     /// so the causes were never worth naming before — now they are.
     private func dropComposition(cause: String, keepShortcutTail: Bool = false) {
         wordGluedToDigit = false
+        autoCappedWord = false; suppressAutoCap = false; lastEmDashOurs = false; periodSpaceNs = 0
         if !keepShortcutTail { shortcutTail.reset() }
         if !engine.isEmpty {
             DebugLog.log("composition dropped mid-word (cause=\(cause)) len=\((engine.composed as NSString).length)")
@@ -2017,6 +2065,96 @@ final class TelexInputController: IMKInputController {
         return true
     }
 
+    // MARK: - Cài đặt Nhập văn bản của macOS (SystemAutoText.swift)
+
+    /// Phím cách thứ hai (dấu chấm khi nhấn đúp) hoặc "-" thứ hai ("--" → "—") khi
+    /// engine rỗng. Quyết bằng dòng phím mình đã thấy (không đọc màn hình); chỉ khi sẽ
+    /// thay mới đọc lại đúng các ký tự sắp thay, lệch ⇒ phím thường. true = đã thay,
+    /// phím bị nuốt.
+    private func trySystemReplace(_ space: Bool, prevSpaceNs: UInt64, prevEmDashOurs: Bool,
+                                  isRepeat: Bool, _ client: IMKTextInput, id: String?) -> Bool {
+        let st = SystemAutoTextSettings.shared.current
+        guard space ? st.period : st.dashes else { return false }
+        let before = shortcutTail.recent
+        var expect: String, replaceLen: Int, insert: String
+        if space {
+            guard prevSpaceNs > 0,
+                  let prev = SystemAutoText.doubleSpacePeriod(
+                    before: before, gapNs: DispatchTime.now().uptimeNanoseconds &- prevSpaceNs,
+                    isRepeat: isRepeat) else { return false }
+            expect = String(prev) + " "; replaceLen = 1; insert = ". "
+        } else {
+            switch SystemAutoText.dash(before: before, lastWasOurEmDash: prevEmDashOurs) {
+            case .none: return false
+            case .emDash:
+                expect = String(before.suffix(2)); replaceLen = 1; insert = "—"
+            case .restore:
+                expect = "—"; replaceLen = 1; insert = "---"
+            }
+        }
+        guard SystemAutoText.appAllowed(id), Self.replacesCommittedText(id) else { return false }
+        let sel = client.selectedRange()
+        let n = (expect as NSString).length
+        guard sel.location != NSNotFound, sel.length == 0, sel.location >= n,
+              let sub = client.attributedSubstring(from: NSRange(location: sel.location - n, length: n)),
+              sub.string == expect else {
+            DebugLog.log("system auto-text \(id ?? "?"): screen disagrees → plain key")
+            return false
+        }
+        let range = NSRange(location: sel.location - replaceLen, length: replaceLen)
+        if AppState.shared.manualMode(id) == .inPlace, range.location <= 1 { return false }
+        client.insertText(insert, replacementRange: range)
+        shortcutTail.replaceSuffix(String(before.suffix(replaceLen)), with: insert)
+        engine.forgetLastCommit()      // ⌫ kế tiếp xoá ký tự vừa chèn, không mở lại từ
+        lastEmDashOurs = !space && insert == "—"
+        logDecision("system auto-text \(id ?? "?"): \(space ? "period" : "dash") -\(replaceLen) +\(insert.count)")
+        return true
+    }
+
+    /// Phím " / ' ⇒ ngoặc cong theo kiểu macOS, nil = giữ nguyên phím. Ký tự trước con
+    /// trỏ lấy từ dòng phím; không biết thì đọc một ký tự (hiếm: ngay sau click/đổi ô).
+    private func smartQuoteText(_ typed: String?, _ client: IMKTextInput, id: String?) -> String? {
+        guard let t = typed, t.count == 1, let c = t.first else { return nil }
+        let st = SystemAutoTextSettings.shared.current
+        guard st.quotes, SystemAutoText.appAllowed(id) else { return nil }
+        var prev: Character?
+        if Accessibility.isTrusted, let last = shortcutTail.recent.last {
+            prev = last
+        } else {
+            let sel = client.selectedRange()
+            guard sel.location != NSNotFound else { return nil }
+            if sel.location > 0 {
+                guard let sub = client.attributedSubstring(from: NSRange(location: sel.location - 1, length: 1)),
+                      let p = sub.string.last else { return nil }
+                prev = p
+            }
+        }
+        return SystemAutoText.smartQuote(c, prev: prev, quotes: st.quoteChars)
+    }
+
+    /// Chữ đầu từ: viết hoa không (cài đặt macOS "Tự động viết hoa từ"). Ngữ cảnh từ dòng
+    /// phím; không biết ⇒ đọc tối đa 24 ký tự trước con trỏ (chỉ chữ đầu tiên sau click /
+    /// đổi ô). Đầu văn bản chỉ viết hoa ở ô nhiều dòng (FocusedRole).
+    private func shouldAutoCapitalize(caret: Int?, _ client: IMKTextInput, id: String?) -> Bool {
+        guard SystemAutoTextSettings.shared.current.capitalize else { return false }
+        if suppressAutoCap { suppressAutoCap = false; return false }
+        guard SystemAutoText.appAllowed(id) else { return false }
+        // Dòng phím chỉ đáng tin khi click được báo về (tap chạy ⇔ có quyền Trợ năng).
+        let known = Accessibility.isTrusted && !shortcutTail.recent.isEmpty ? shortcutTail.recent : nil
+        var ctx = SystemAutoText.capitalization(before: known, atTextStart: false)
+        if ctx == .unknown, let loc = caret {
+            if loc == 0 {
+                ctx = SystemAutoText.capitalization(before: nil, atTextStart: FocusedRole.isMultilineText())
+            } else {
+                let n = min(loc, 24)
+                if let sub = client.attributedSubstring(from: NSRange(location: loc - n, length: n)) {
+                    ctx = SystemAutoText.capitalization(before: sub.string, atTextStart: false)
+                }
+            }
+        }
+        return ctx == .capitalize
+    }
+
     // MARK: - Gợi ý cạnh con trỏ (CaretHint)
 
     /// Áp dụng gợi ý đã chọn (Tab/Enter/click). Phép tính: chèn kết quả sau "=". Chip số:
@@ -2102,6 +2240,9 @@ final class TelexInputController: IMKInputController {
         }
         // Gõ tắt trùng Text Replacements của macOS (#117): làm mới bảng ≤ 1 lần/30 giây.
         SystemReplacementGuard.shared.activated(bundleID: AppState.shared.currentBundleID)
+        // Dấu chấm đúp-cách / viết hoa đầu câu / ngoặc cong-gạch dài: đọc lại cài đặt macOS
+        // (≤ 1 lần/giây) — đổi trong System Settings rồi quay lại app là có hiệu lực.
+        SystemAutoTextSettings.shared.refresh()
         // Tap-side view of this activation: focus epoch for re-edit(tap) (#111) and
         // the overlay-launcher latch (#110). Before anything else reads the client.
         ClientFocus.noteActivated(client: activatedClient != nil ? AppState.shared.currentBundleID : nil)
