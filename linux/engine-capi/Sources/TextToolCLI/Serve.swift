@@ -10,9 +10,10 @@
 //   math    <before>                                          (before kết thúc bằng "=")
 //   number  <before>                                          (before kết thúc bằng " ")
 //   date    <before> <prevRun> <run> <boundary> <Y> <M> <D> <h> <m>
-//   typo    <before> <word> <boundary> <raw> <flags 10×0/1>
+//   typo    <before> <word> <boundary> <raw> <flags 10×0/1> [<filter 0|1>]
 //   tones   <before>
-//   predict <before> <typed> <raw> <english 0|1>              (gợi ý từ — Predict.swift)
+//   predict <before> <typed> <raw> <english 0|1> [<filter 0|1>]  (gợi ý từ — Predict.swift)
+// `filter` = [general] filter_sensitive ("Lọc từ nhạy cảm"); thiếu ⇒ 1 (bật, như iOS).
 // Trả lời: `-` (không gợi ý) hoặc `<kind> <display> <replace> <insert>` (predict: một ứng viên).
 import Foundation
 #if canImport(Glibc)
@@ -66,6 +67,7 @@ enum HintProtocol {
         let f = fields(line)
         guard let cmd = f.first else { return "-" }
         func at(_ i: Int) -> String { i < f.count ? f[i] : "" }
+        func filterAt(_ i: Int) -> Bool { at(i) != "0" }
         let before = at(1)
         guard before.utf16.count <= 4096 else { return "-" }
         switch cmd {
@@ -87,10 +89,12 @@ enum HintProtocol {
             let word = at(2), boundary = at(3), raw = at(4)
             guard TypoFixLogic.worthChecking(boundary: boundary, raw: raw, word: word),
                   VTDataFile.url("vnlexicon.bin") != nil,
-                  let fix = TypoFixLogic.lexiconCorrection(raw: raw, flags: .init(bits: at(5))) else { return "-" }
+                  let fix = TypoFixLogic.lexiconCorrection(raw: raw, flags: .init(bits: at(5)),
+                                                           filterSensitive: filterAt(6)) else { return "-" }
             return answer(TypoFixLogic.suggestion(before: before, word: word, boundary: boundary, raw: raw, fix: fix))
         case "predict":
-            return predictAnswer(before: before, typed: at(2), raw: at(3), english: at(4) == "1")
+            return predictAnswer(before: before, typed: at(2), raw: at(3), english: at(4) == "1",
+                                 filterSensitive: filterAt(5))
         case "tones":
             guard let run = ToneRunLogic.run(before: before),
                   let restored = apply(.addTones, run) else { return "-" }

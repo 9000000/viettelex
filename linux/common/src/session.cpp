@@ -376,6 +376,7 @@ void Session::applySettings(const Settings &s) {
     capitalize_ = s.autoCapitalize;
     smart_ = s.smartPunctuation;
     predict_ = s.wordPrediction;
+    filter_ = s.filterSensitive;
     quotes_ = autotext::quotesFor(s.quoteStyle);
     if (!predict_) declinedPrediction_.clear();
     if (!period_) lastSpaceMs_ = -1;
@@ -495,7 +496,9 @@ std::vector<std::string> Session::nextWordRequest() {
     if (!predict_ || !hintSink_ || !autoTextHere() || !vt_is_empty(e_) || !autotext::nextWordWorthAsking(tail_))
         return {};
     declinedPrediction_.clear();  // a new word: the old Esc no longer applies
-    return {"predict", predictBefore(), "", "", vt_previous_word_english(e_) ? "1" : "0"};
+    std::vector<std::string> r = {"predict", predictBefore(), "", "", vt_previous_word_english(e_) ? "1" : "0"};
+    if (!filter_) r.push_back("0");  // "Lọc từ nhạy cảm" off (absent = on)
+    return r;
 }
 
 // Completion of the word being typed ("đư" → được / đường / đưa), after kPredictIdleMs of no
@@ -505,8 +508,10 @@ void Session::schedulePrediction(const std::string &typed, const std::string &ra
     // on screen and only replaced where the Session may edit.
     if (!autoTextHere() || (mode_ == DisplayMode::Surrounding && !surroundingEdits_)) return;
     if (!autotext::completionWorthAsking(typed) || autotext::predictionMuted(typed, declinedPrediction_)) return;
-    requestHint({"predict", predictBefore() + typed, typed, rawKeys, vt_previous_word_english(e_) ? "1" : "0"},
-                autotext::kPredictIdleMs);
+    std::vector<std::string> r = {"predict", predictBefore() + typed, typed, rawKeys,
+                                  vt_previous_word_english(e_) ? "1" : "0"};
+    if (!filter_) r.push_back("0");  // "Lọc từ nhạy cảm" off (absent = on)
+    requestHint(std::move(r), autotext::kPredictIdleMs);
 }
 
 // A printable boundary (or Enter / Tab / navigation) was just handled: keep the typed tail
@@ -565,8 +570,10 @@ void Session::afterBoundary(uint32_t ch, uint32_t keysym, const std::string *typ
                !vt_is_unaccented_syllable(run.c_str())) {
         // An English word of the engine's list: the helper would answer "no fix" (isKnown) —
         // same outcome without waking it (it stays asleep while typing English).
-        if (!hints::typoKnownEnglish(lastEnded_.raw))
+        if (!hints::typoKnownEnglish(lastEnded_.raw)) {
             primary = {"typo", typedBefore(), run, boundary, lastEnded_.raw, engineBits_};
+            if (!filter_) primary.push_back("0");  // "Lọc từ nhạy cảm" off (absent = on)
+        }
     } else if (tt != hints::ToneTrigger::None) {
         primary = {"tones", typedBefore()};
         delayMs = tt == hints::ToneTrigger::Pause ? 900 : 0;  // ToneRunLogic.pauseDelay
@@ -645,10 +652,47 @@ bool Session::applyPrediction(const std::string &word, InputContext &ic) {
     gluedToDigit_ = false;
     caretMoved_ = false;
     autoCappedWord_ = suppressAutoCap_ = false;
-    lastSpaceMs_ = -1;
+    // Our space counts as the first space of a double-space period, and the very next key may
+    // attach punctuation to the word (acceptedSpaceKey).
+    lastSpaceMs_ = period_ ? (nowMs_ ? nowMs_() : 0) : -1;
+    acceptedSpace_ = insert;
+    carriedSpace_.clear();
     std::vector<std::string> next = nextWordRequest();
     if (!next.empty()) requestHint(std::move(next), autotext::kPredictIdleMs);
     return true;
+}
+
+// The key right after accepting a prediction ("được␣"): punctuation attaches to the word and
+// our space moves after it (autotext::acceptSpaceReplacement); the space right after that is
+// swallowed. The screen is read back first (like every replacement); anything else → -1 (the
+// key is handled as usual, the state is gone). 1 = consumed.
+int Session::acceptedSpaceKey(const KeyEvent &ev, InputContext &ic) {
+    std::string inserted, carried;
+    inserted.swap(acceptedSpace_);
+    carried.swap(carriedSpace_);
+    if (!vietnamese_ || passthrough_ || !vt_is_empty(e_) || mode_ == DisplayMode::Direct ||
+        (ev.mods & (VT_MOD_CTRL | VT_MOD_ALT | VT_MOD_SUPER)) || ev.unicode == 0)
+        return -1;
+    auto screenEnds = [&](const std::string &t) {
+        std::string before;
+        return !ic.hasSelection() && ic.textBeforeCursorTail(utf8Chars(t), before) && endsWith(before, t);
+    };
+    if (!carried.empty()) {
+        if (ev.unicode != ' ' || !screenEnds(carried)) return -1;
+        lastSpaceMs_ = -1;
+        return 1;  // "được. " + space: not two spaces
+    }
+    const std::string out = autotext::acceptSpaceReplacement(ev.unicode);
+    if (inserted.empty() || out.empty() || !screenEnds(inserted)) return -1;
+    if (mode_ == DisplayMode::Surrounding && !surroundingEdits_) return -1;
+    replace(ic, 1, out, " ");
+    tailPop(1);
+    tailAppend(out);
+    vt_forget_last_commit(e_);
+    lastSpaceMs_ = -1;
+    lastWasBoundaryChar_ = false;
+    if (out.back() == ' ') carriedSpace_ = out;
+    return 1;
 }
 
 void Session::dismissHint(InputContext &ic) {
@@ -775,6 +819,8 @@ void Session::focusIn() {
     tailReset();
     lastSpaceMs_ = -1;
     lastEmDashOurs_ = autoCappedWord_ = suppressAutoCap_ = false;
+    acceptedSpace_.clear();
+    carriedSpace_.clear();
     declinedPrediction_.clear();
     caretMoved_ = true;
     lastWasBoundaryChar_ = false;
@@ -786,6 +832,8 @@ void Session::finish(InputContext &ic, bool commitPreedit) {
     tailReset();
     lastSpaceMs_ = -1;
     lastEmDashOurs_ = autoCappedWord_ = suppressAutoCap_ = false;
+    acceptedSpace_.clear();
+    carriedSpace_.clear();
     ackDrop();  // the caret moved / focus left: nothing to compare any more
     if (mode_ == DisplayMode::Preedit && !vt_is_empty(e_)) {
         std::string text = composed();
@@ -937,6 +985,12 @@ bool Session::processKey(const KeyEvent &ev, InputContext &ic) {
             dismissHint(ic);
             break;
         }
+    }
+
+    // The space we inserted when a prediction was accepted: the very next key decides.
+    if (!acceptedSpace_.empty() || !carriedSpace_.empty()) {
+        const int r = acceptedSpaceKey(ev, ic);
+        if (r >= 0) return r != 0;
     }
 
     // Vi/En toggle hotkey (Ctrl+Space by default).

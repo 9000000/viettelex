@@ -57,6 +57,7 @@ DEFAULTS = {
         "smart_punctuation": False,     # " ' → “ ” ‘ ’, -- → —
         "quote_style": "curly",         # curly “”‘’ | low9 „“‚‘ | guillemets «»‹›
         "word_prediction": False,       # gợi ý từ: hoàn thành từ / từ kế tiếp (Tab)
+        "filter_sensitive": True,       # "Lọc từ nhạy cảm": gợi ý từ / sửa lỗi gõ không đưa từ tục
     },
     # Thử nghiệm (SETTINGS.md §9): "forward-keys" = gõ không gạch chân ở Chrome/Electron.
     "experimental": {

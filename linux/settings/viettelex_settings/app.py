@@ -73,7 +73,8 @@ HINT_SWITCHES = (
      N_("50k, 1tr2, 2 tỷ + dấu cách → 1.200.000 ₫ cạnh con trỏ; Tab để thay.")),
     ("typo_hints", N_("Gợi ý sửa lỗi gõ sai"),
      N_("Từ vừa gõ không phải tiếng Việt, tiếng Anh hay từ chat → gợi ý từ đúng khi gõ nhầm "
-        "một phím kề hoặc đảo hai phím (tpoi → tôi). Tab để thay, Esc = đừng gợi ý từ này nữa.")),
+        "một phím kề hoặc đảo hai phím (tpoi → tôi, spellnig → spelling). Tab để thay, Esc = đừng "
+        "gợi ý từ này nữa.")),
     ("tone_hints", N_("Gợi ý thêm dấu cho câu không dấu"),
      N_("Từ 3 âm tiết không dấu, sau . ! ? hoặc khi dừng gõ một chút → câu có dấu "
         "(toi di hoc → tôi đi học). Tab để thay cả cụm. Mặc định tắt.")),
@@ -81,7 +82,8 @@ HINT_SWITCHES = (
      N_("“hôm nay”, “ngày mai”, “hôm qua” → dd/mm/yyyy; “bây giờ” → giờ:phút (today, tomorrow, "
         "yesterday, now sau một từ tiếng Anh). Tab để thay.")),
 )
-# Văn bản tự động (tab Tuỳ chỉnh): key config.toml [general], nhãn, mô tả — mặc định tắt hết.
+# Văn bản tự động (tab Tuỳ chỉnh): key config.toml [general], nhãn, mô tả — mặc định tắt hết
+# (trừ "Lọc từ nhạy cảm": bật, như iOS/macOS).
 AUTO_TEXT_SWITCHES = (
     ("double_space_period", N_("Thêm dấu chấm khi gõ hai dấu cách"),
      N_("Gõ hai dấu cách liền nhau sau một chữ → “. ” (giữ phím cách thì không). Chỉ ở app cho bộ gõ "
@@ -92,9 +94,11 @@ AUTO_TEXT_SWITCHES = (
     ("smart_punctuation", N_("Ngoặc kép cong và gạch dài"),
      N_("\" ' → ngoặc cong theo ngữ cảnh (don't → don’t); -- → — (gõ thêm - thì thành ---).")),
     ("word_prediction", N_("Gợi ý từ"),
-     N_("Dừng gõ một chút → một từ gợi ý trong ô gợi ý của bộ gõ: hoàn thành từ đang gõ, hoặc từ kế "
-        "tiếp khi đã có hai từ trước đó. Tab hoặc bấm chuột để chọn, Esc bỏ; không bao giờ tự thay. "
-        "Cần gói viettelex-text-tools.")),
+     N_("Dừng gõ một chút → một từ gợi ý trong ô gợi ý của bộ gõ: hoàn thành từ đang gõ (cả tiếng "
+        "Anh: keyb → keyboard), hoặc từ kế tiếp (cảm → ơn). Tab hoặc bấm chuột để chọn, Esc bỏ; không "
+        "bao giờ tự thay. Gõ . , ? ! ngay sau đó thì dấu câu dính vào từ. Cần gói viettelex-text-tools.")),
+    ("filter_sensitive", N_("Lọc từ nhạy cảm"),
+     N_("Gợi ý từ và sửa lỗi gõ không chủ động đưa từ tục — gõ tay vẫn bình thường. Mặc định bật.")),
 )
 QUOTE_STYLE_CHOICES = (
     ("curly", N_("“ ” ‘ ’ (mặc định)")),
@@ -439,7 +443,7 @@ class SettingsWindow(Adw.PreferencesWindow):
         # Linux không có cài đặt chung ⇒ công tắc riêng, mặc định tắt hết.
         g = Adw.PreferencesGroup(
             title=_("Văn bản tự động"),
-            description=_("Mặc định tắt. Không chạy trong terminal, trình soạn code, ô địa chỉ web / "
+            description=_("Mặc định tắt (trừ Lọc từ nhạy cảm). Không chạy trong terminal, trình soạn code, ô địa chỉ web / "
                           "email, ô mật khẩu và khi đang gõ English."))
         for key, title, sub in AUTO_TEXT_SWITCHES:
             self.switch(g, "general", key, _(title), _(sub))

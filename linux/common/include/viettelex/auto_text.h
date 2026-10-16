@@ -77,6 +77,12 @@ bool predictionMuted(const std::string &typed, const std::string &declined);
 bool completionWorthAsking(const std::string &typed);
 // …for the next word: `before` ends with exactly one space right after a letter.
 bool nextWordWorthAsking(const std::string &before);
+// The space WE inserted when a prediction was accepted ("được␣") and the very next key `ch`
+// (PredictionLogic.acceptSpaceReplacement, WordPrediction.swift — iOS AutoSpace rules):
+// . , ? ! ; : and closing ) ] } ” ’ » › → that key + a space ("được. "); "/" → "/" alone;
+// anything else → "" (keep the space, handle the key as usual). Straight quotes are kept:
+// after a space they usually open the next word.
+std::string acceptSpaceReplacement(uint32_t ch);
 
 }  // namespace autotext
 }  // namespace viettelex

@@ -217,15 +217,45 @@ func caretSelfTest(fixtures: String) -> Int {
     check(!L.muted(typed: "", declined: "đư"), "muted rỗng")
     check(!L.muted(typed: "đư", declined: nil), "muted nil")
 
-    func cands(_ before: String, typed: String = "", raw: String = "", english: Bool = false) -> [String] {
+    func cands(_ before: String, typed: String = "", raw: String = "", english: Bool = false,
+               filter: Bool = true) -> [String] {
         guard let r = L.request(before: before, typed: typed, english: english) else { return [] }
-        return PredictionModel.shared.candidates(r, raw: raw)
+        return PredictionModel.shared.candidates(r, raw: raw, filterSensitive: filter)
     }
-    // Từ kế tiếp: chỉ 2 từ ngữ cảnh + dòng trigram (Phil 16/10/2026: "Tên ␣" → "gọi" là đoán mò).
-    eq(cands("Tên "), [], "next một từ ngữ cảnh: không")
-    eq(cands("cảm "), [], "next cảm: không (một từ)")
+    // Từ kế tiếp: dòng trigram 2 từ, hoặc seed iOS với một từ (= WordPredictionTests macOS).
+    eq(cands("Tên "), [], "next một từ ngữ cảnh, không seed: không")
+    eq(cands("cảm ").first, "ơn", "next seed cảm → ơn")
+    eq(cands("xin ").first, "lỗi", "next seed xin → lỗi")
+    eq(cands("zzqx cảm ").first, "ơn", "next seed không trigram")
+    eq(cands("nguyễn ").first, "Văn", "next seed DisplayCase")
+    eq(cands("good ", english: true).first, "morning", "next seed tiếng Anh")
+    eq(cands("anh ", english: true), [], "next seed Việt trong ngữ cảnh Anh: không")
     eq(cands("xong, tên "), [], "next dấu phẩy cắt: không")
-    eq(cands("zzqx tên "), [], "next cặp không trigram: không")
+    eq(cands("zzqx tên "), [], "next cặp không trigram, không seed: không")
+    eq(cands("vãi ").first, "cả", "lọc nhạy cảm bật")
+    eq(cands("vãi ", filter: false).first, "lồn", "lọc nhạy cảm tắt")
+    eq(cands("ngon "), [], "lọc bật: seed chỉ có từ nhạy cảm")
+    eq(cands("ngon ", filter: false).first, "vl", "lọc tắt")
+    // Tiếng Anh giữa câu Việt (prefersEnglish) — và nơi không được bật.
+    eq(cands("tôi gặp pé", typed: "pé", raw: "pers").first, "person", "en override pers")
+    eq(cands("ưởn", typed: "ưởn", raw: "wron").first, "wrong", "en override wron")
+    for (t, raw) in [("toi", "toi"), ("duoc", "duoc"), ("cam", "cam"), ("thẻ", "ther"), ("thin", "thin"), ("chan", "chan")] {
+        let c = cands("anh " + t, typed: t, raw: raw)
+        check(!c.contains { SwipeEnglish.contains($0.lowercased()) && !VNSuggest.contains($0) }, "en override không «\(raw)»: \(c)")
+    }
+    // Sửa lỗi gõ tiếng Anh (= CaretSuggestionsTests macOS).
+    let fx: (String) -> String? = { TypoFixLogic.lexiconCorrection(raw: $0, flags: .init()) }
+    eq(fx("spellnig"), "spelling", "typo en spellnig")
+    eq(fx("teh"), "the", "typo en teh")
+    eq(fx("becuase"), "because", "typo en becuase")
+    eq(fx("goverment"), "government", "typo en goverment")
+    eq(fx("hte"), nil, "typo en hte (he sát nút)")
+    eq(fx("tpoi"), "tôi", "typo vi vẫn trước")
+    eq(TypoFixLogic.correction(raw: "shjt", compose: { $0 }, frequency: { _ in nil }, hasCompletion: { _ in false },
+                               isKnown: { _ in false }, englishFrequency: { $0 == "shit" ? 200 : nil }), nil, "typo lọc bật")
+    eq(TypoFixLogic.correction(raw: "shjt", compose: { $0 }, frequency: { _ in nil }, hasCompletion: { _ in false },
+                               isKnown: { _ in false }, englishFrequency: { $0 == "shit" ? 200 : nil },
+                               filterSensitive: false), "shit", "typo lọc tắt")
     check(!cands("cảm ơn ").isEmpty, "next cảm ơn: có")
     check(!cands("xin chào ").isEmpty, "next xin chào: có")
     check(cands("hôm nay ").count <= L.rankDepth, "next ≤ rankDepth")
@@ -251,7 +281,10 @@ func caretSelfTest(fixtures: String) -> Int {
     eq(L.answer(["được", "đường", "đưa", "đứng"], typed: "đư"), "predict\tđược\tđư\tđược ", "answer: chỉ hạng 1")
     eq(L.answer(["ơn"], typed: ""), "predict\tơn\t\tơn ", "answer từ kế tiếp")
     eq(L.answer([], typed: "x"), "-", "answer rỗng")
-    eq(HintProtocol.handle("predict\tcảm \t\t\t0"), "-", "serve predict một từ: không")
+    eq(HintProtocol.handle("predict\tTên \t\t\t0"), "-", "serve predict một từ không seed: không")
+    eq(HintProtocol.handle("predict\tcảm \t\t\t0"), "predict\tơn\t\tơn ", "serve predict seed")
+    eq(HintProtocol.handle("predict\tvãi \t\t\t0\t0"), "predict\tlồn\t\tlồn ", "serve predict lọc tắt")
+    eq(HintProtocol.handle("predict\tvãi \t\t\t0\t1"), "predict\tcả\t\tcả ", "serve predict lọc bật")
     eq(HintProtocol.handle("predict\tthành phố hồ \t\t\t0"), "predict\tChí\t\tChí ", "serve predict next")
     eq(HintProtocol.handle("predict\tabc.đư\tđư\tdduw\t0"), "-", "serve predict không")
     // Đo (in ra để báo cáo): thời gian một lượt đã nạp.

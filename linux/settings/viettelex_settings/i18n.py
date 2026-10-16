@@ -229,10 +229,11 @@ EN = {
         "50k, 1tr2, 2 tỷ + space → 1.200.000 ₫ next to the caret; Tab replaces.",
     "Gợi ý sửa lỗi gõ sai": "Typo fix suggestions",
     "Từ vừa gõ không phải tiếng Việt, tiếng Anh hay từ chat → gợi ý từ đúng khi gõ nhầm "
-    "một phím kề hoặc đảo hai phím (tpoi → tôi). Tab để thay, Esc = đừng gợi ý từ này nữa.":
+    "một phím kề hoặc đảo hai phím (tpoi → tôi, spellnig → spelling). Tab để thay, Esc = đừng "
+    "gợi ý từ này nữa.":
         "When the word just typed is not Vietnamese, English or a chat word → suggests the right "
-        "word for one neighbouring-key slip or two swapped keys (tpoi → tôi). Tab replaces, "
-        "Esc = don’t suggest this word again.",
+        "word for one neighbouring-key slip or two swapped keys (tpoi → tôi, spellnig → spelling). "
+        "Tab replaces, Esc = don’t suggest this word again.",
     "Gợi ý thêm dấu cho câu không dấu": "Add tones to unaccented sentences",
     "Từ 3 âm tiết không dấu, sau . ! ? hoặc khi dừng gõ một chút → câu có dấu "
     "(toi di hoc → tôi đi học). Tab để thay cả cụm. Mặc định tắt.":
@@ -245,9 +246,9 @@ EN = {
         "yesterday, now after an English word). Tab replaces.",
     # --- Văn bản tự động
     "Văn bản tự động": "Automatic text",
-    "Mặc định tắt. Không chạy trong terminal, trình soạn code, ô địa chỉ web / "
+    "Mặc định tắt (trừ Lọc từ nhạy cảm). Không chạy trong terminal, trình soạn code, ô địa chỉ web / "
     "email, ô mật khẩu và khi đang gõ English.":
-        "Off by default. Never in terminals, code editors, web address / e-mail fields, password "
+        "Off by default (except Filter sensitive words). Never in terminals, code editors, web address / e-mail fields, password "
         "fields, or while typing English.",
     "Thêm dấu chấm khi gõ hai dấu cách": "Add period with double-space",
     "Gõ hai dấu cách liền nhau sau một chữ → “. ” (giữ phím cách thì không). Chỉ ở app cho bộ gõ "
@@ -264,12 +265,17 @@ EN = {
     "\" ' → ngoặc cong theo ngữ cảnh (don't → don’t); -- → — (gõ thêm - thì thành ---).":
         "\" ' → curly quotes by context (don't → don’t); -- → — (one more - gives ---).",
     "Gợi ý từ": "Word suggestions",
-    "Dừng gõ một chút → một từ gợi ý trong ô gợi ý của bộ gõ: hoàn thành từ đang gõ, hoặc từ kế "
-    "tiếp khi đã có hai từ trước đó. Tab hoặc bấm chuột để chọn, Esc bỏ; không bao giờ tự thay. "
-    "Cần gói viettelex-text-tools.":
+    "Dừng gõ một chút → một từ gợi ý trong ô gợi ý của bộ gõ: hoàn thành từ đang gõ (cả tiếng "
+    "Anh: keyb → keyboard), hoặc từ kế tiếp (cảm → ơn). Tab hoặc bấm chuột để chọn, Esc bỏ; không "
+    "bao giờ tự thay. Gõ . , ? ! ngay sau đó thì dấu câu dính vào từ. Cần gói viettelex-text-tools.":
         "Pause briefly → one suggested word in the input method’s candidate window: a completion of "
-        "the word being typed, or the next word once two words precede it. Tab or a click takes "
-        "it, Esc dismisses; never replaces by itself. Needs the viettelex-text-tools package.",
+        "the word being typed (English too: keyb → keyboard), or the next word (good → morning). Tab or a "
+        "click takes it, Esc dismisses; never replaces by itself. Typing . , ? ! right after attaches "
+        "the punctuation to the word. Needs the viettelex-text-tools package.",
+    "Lọc từ nhạy cảm": "Filter sensitive words",
+    "Gợi ý từ và sửa lỗi gõ không chủ động đưa từ tục — gõ tay vẫn bình thường. Mặc định bật.":
+        "Word suggestions and typo fixes never offer swear words — typing them yourself works as "
+        "usual. On by default.",
     "Kiểu ngoặc kép": "Quote style",
     "“ ” ‘ ’ (mặc định)": "“ ” ‘ ’ (default)",
     "menu Công cụ…": "Tools… menu",

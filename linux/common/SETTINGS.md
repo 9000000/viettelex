@@ -62,6 +62,7 @@ auto_capitalize = false             # tự viết hoa đầu câu
 smart_punctuation = false           # " ' → “ ” ‘ ’, "--" → "—"
 quote_style = "curly"               # "curly" “ ” ‘ ’ | "low9" „ “ ‚ ‘ | "guillemets" « » ‹ ›
 word_prediction = false             # gợi ý từ (hoàn thành từ / từ kế tiếp) trong ô ứng viên
+filter_sensitive = true             # "Lọc từ nhạy cảm": gợi ý từ / sửa lỗi gõ không đưa từ tục
 
 [experimental]
 no_underline = "off"                # "off" | "forward-keys": Chromium/Electron không gạch chân (§9)
@@ -210,7 +211,7 @@ công tắc; tắt hết = một lần đọc cờ mỗi phím, không theo dõi
 |---|---|---|
 | `math_results` | bật | phép tính + `=` (`12*3=`, `200+10%=`, `125 x (4 + 5.5) =`) → `= 36`; Tab **hoặc Enter** chèn kết quả sau `=` |
 | `number_chips` | bật | `50k` / `1tr2` / `2 tỷ` + dấu cách → `1.200.000 ₫` (chỉ dạng tiền, không đọc số thành chữ); Tab thay |
-| `typo_hints` | bật | từ vừa gõ (ranh giới ` , ; ! ? )`) không là âm tiết Việt / tiếng Anh / từ chat → sửa MỘT phím kề trên bàn phím cứng hoặc đảo hai phím liền nhau, cùng ngưỡng macOS (tần suất ≥ 150, hơn ứng viên thứ hai ≥ 80); Tab thay (giữ ký tự ranh giới), Esc = không gợi ý lại từ đó trong phiên |
+| `typo_hints` | bật | từ vừa gõ (ranh giới ` , ; ! ? )`) không là âm tiết Việt / tiếng Anh / từ chat → sửa MỘT phím kề trên bàn phím cứng hoặc đảo hai phím liền nhau, cùng ngưỡng macOS (tần suất ≥ 150, hơn ứng viên thứ hai ≥ 80); không có bản sửa tiếng Việt ⇒ bản sửa **tiếng Anh** một sửa trên phím thô (đảo / phím kề; sót / thừa phím khi ≥ 5 chữ — `spellnig` → spelling, `teh` → the), tần suất ≥ 140 (từ ≥ 7 chữ: ≥ 60), hơn ứng viên thứ hai ≥ 60 (`TypoFixLogic.englishDefaults`); Tab thay (giữ ký tự ranh giới), Esc = không gợi ý lại từ đó trong phiên |
 | `tone_hints` | **tắt** | ≥ 3 âm tiết không dấu liên tiếp, rồi `. ! ?` hoặc dừng gõ 0,9 s sau dấu cách → cụm có dấu (Thêm dấu); Tab thay cả cụm, Esc = không mời lại cụm đó |
 | `date_hints` | bật | `hôm nay` / `ngày mai` / `hôm qua` + dấu cách → `dd/MM/yyyy`; `bây giờ` → `HH:mm`; today / tomorrow / yesterday / now chỉ sau một từ tiếng Anh; Tab thay cụm |
 
@@ -228,11 +229,12 @@ Chạy ở đâu: bộ gõ chỉ theo dõi đuôi chữ vừa gõ và xét cổn
 `viettelex-text-tool --serve`: một process con sống lâu, bật ở lần kích hoạt đầu, tự thoát sau
 2 phút rảnh. Thiếu gói `viettelex-text-tools` → không có gợi ý nào.
 
-## 8b. Văn bản tự động (`double_space_period`, `auto_capitalize`, `smart_punctuation`, `quote_style`, `word_prediction`)
+## 8b. Văn bản tự động (`double_space_period`, `auto_capitalize`, `smart_punctuation`, `quote_style`, `word_prediction`, `filter_sensitive`)
 
 Port bản macOS (16/10/2026: `App/Sources/SystemAutoText.swift`, `WordPrediction.swift`). macOS
 theo cài đặt Nhập văn bản của hệ thống; Linux không có cài đặt chung nên mỗi tính năng là một
-công tắc của VietTelex, **mặc định TẮT hết** (người dùng Linux hay gõ trong terminal / code).
+công tắc của VietTelex, **mặc định TẮT hết** (người dùng Linux hay gõ trong terminal / code) —
+trừ `filter_sensitive` (bật, như iOS / macOS).
 Tắt = một lần đọc cờ ở phím cách / chữ đầu từ / `"` `'` `-`; không theo dõi gì, không nạp dữ liệu.
 
 | Key | Mặc định | Làm gì |
@@ -241,7 +243,8 @@ Tắt = một lần đọc cờ ở phím cách / chữ đầu từ / `"` `'` `-
 | `auto_capitalize` | tắt | Chữ a–z đầu từ, ngay sau `. ? !` + khoảng trắng (bỏ ngoặc/nháy đóng), xuống dòng, hoặc đầu văn bản **chỉ ở ô nhiều dòng** (Fcitx5 `CapabilityFlag::Multiline`; IBus không có cờ này ⇒ không viết hoa đầu ô) → đưa chữ HOA vào engine (Telex vẫn ghép: `dduwowcj` → `Được`). Bỏ qua viết tắt (`Mr.`, `TP.`, `e.g.`…), `...`, email / URL / tên miền, tên viết tắt một chữ (`J.`). ⌫ xoá đúng chữ hoa đó ⇒ chữ đầu kế tiếp giữ thường. Ngữ cảnh từ đuôi phím đã gõ; không biết thì đọc tối đa 24 ký tự (chỉ khi surrounding đã chứng minh) |
 | `smart_punctuation` | tắt | `"` / `'` → ngoặc mở sau khoảng trắng / đầu văn bản / ngoặc mở / gạch dài, còn lại ngoặc đóng (`don't` → `don’t`) — chèn thay phím, không sửa chữ cũ (chạy cả ở Chrome); ký tự trước không biết ⇒ giữ phím thẳng. `--` → `—`, gõ `-` tiếp ngay sau `—` vừa đổi → `---`; không đổi `<!--`, `!--` và chuỗi ≥ 3 gạch. Phần gạch sửa chữ cũ ⇒ như `double_space_period` |
 | `quote_style` | `"curly"` | `"curly"` `“ ” ‘ ’`, `"low9"` `„ “ ‚ ‘`, `"guillemets"` `« » ‹ ›` (= NSUserQuotesArray macOS) |
-| `word_prediction` | tắt | Dừng gõ 0,3 s → **một** từ (hạng 1, không danh sách, không số thứ tự): **hoàn thành** từ đang gõ (≥ 2 chữ; tiếng Anh khi ngữ cảnh tiếng Anh hoặc không âm tiết Việt nào khớp, theo phím thô) hoặc **từ kế tiếp** ngay sau một dấu cách — chỉ khi có đủ 2 từ ngữ cảnh và có dữ liệu trigram cho cặp đó (`Tên ␣` → không gì; `cảm ơn ␣` → có). Tab / click = nhận (+ dấu cách), Esc = bỏ (không gợi ý lại khi từ vẫn bắt đầu bằng chữ đã từ chối), phím khác bỏ qua rồi đi tiếp — **phím số không chọn ứng viên**. Gợi ý cạnh con trỏ khác (§8) luôn thắng. Không bao giờ tự thay. Không học từ người dùng |
+| `word_prediction` | tắt | Dừng gõ 0,3 s → **một** từ (hạng 1, không danh sách, không số thứ tự): **hoàn thành** từ đang gõ (≥ 2 chữ; tiếng Anh khi ngữ cảnh tiếng Anh, khi không âm tiết Việt nào khớp, hoặc khi phím thô ≥ 4 là tiền tố tiếng Anh rõ ràng hơn mọi cách đọc tiếng Việt — `pers` (hiện `pé`) → person; không bao giờ khi chữ đang gõ đã là âm tiết Việt phổ biến: `toi`, `duoc`, `cam`, `ther`→`thẻ`; theo phím thô) hoặc **từ kế tiếp** ngay sau một dấu cách — dòng trigram cho 2 từ ngữ cảnh (`cảm ơn ␣` → bạn), hoặc cặp **seed** chọn tay của iOS với một từ ngữ cảnh (`cảm ␣` → ơn, `xin ␣` → lỗi; bảng `App/Sources/SeedNextData.swift`, sinh bằng `Scripts/gen-seed-next.sh` từ chính UserLangModel iOS); không bao giờ đoán bigram thống kê một từ (`Tên ␣` → không gì). Tab / click = nhận (+ dấu cách; phím **ngay sau** là `. , ? ! ; :` hoặc ngoặc / nháy đóng cong ⇒ dấu câu dính vào từ, dấu cách dời ra sau — `được. ` — và phím cách kế bị nuốt; `/` ⇒ chỉ gỡ dấu cách; đọc lại màn hình trước khi gỡ; dấu cách đó cũng là dấu cách thứ nhất của `double_space_period`), Esc = bỏ (không gợi ý lại khi từ vẫn bắt đầu bằng chữ đã từ chối), phím khác bỏ qua rồi đi tiếp — **phím số không chọn ứng viên**. Gợi ý cạnh con trỏ khác (§8) luôn thắng. Không bao giờ tự thay. Không học từ người dùng |
+| `filter_sensitive` | **bật** | "Lọc từ nhạy cảm" (= iOS `filterSensitive`, macOS Cài đặt): gợi ý từ (hoàn thành, từ kế tiếp seed / trigram, tiếng Anh) và sửa lỗi gõ không chủ động đưa từ trong `SensitiveWords.set`; tắt ⇒ như iOS, seed hiện nguyên (`vãi ␣` → lồn thay vì cả). Gõ tay luôn bình thường. Gửi theo từng yêu cầu `predict` / `typo` (trường cuối `0` khi tắt) |
 
 Chung: không chạy trong terminal (`isTerminalApp`, ô Terminal, Direct), trình soạn code
 (`autotext::isCodeEditorApp`: VS Code + họ, Zed, Sublime, JetBrains, Kate, Builder, Geany…), ô

@@ -22,6 +22,7 @@ on:
       # Shared iOS sources/data the text tool symlinks to (tar list in build-deb.sh).
       - "iOS/Keyboard/*.swift"
       - "iOS/Keyboard/Resources/*.bin"
+      - "App/Sources/SeedNextData.swift"   # gợi ý từ: bảng seed (generated, symlinked)
       - "iOS/KeyboardTests/Fixtures/**"
       - "android/telexcore/src/test/resources/golden.tsv.gz"
       - "LICENSE"

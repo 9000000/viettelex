@@ -303,6 +303,10 @@ private:
     bool lastEmDashOurs_ = false;
     bool autoCappedWord_ = false, suppressAutoCap_ = false;
     std::string declinedPrediction_;
+    bool filter_ = true;          // Settings::filterSensitive — sent to the helper only when off
+    std::string acceptedSpace_;   // "được " just inserted by accepting a prediction (next key only)
+    std::string carriedSpace_;    // ". " after the punctuation moved our space: next space swallowed
+    int acceptedSpaceKey(const KeyEvent &ev, InputContext &ic);
     bool tryAutoReplace(bool space, int64_t prevSpaceMs, bool spaceHeld, bool prevEmDashOurs, InputContext &ic);
     bool smartQuoteFor(uint32_t ch, InputContext &ic, std::string &out);
     bool shouldCapitalize(InputContext &ic);

@@ -150,18 +150,105 @@ enum TypoFixLogic {
         return top
     }
 
+    // MARK: Tiếng Anh ("spellnig" → spelling — Phil 16/10/2026)
+
+    /// Sửa tiếng Anh: chỉ khi KHÔNG có bản sửa tiếng Việt. Ứng viên MỘT sửa trên PHÍM THÔ (không
+    /// qua Telex) có trong enlexicon: thay phím kề / đảo hai phím liền nhau luôn được đề xuất;
+    /// bỏ phím thừa / thêm phím sót chỉ đề xuất khi từ ≥ `insDelMinLen` chữ (ngắn hơn: đối thủ).
+    /// Ứng viên tiếng Việt (mọi loại sửa) là ĐỐI THỦ — hai lexicon cùng thang tần suất 0–255.
+    /// Dò bằng TypoFixEvalTests.testEnglishTuneGridOnDev (câu Anh Tatoeba DEV).
+    /// Từ dài (≥ `longMinLen` chữ) hiếm khi cách một từ thật đúng MỘT sửa một cách tình cờ ⇒ ngưỡng
+    /// tần suất riêng, thấp hơn (`longMinFreq`: "spellnig" → spelling, tần suất 99).
+    struct EnglishParams: Equatable {
+        var minFreq: Int
+        var margin: Int
+        var insDelMinLen: Int
+        var longMinLen: Int = 99
+        var longMinFreq: Int = 255
+    }
+
+    static let englishDefaults = EnglishParams(minFreq: 140, margin: 60, insDelMinLen: 5, longMinLen: 7, longMinFreq: 60)
+
+    /// Mọi chuỗi MỘT sửa của `lower` (a–z) có trong enlexicon (`frequency`), khác chính nó.
+    static func englishCandidates(_ lower: String, frequency: (String) -> Int?) -> [Cand] {
+        let c0 = Array(lower)
+        var out: [Cand] = []
+        func consider(_ c: [Character], _ e: Edit) {
+            let w = String(c)
+            guard w != lower, let f = frequency(w) else { return }
+            out.append(Cand(word: w, freq: f, edit: e))
+        }
+        for i in c0.indices {
+            for n in AdjacentKeyFixer.physicalNeighbors[c0[i]] ?? [] where n != c0[i] {
+                var c = c0; c[i] = n; consider(c, .sub)
+            }
+        }
+        for i in 0..<max(0, c0.count - 1) where c0[i] != c0[i + 1] {
+            var c = c0; c.swapAt(i, i + 1); consider(c, .swap)
+        }
+        if c0.count > 2 {
+            for i in c0.indices where i == 0 || c0[i] != c0[i - 1] {
+                var c = c0; c.remove(at: i); consider(c, .del)
+            }
+        }
+        for i in 0...c0.count {
+            for l in letters where i == 0 || c0[i - 1] != l {
+                var c = c0; c.insert(l, at: i); consider(c, .ins)
+            }
+        }
+        return out
+    }
+
+    /// Từ tiếng Anh đứng đầu (theo tần suất) trong `en` ∪ `rivals` (tiếng Việt), nếu đề xuất
+    /// được, phổ biến (≥ minFreq) và hơn từ thứ hai ≥ margin. nil = không.
+    static func englishPick(_ en: [Cand], rivals: [Cand], typedLen: Int,
+                            p: EnglishParams = englishDefaults) -> Cand? {
+        var best: [String: Cand] = [:]
+        var proposable: Set<String> = []
+        let insDel = typedLen >= p.insDelMinLen
+        for c in en {
+            if c.edit == .sub || c.edit == .swap || insDel { proposable.insert(c.word) }
+            if let b = best[c.word], b.freq >= c.freq { continue }
+            best[c.word] = c
+        }
+        for c in rivals {
+            if let b = best[c.word], b.freq >= c.freq { continue }
+            best[c.word] = c
+        }
+        let sorted = best.values.sorted { $0.freq != $1.freq ? $0.freq > $1.freq : $0.word < $1.word }
+        let minFreq = typedLen >= p.longMinLen ? min(p.minFreq, p.longMinFreq) : p.minFreq
+        guard let top = sorted.first, proposable.contains(top.word), top.freq >= minFreq else { return nil }
+        if sorted.count > 1, top.freq - sorted[1].freq < p.margin { return nil }
+        return top
+    }
+
+    /// Bản sửa cho từ (phím thô `raw`) hoặc nil. `isKnown`: dạng chữ thường (phím thô và dạng
+    /// engine ra) là từ đã biết — tiếng Anh / chat / từng Esc ⇒ không gợi ý. `englishFrequency`
+    /// (enlexicon) ≠ nil ⇒ không có bản sửa tiếng Việt thì thử bản sửa tiếng Anh.
     static func correction(raw: String, compose: (String) -> String, frequency: (String) -> Int?,
                            hasCompletion: (String) -> Bool, isKnown: (String) -> Bool,
-                           p: Params = defaults) -> String? {
+                           englishFrequency: ((String) -> Int?)? = nil, filterSensitive: Bool = true,
+                           p: Params = defaults, ep: EnglishParams = englishDefaults) -> String? {
         guard (p.minLen...10).contains(raw.count), raw.allSatisfy({ $0.isASCII && $0.isLetter }) else { return nil }
         let lower = raw.lowercased()
         if isKnown(lower) { return nil }
         let current = compose(lower)
         if current != lower, isKnown(current.lowercased()) { return nil }
         if frequency(current) != nil || hasCompletion(current) { return nil }
-        guard let best = pick(candidates(lower, compose: compose, frequency: frequency,
-                                         hasCompletion: hasCompletion, edits: p.edits.union(p.rivals)), p: p)
-        else { return nil }
+        let vn = candidates(lower, compose: compose, frequency: frequency,
+                            hasCompletion: hasCompletion, edits: p.edits.union(p.rivals))
+        let best: Cand
+        if let b = pick(vn, p: p) {
+            best = b
+        } else if let ef = englishFrequency,
+                  let b = englishPick(englishCandidates(lower, frequency: ef), rivals: vn, typedLen: lower.count, p: ep) {
+            best = b
+        } else {
+            return nil
+        }
+        // "Lọc từ nhạy cảm" bật (như thanh gợi ý iOS): không chủ động đưa từ tục — bỏ hẳn lượt
+        // này (không lùi về ứng viên thứ hai: nó chưa chắc hơn đủ xa).
+        if SensitiveWords.filter([best.word], enabled: filterSensitive).isEmpty { return nil }
         if raw.first?.isUppercase == true, let f = best.word.first {
             return f.uppercased() + best.word.dropFirst()
         }
@@ -210,11 +297,12 @@ enum TypoFixLogic {
         }
     }
 
-    static func lexiconCorrection(raw: String, flags: EngineFlags) -> String? {
+    static func lexiconCorrection(raw: String, flags: EngineFlags, filterSensitive: Bool = true) -> String? {
         correction(raw: raw, compose: composer(flags),
                    frequency: { VNSuggest.frequency(of: $0) },
                    hasCompletion: { !VNSuggest.matches($0, poolLimit: 1).isEmpty },
-                   isKnown: isKnown)
+                   isKnown: isKnown, englishFrequency: { SwipeEnglish.frequency(of: $0) },
+                   filterSensitive: filterSensitive)
     }
 
     static func suggestion(before: String, word: String, boundary: String, raw: String,
@@ -225,6 +313,12 @@ enum TypoFixLogic {
         guard AutoCorrect.caseAllows(raw, sentenceStart: AutoCorrect.isSentenceStart(head)) else { return nil }
         return CaretSuggestion(kind: .typo, display: fix, replace: replace, insert: fix + boundary)
     }
+}
+
+/// Tần suất enlexicon (0–255) — = EnglishLite.frequency của macOS (process con này đã giải mã
+/// enlexicon thành SwipeEnglish.lexicon cho Thêm dấu).
+extension SwipeEnglish {
+    static func frequency(of word: String) -> Int? { index(of: word).map { Int(lexicon.freq[$0]) } }
 }
 
 // MARK: - 2. Thêm dấu cho cụm không dấu (= ToneRunLogic)
