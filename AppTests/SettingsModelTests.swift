@@ -46,6 +46,13 @@ final class SettingsModelTests: XCTestCase {
     /// thông báo cập nhật hằng tuần và toast "chưa tải gói dịch" từng chỉ người dùng tới
     /// tab không còn tồn tại (PR #125). Mọi chuỗi "Settings → X" (trừ System Settings)
     /// phải chỉ tới một tab có thật, ở cả khoá tiếng Anh lẫn bản dịch tiếng Việt.
+    /// Phil 18/10/2026: giữ tên "Chính tả teencode" (dễ hiểu hơn "Chính tả khi nhắn tin").
+    func testTeencodeToggleKeepsItsName() throws {
+        let path = try XCTUnwrap(Bundle.main.path(forResource: "vi", ofType: "lproj"))
+        let vi = try XCTUnwrap(Bundle(path: path))
+        XCTAssertEqual(vi.localizedString(forKey: "Teencode spelling", value: nil, table: nil), "Chính tả teencode")
+    }
+
     func testSettingsPathStringsNameCurrentTabs() throws {
         let path = try XCTUnwrap(Bundle.main.path(forResource: "vi", ofType: "lproj"))
         let vi = try XCTUnwrap(Bundle(path: path))

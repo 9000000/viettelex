@@ -273,8 +273,8 @@ Chọn “Sửa tự động” để VietTelex xoá mục quyền cũ của ch�
 
 "Click: open the Typing modes table + copy debug info" = "Bấm để mở bảng cách gõ (tab Ứng dụng) và sao chép thông tin chẩn đoán";
 
-"Teencode spelling" = "Chính tả khi nhắn tin";
-"Accept chat spellings: w/z/k instead of qu/d/c (wá, zui zẻ, kó) and bíe, thík, gòy, ừk. Off = standard spelling only, so English words like was, war, worse, zoo stay as typed." = "Chấp nhận cách viết khi nhắn tin: dùng w/z/k thay cho qu/d/c (wá, zui zẻ, kó), cùng các cách viết như bíe, thík, gòy, ừk. Tắt mục này để chỉ dùng chính tả chuẩn; các từ tiếng Anh như was, war, worse, zoo sẽ được giữ nguyên.";
+"Teencode spelling" = "Chính tả teencode";
+"Accept chat spellings: w/z/k instead of qu/d/c (wá, zui zẻ, kó) and bíe, thík, gòy, ừk. Off = standard spelling only, so English words like was, war, worse, zoo stay as typed." = "Chấp nhận cách viết teencode: dùng w/z/k thay cho qu/d/c (wá, zui zẻ, kó), cùng các cách viết như bíe, thík, gòy, ừk. Tắt mục này để chỉ dùng chính tả chuẩn; các từ tiếng Anh như was, war, worse, zoo sẽ được giữ nguyên.";
 
 "%@ is on a password field" = "%@ đang ở ô mật khẩu";
 "macOS pauses every input method in password fields — normal. Click another field to type Vietnamese again" = "macOS tạm tắt mọi bộ gõ trong ô mật khẩu — bình thường. Bấm sang ô khác là gõ tiếng Việt lại được";
