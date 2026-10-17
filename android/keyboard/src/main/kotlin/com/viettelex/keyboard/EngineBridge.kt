@@ -546,6 +546,21 @@ class EngineBridge(settings: KeyboardSettings = KeyboardSettings()) {
         return true
     }
 
+    /** Bảng gõ tắt hiệu lực (từ vựng vuốt: [SwipeVocab.setShortcuts]) — rỗng khi tắt Gõ tắt. */
+    val effectiveShortcuts: ShortcutTable
+        get() = if (settings.shortcutsEnabled) settings.shortcuts else ShortcutTable()
+
+    /**
+     * Nội dung sẽ chèn khi VUỐT ra [word] (đã áp Shift: "vn" / "Vn" / "VN") — đúng như gõ [word] +
+     * dấu cách: chỉ khoá thuần chữ, theo công tắc Gõ tắt + ô cho phép (không passthrough / URL /
+     * email). null = không phải khoá. = iOS EngineBridge.swipeShortcutExpansion.
+     */
+    fun swipeShortcutExpansion(word: String): String? {
+        if (!settings.shortcutsEnabled || !shortcutsAllowed || passthrough || emailField ||
+            settings.shortcuts.isEmpty || !ShortcutTable.isWordKey(word)) return null
+        return settings.shortcuts.expansion(word)
+    }
+
     /** Nội dung sẽ bung nếu gõ ranh giới ngay bây giờ (thanh gợi ý). Chỉ khoá chữ. */
     val shortcutPreview: String?
         get() {

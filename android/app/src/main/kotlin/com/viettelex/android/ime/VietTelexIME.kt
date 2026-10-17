@@ -464,6 +464,10 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
             emailField = field.kind == InputKind.EMAIL, stripTools = field.stripTools,
             lowercaseSuggestions = field.lowercaseSuggestions, appNoSuggestions = field.appNoSuggestions,
             emailCompose = field.emailCompose))
+        // Bảng gõ tắt đổi ⇒ từ vựng vuốt mới: dựng lại template ở nền (cú vuốt kế khỏi chờ).
+        if (session.takeSwipeVocabChanged()) swipeDecoder?.let { dec ->
+            if (dec.layout != null) worker().post { synchronized(swipeLock) { if (swipeDecoder === dec) dec.prepare() } }
+        }
         // Ngôn ngữ (vuốt phím cách) lưu riêng: ghi không đụng prefs cài đặt (listener/theme).
         session.restoreLanguage(stateStore().getString(Keys.KEYBOARD_LANGUAGE, null), proxy)
         hwSetting = settings.hardwareTelex

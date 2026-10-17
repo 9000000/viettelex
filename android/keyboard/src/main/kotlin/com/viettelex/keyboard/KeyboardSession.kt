@@ -333,6 +333,10 @@ class KeyboardSession(
     /** Chip kết quả phép tính đang hiện — payload [SuggestionSet.MATH_TOKEN]. */
     private var mathChip: NumberChip? = null
 
+    /** Từ vựng vuốt vừa đổi ở [startInput] (bảng gõ tắt) — IME lấy một lần để dựng lại template nền. */
+    private var swipeVocabChanged = false
+    fun takeSwipeVocabChanged(): Boolean = swipeVocabChanged.also { swipeVocabChanged = false }
+
     /** Gõ vuốt bật cho ô hiện tại (IME quyết: setting + loại ô + TalkBack). */
     var swipeTypingActive = false
         private set
@@ -343,6 +347,11 @@ class KeyboardSession(
     private var swipeLiteral = false
     /** Phương án tiếng Anh trong [swipeAlts] (chèn nguyên văn khi chọn). */
     private var swipeEnglishAlts: Set<String> = emptySet()
+    /**
+     * Vuốt KHOÁ gõ tắt ("vn"): [swipeWord] là nội dung đã bung (nguyên văn), đây là khoá (đúng hoa/
+     * thường như vuốt) — ⌫ đầu trả lại khoá như hoàn tác gõ tắt gõ tay. = iOS SwipeOpen.shortcutKey.
+     */
+    private var swipeShortcutKey: String? = null
     /** Vuốt ra từ tiếng Anh (công tắc con, [KeyboardSettings.swipeEnglish]). */
     var swipeEnglish = true
     /**
@@ -423,6 +432,8 @@ class KeyboardSession(
         initialCapsPending = true
         filterSensitive = settings.filterSensitive
         SwipeVocab.filterSensitive = settings.filterSensitive   // gõ vuốt theo cùng công tắc
+        // Gõ tắt vuốt được (khoá + từ của nội dung): bảng đổi ⇒ IME dựng lại template một lần (nền).
+        if (settings.swipeTyping && SwipeVocab.setShortcuts(bridge.effectiveShortcuts)) swipeVocabChanged = true
         swipeEnglish = settings.swipeEnglish
         autoCapitalize = settings.autoCapitalize
         recentEnglish.clear(); langRecent.clear()
@@ -518,6 +529,7 @@ class KeyboardSession(
 
     private fun clearSwipe() {
         swipeWord = null; swipeAlts = emptyList(); swipeLiteral = false; swipeEnglishAlts = emptySet()
+        swipeShortcutKey = null
         revisable = null; reviseUndo = null
         typedPending = null; typedUndo = null
     }
@@ -661,6 +673,7 @@ class KeyboardSession(
         tonesUndo = null
         val swiped = openSwipeWord()
         val literal = if (swipeLiteral) swiped else null
+        val shortcutKey = swipeShortcutKey
         revisableAfterLetter = revisable?.takeIf { key is Key.Letter && it.word == swiped }
         // Sửa lại từ vuốt khi từ kế GÕ PHÍM: dấu cách chốt từ vuốt còn nguyên ⇒ chờ; đang chờ ⇒
         // phím chữ / ⌫ trong từ gõ giữ, ranh giới thử sửa, phím khác bỏ (clearSwipe).
@@ -746,7 +759,16 @@ class KeyboardSession(
                 proxy.clearAll()
                 bridge.reset(); lastWord = null; lastWord2 = null; clearUndo()
             }
-            Key.Backspace -> if (swiped != null && proxy.confirmTail(swiped)) {
+            Key.Backspace -> if (swiped != null && shortcutKey != null && proxy.confirmTail(swiped)) {
+                // ⌫ đầu ngay sau vuốt khoá gõ tắt: trả lại khoá (như hoàn tác gõ tắt gõ tay) — khoá
+                // nằm lại thành chữ thường trên màn hình (engine trống ⇒ dấu cách sau không bung lại).
+                proxy.deleteCodePoints(Cp.count(swiped))
+                proxy.insertText(shortcutKey)
+                bridge.reset()
+                bridge.forgetLastCommit()
+                clearUndo()
+                TouchLog.write("shortcut undo (vuốt): -${Cp.count(swiped)} +${Cp.count(shortcutKey)}")
+            } else if (swiped != null && proxy.confirmTail(swiped)) {
                 // ⌫ ĐẦU TIÊN ngay sau vuốt: xoá cả từ vuốt (từ chưa chốt ⇒ ngữ cảnh giữ nguyên).
                 proxy.deleteCodePoints(Cp.count(swiped))
                 bridge.reset()
@@ -895,9 +917,23 @@ class KeyboardSession(
      * nếu liền trước là chữ, chèn [choice] rồi seed engine bằng nó ⇒ composition đang mở
      * (phím dấu Telex sửa được, ⌫ đầu xoá cả từ, thanh gợi ý hiện biến thể).
      */
-    fun commitSwipe(choice: SwipeChoice, proxy: TextProxy, revisedPrev: String? = null,
-                    scored: List<SwipeWord> = emptyList(), case: SwipeSuggest.Case = SwipeSuggest.Case.LOWER): KeyOutcome {
+    fun commitSwipe(choice0: SwipeChoice, proxy: TextProxy, revisedPrev: String? = null,
+                    scored0: List<SwipeWord> = emptyList(), case: SwipeSuggest.Case = SwipeSuggest.Case.LOWER): KeyOutcome {
         tonesUndo = null
+        // Khoá gõ tắt ("vn", từ vựng vuốt SwipeVocab.shortcutEntries): chèn nội dung bung như gõ khoá +
+        // dấu cách (⌫ đầu trả lại khoá). Khoá đứng đầu phương án — chạm để giữ nguyên khoá. = iOS finish.
+        var choice = choice0
+        var scored = scored0
+        var shortcutKey: String? = null
+        val key = choice0.shifted
+        val e = if (key.isEmpty()) null else bridge.swipeShortcutExpansion(key)
+        if (e != null && e != key) {
+            shortcutKey = key
+            choice = SwipeChoice(e, (listOf(key) + choice0.alternatives.filter { it != key && it != e }).take(3),
+                english = false, englishAlternatives = choice0.englishAlternatives + key, shifted = key)
+            scored = emptyList()
+            TouchLog.write("swipe: khoá gõ tắt (${Cp.count(key)}→${Cp.count(e)} chars)")
+        }
         val lit = if (swipeLiteral) swipeWord else null
         val prevWord = revisable?.word
         clearUndo(); clearSwipe()
@@ -922,7 +958,15 @@ class KeyboardSession(
             bridge.boundary(" ", proxy, expand = false)
         }
         proxy.insertText(choice.word)
-        if (choice.english) {
+        if (shortcutKey != null) {
+            // nội dung bung: nguyên văn như từ Anh vuốt (engine trống), nhưng không phải ngữ cảnh Anh
+            bridge.adoptLiteral()
+            swipeWord = choice.word
+            swipeLiteral = true
+            swipeAlts = choice.alternatives
+            swipeEnglishAlts = choice.englishAlternatives
+            swipeShortcutKey = shortcutKey
+        } else if (choice.english) {
             // tiếng Anh: chèn nguyên văn, engine trống (không seed Telex, không bung dấu)
             bridge.adoptLiteral()
             swipeWord = choice.word
@@ -1388,6 +1432,7 @@ class KeyboardSession(
             val eng = swipeEnglishAlts - item + (if (swipeLiteral) setOf(sw) else emptySet())
             val alts = swipeAlts.map { if (it == item) sw else it }
             revisable = null                       // user đã chọn: cú vuốt kế không sửa lại từ này
+            swipeShortcutKey = null                // đã chọn phương án: ⌫ thường
             if (itemEnglish) {
                 bridge.adoptLiteral()
                 swipeWord = item; swipeLiteral = true; swipeAlts = alts; swipeEnglishAlts = eng

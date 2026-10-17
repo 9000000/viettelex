@@ -57,9 +57,8 @@ enum SwipeVocab {
 
     /// Bảng đầy đủ theo chế độ: chat + thô tục luôn có (+ tục khi tắt lọc, tần suất từ seed)
     /// + từ của bảng Gõ tắt (`shortcutEntries`, rỗng khi tắt Gõ tắt).
-    static func entries(filter: Bool) -> [Entry] {
+    static func entries(filter: Bool, shortcuts sc: [Entry] = []) -> [Entry] {
         let base = filter ? chat + always : chat + always + sensitiveEntries(SeedData.unigrams)
-        let sc = shortcuts
         return sc.isEmpty ? base : base + sc.filter { !(filter && isSensitive($0.word.lowercased())) }
     }
 
@@ -182,17 +181,17 @@ enum SwipeVocab {
     static var current: Vocab {
         lock.lock(); defer { lock.unlock() }
         if let v = cache[filterOn] { return v }
-        let v = build(filter: filterOn)
+        let v = build(filter: filterOn, shortcuts: shortcutStore)   // đang giữ lock: KHÔNG gọi `shortcuts`
         cache[filterOn] = v
         return v
     }
 
     static func isSensitive(_ word: String) -> Bool { SensitiveWords.set.contains(word) }
 
-    static func build(filter: Bool) -> Vocab {
+    static func build(filter: Bool, shortcuts: [Entry] = []) -> Vocab {
         let lex = SwipeLexicon.forms
         var words: [String: [SwipeWord]] = [:]
-        for e in entries(filter: filter) {
+        for e in entries(filter: filter, shortcuts: shortcuts) {
             let f = SwipeLexicon.fold(e.word)
             let lf = SwipeLexicon.index(of: f) == nil ? -1 : lexiconFreq(e.word)
             // có sẵn trong vnlexicon: chỉ thay khi bảng cao hơn; không có: từ tục được sàn

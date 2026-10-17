@@ -92,6 +92,8 @@ class GestureClassifier(val params: Params = Params()) {
 data class SwipeChoice(
     val word: String, val alternatives: List<String>,
     val english: Boolean = false, val englishAlternatives: Set<String> = emptySet(),
+    /** Từ thắng chỉ áp Shift (không tên riêng) — tra khoá gõ tắt như gõ tay. = iOS Choice.shifted. */
+    val shifted: String = "",
 )
 
 object SwipeSuggest {
@@ -297,7 +299,8 @@ object SwipeSuggest {
         }
         val cased = { w: String -> applyCase(w, case, proper) }
         return SwipeChoice(cased(word), alts.map(cased),
-            lead == SwipeLang.EN, alts.filter { it in english }.mapTo(HashSet()) { cased(it) })
+            lead == SwipeLang.EN, alts.filter { it in english }.mapTo(HashSet()) { cased(it) },
+            shifted = applyCase(word, case))
     }
 
     /** Chỉ Shift (không tên riêng) — giữ cho công cụ/test cũ. */
