@@ -83,9 +83,10 @@ final class SuggestBigramTests: XCTestCase {
         // cùng ngưỡng Kotlin (đo 27/09/2026: slot1 0.747→0.829, 3 slot 0.880→0.938, kế tiếp 0.111→0.271)
         XCTAssertGreaterThanOrEqual(after.r1, 0.82, after.fmt)
         XCTAssertGreaterThanOrEqual(after.r3, 0.93, after.fmt)
-        XCTAssertGreaterThanOrEqual(after.rn, 0.26, after.fmt)
+        XCTAssertGreaterThanOrEqual(after.rn, 0.31, after.fmt)
         XCTAssertGreaterThanOrEqual(after.r1 - before.r1, 0.07)
-        XCTAssertGreaterThanOrEqual(after.rn - before.rn, 0.14)
+        // 18/10/2026 seed từ corpus hội thoại: phần bigram thêm 0.16 → 0.10 (seed mạnh hơn) — xem bản Kotlin
+        XCTAssertGreaterThanOrEqual(after.rn - before.rn, 0.09)
     }
 
     /// Người dùng đã gõ lâu (học dần từng từ): bigram không làm tụt, cá nhân vẫn dẫn.

@@ -226,7 +226,7 @@ class TouchSimTests {
 
     private companion object {
         const val PARITY_NODES = 63210
-        val PARITY_P = floatArrayOf(0.1621066f, 2.3995224e-5f, 0.25000682f, 0.48642358f, 0.0019261033f, 0.9978731f, 0.17668681f, 0.17500657f)
+        val PARITY_P = floatArrayOf(0.16052505f, 2.4178255e-5f, 0.25838506f, 0.49238884f, 0.002160288f, 0.99860436f, 0.17761526f, 0.17500657f)
     }
 
     private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)

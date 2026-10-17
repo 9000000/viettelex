@@ -28,8 +28,9 @@ class CuratedPairsTests {
 
     /** "co dau": một mình = cô dâu, ngữ cảnh gõ/chữ = có dấu, chat "làm gì …" = có đâu. */
     @Test fun coDauThreeReadings() {
-        // đứng một mình: vnlm.bin hội thoại (18/10/2026) nghiêng "có dấu" (trước: "cô dâu") — Phil quyết
-        assertEquals("có dấu", r("co dau"))
+        // đứng một mình: vnlm.bin hội thoại (18/10/2026) nghiêng "có dấu"; tần suất vnlexicon corpus hội thoại
+        // (giai đoạn 2, cùng ngày) đưa về lại "cô dâu" (cô/dâu mạnh hơn) — Phil quyết
+        assertEquals("cô dâu", r("co dau"))
         assertEquals("cô dâu chú rể", r("co dau chu re"))
         assertEquals("tiếng Việt có dấu", r("tieng Viet co dau"))
         assertEquals("làm gì có đâu", r("lam gi co dau"))

@@ -15,9 +15,13 @@ Nguồn:
         `gen-syllable-lm.py unigram` trên corpus trộn (Wikimedia + Tatoeba + OpenSubtitles v2024
         + FineWeb-2, cùng trọng số với vnlm.bin) — bản dùng từ 18/10/2026 (giai đoạn 2).
 
-Tần suất 0–255 = max(1, int(255·ln(c)/ln(max c))); âm tiết không có số đếm (hoặc c ≤ 1)
-lấy theo hạng hieuthi: max(1, int(60·(1 − rank/n))). Với --counts, số đếm được nhân
-`--scale` trước (xem docs/DATA-SOURCES.md mục vnlexicon).
+--freq: tần suất 0–255 = max(1, int(255·ln(c)/ln(max c))); âm tiết không có trong danh sách lấy
+theo hạng hieuthi: max(1, int(60·(1 − rank/n))).
+--counts: GIỮ NGUYÊN THANG của bản cũ — số đếm quy về "số lần như thể trong corpus tham chiếu"
+c' = c·REF_TOTAL/Σc rồi f = min(255, max(1, int(255·ln(c')/ln(REF_MAX)))), REF_TOTAL/REF_MAX =
+tổng/max của hermitdave 2016/vi_50k (17.011.917 / 479.988 — "tôi"). Cùng tỉ lệ token ⇒ cùng tần
+suất như bản cũ, nên ngưỡng 0–255 ở mọi nền tảng (TypoFix, AutoCorrect, SwipeVocab…) và thang
+enlexicon (gen-enlexicon.py N_VI/CMAX_VI) giữ nghĩa; chỉ giá trị từng âm tiết đổi theo corpus mới.
 
 vnlexicon.bin (little-endian): 0 "VNL2" | 4 version u32=1 | 8 count u32 | 12 sectionCount u32=6 |
 16 6 × (offset u32, length u32) — offset tính từ đầu file; section đặt liền nhau, mỗi section
@@ -103,15 +107,33 @@ def load_counts(path):
             counts[w] = counts.get(w, 0) + float(parts[1])
     return counts
 
-def build_entries(syllables, counts):
+# Từ thô tục KHÔNG nằm trong VULGAR/SensitiveWords (SwipeVocab.swift: vú, ngu, dái, cu, vãi…): câu
+# hội thoại chứa chúng hay đi kèm từ tục bị bỏ cả câu ⇒ số đếm mới bị kéo xuống (vãi 126 → 114) —
+# --keep-vulgar-from lấy max(cũ, mới) cho cả nhóm này. (mày KHÔNG: thiên lệch phụ đề cũ mày > máy.)
+RUDE_UNFILTERED = {"vãi", "vú", "ngu", "dái", "cu"}
+REF_TOTAL, REF_MAX = 17011917, 479988   # hermitdave 2016/vi_50k: Σ số đếm, max ("tôi")
+
+def read_vnl2(path):
+    """vnlexicon.bin → {âm tiết: tần suất}."""
+    b = open(path, "rb").read()
+    assert b[:4] == b"VNL2"
+    n = struct.unpack_from("<I", b, 8)[0]
+    sec = [struct.unpack_from("<II", b, 16 + i * 8) for i in range(6)]
+    do = struct.unpack_from("<%dI" % (n + 1), b, sec[4][0])
+    return {b[sec[1][0] + do[i]: sec[1][0] + do[i + 1]].decode("utf-8"): b[sec[5][0] + i] for i in range(n)}
+
+def build_entries(syllables, counts, ref_max=None, keep=None):
     """[(folded, 255−f, display, attrs, f)] đã sort — id = chỉ số."""
-    maxlog = math.log(max(counts.values()))
+    maxlog = math.log(ref_max or max(counts.values()))
     entries = []
     for rank, w in enumerate(syllables):
         c = counts.get(w)
-        if c and c > 1: f = max(1, int(255 * math.log(c) / maxlog))
+        if ref_max is not None:      # --counts: mọi âm tiết có số đếm (0 ⇒ 1)
+            f = min(255, max(1, int(255 * math.log(c) / maxlog))) if c and c > 1 else 1
+        elif c and c > 1: f = max(1, int(255 * math.log(c) / maxlog))
         elif c: f = 1   # c == 1 (ln = 0) — như bản cũ: max(1, 0)
         else: f = max(1, int(60 * (1 - rank / len(syllables))))
+        if keep and w in keep: f = max(f, keep[w])
         dec = [decompose_char(ch) for ch in w]
         if any(d is None for d in dec): continue
         folded = "".join(d[0] for d in dec)
@@ -215,7 +237,12 @@ def main():
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--freq", help="vi_50k.txt (hermitdave)")
     g.add_argument("--counts", help="âm_tiết<TAB>số đếm (corpus trộn)")
-    ap.add_argument("--scale", type=float, default=1.0, help="nhân số đếm --counts trước khi lấy ln")
+    ap.add_argument("--ref-total", type=float, default=REF_TOTAL)
+    ap.add_argument("--ref-max", type=float, default=REF_MAX)
+    ap.add_argument("--keep-vulgar-from", metavar="OLD.bin",
+                    help="--counts: từ tục (lm-chat-prep.VULGAR + RUDE_UNFILTERED) lấy max(mới, tần suất vnlexicon cũ) — nguồn hội "
+                         "thoại BỎ CẢ CÂU chứa chúng nên số đếm mới gần 0 (cứt 130 → 8), làm gõ vuốt khi TẮT lọc "
+                         "không ra được")
     ap.add_argument("--out", help="vnlexicon.bin")
     ap.add_argument("--swift", help="định dạng Swift base64 cũ (lịch sử)")
     ap.add_argument("--patch-sources", action="store_true",
@@ -226,8 +253,19 @@ def main():
     if a.freq:
         counts = load_freq50k(a.freq)
     else:
-        counts = {w: c * a.scale for w, c in load_counts(a.counts).items()}
-    entries = build_entries(syllables, counts)
+        raw = load_counts(a.counts)
+        tot = sum(raw.values())
+        counts = {w: c * a.ref_total / tot for w, c in raw.items()}
+    keep = {}
+    if a.keep_vulgar_from:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "chatprep", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lm-chat-prep.py"))
+        cp = importlib.util.module_from_spec(spec); spec.loader.exec_module(cp)
+        rude = cp.VULGAR | RUDE_UNFILTERED
+        keep = {w: f for w, f in read_vnl2(a.keep_vulgar_from).items() if w in rude}
+        print("giữ tần suất cũ:", " ".join(f"{w}={f}" for w, f in sorted(keep.items())), file=sys.stderr)
+    entries = build_entries(syllables, counts, a.ref_max if a.counts else None, keep)
     if a.out:
         n = write_vnl2(entries, a.out)
         print(f"{a.out}: {n} B, {len(entries)} âm tiết", file=sys.stderr)

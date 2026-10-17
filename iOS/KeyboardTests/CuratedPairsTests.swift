@@ -23,8 +23,9 @@ final class CuratedPairsTests: XCTestCase {
     /// Ba cách đọc của "co dau": đứng một mình = cô dâu (vnlm.bin: PMI cô→dâu +4,5 trội hẳn), ngữ cảnh
     /// gõ/chữ = có dấu, chat "làm gì …" = có đâu.
     func testCoDauThreeReadings() {
-        // đứng một mình: vnlm.bin hội thoại (18/10/2026) nghiêng "có dấu" (trước: "cô dâu") — Phil quyết
-        XCTAssertEqual(r("co dau"), "có dấu")
+        // đứng một mình: vnlm.bin hội thoại (18/10/2026) nghiêng "có dấu"; tần suất vnlexicon corpus hội thoại
+        // (giai đoạn 2, cùng ngày) đưa về lại "cô dâu" — Phil quyết
+        XCTAssertEqual(r("co dau"), "cô dâu")
         XCTAssertEqual(r("co dau chu re"), "cô dâu chú rể")
         XCTAssertEqual(r("tieng Viet co dau"), "tiếng Việt có dấu")
         XCTAssertEqual(r("lam gi co dau"), "làm gì có đâu")

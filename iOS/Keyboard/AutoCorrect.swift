@@ -16,7 +16,7 @@ import TelexCore
 
 enum AutoCorrect {
     /// `minFreq`: tần suất lexicon (0–255) tối thiểu của ứng viên — chỉ từ phổ biến (không,
-    /// này, tôi…; "phím" = 87 không đủ); `margin`: hơn tần suất ứng viên thứ hai ít nhất bấy
+    /// này, tôi…; "phím" = 120 không đủ); `margin`: hơn tần suất ứng viên thứ hai ít nhất bấy
     /// nhiêu; `minEv`: điểm chạm phải lệch về phía phím sửa ít nhất bấy nhiêu (`evidence`) —
     /// không thì loại ứng viên đó (cũng không tính là đối thủ).
     struct Params: Equatable {
@@ -27,8 +27,9 @@ enum AutoCorrect {
     }
 
     // Dò trên DEV (27/09/2026): P 98.4% R 26.8%. Hạ ngưỡng tần suất (kể cả khi chỉ một ứng
-    // viên) hay cộng điểm theo độ lệch chạm đều tụt P dưới 97%. GIỮ Y HỆT bản Kotlin.
-    static let defaults = Params(minLen: 3, minFreq: 170, margin: 30, minEv: 0.1)
+    // viên) hay cộng điểm theo độ lệch chạm đều tụt P dưới 97%. 18/10/2026 (vnlexicon tần suất
+    // corpus hội thoại): 170 → 175 giữ P DEV 98.7% (170: 98.0%; cũ 98.8%), R 26.8 → 27.0%. GIỮ Y HỆT bản Kotlin.
+    static let defaults = Params(minLen: 3, minFreq: 175, margin: 30, minEv: 0.1)
 
     /// Điểm chạm của một phím: lệch so với TÂM phím đã ra, theo cỡ mặt phím (x phải, y xuống).
     struct Touch: Equatable {

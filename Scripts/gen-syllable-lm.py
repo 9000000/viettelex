@@ -320,6 +320,91 @@ def np_source_counts(path, np, chunk=40_000_000):
         return u, np.bincount(inv, weights=c, minlength=len(u)).astype(np.int64)
     return tuple(merge(p) for p in parts)
 
+def apply_shares(wts, mass, shares):
+    """--share: nguồn k chiếm đúng phần p của TỔNG khối lượng có trọng số; tổng giữ bằng khối
+    lượng của các nguồn không --share (sửa `wts` tại chỗ)."""
+    if shares:
+        base = [k for k in mass if k not in shares]
+        M = sum(wts[k] * mass[k] for k in base)            # tổng khối lượng giữ như không có nguồn mới
+        rest = 1.0 - sum(shares.values())
+        for k in base: wts[k] = wts[k] * rest
+        for k, p in shares.items(): wts[k] = p * M / mass[k]
+    for k in mass:
+        print(f"  {k}: ×{wts[k]:.6g} → {wts[k] * mass[k] / 1e6:.2f} tr (khối lượng có trọng số)", file=sys.stderr)
+
+def weights_from_args(names, a):
+    wts = {name: WEIGHTS.get(name, 1) for name in names}
+    for spec in a.weight or []:
+        k, v = spec.split("="); wts[k] = float(v)
+    shares = {}
+    for spec in a.share or []:
+        k, v = spec.split("="); shares[k] = float(v)
+    return wts, shares
+
+def cmd_unigram(a):
+    """Số đếm UNIGRAM có trọng số (cùng --weight/--share như count-np) → TSV "âm_tiết<TAB>số đếm"
+    cho Scripts/gen-vnlexicon.py --counts (tần suất vnlexicon.bin từ corpus trộn, giai đoạn 2
+    18/10/2026). Đếm mọi id trong luồng (kể cả âm tiết đứng một mình giữa hai chỗ đứt)."""
+    import numpy as np
+    words, _ = load_lexicon(a.lexicon)
+    n = len(words)
+    names = [os.path.basename(p).split(".")[0] for p in a.inputs]
+    per = {}
+    for name, path in zip(names, a.inputs):
+        ids = np.fromfile(path, dtype="<u2")
+        per[name] = np.bincount(ids[ids != BR], minlength=n)[:n].astype(np.float64)
+    mass = {k: float(v.sum()) for k, v in per.items()}
+    wts, shares = weights_from_args(names, a)
+    apply_shares(wts, mass, shares)
+    tot = sum(per[k] * wts[k] for k in per)
+    with open(a.out, "w", encoding="utf-8") as f:
+        for i in np.argsort(-tot, kind="stable"):
+            f.write(f"{words[i]}\t{tot[i]:.3f}\n")
+    if a.per_source:
+        with open(a.per_source, "w", encoding="utf-8") as f:
+            f.write("syllable\t" + "\t".join(per) + "\n")
+            for i in range(n):
+                f.write(words[i] + "\t" + "\t".join(str(int(per[k][i])) for k in per) + "\n")
+    print(f"unigram: {n} âm tiết, tổng {tot.sum() / 1e6:.2f} tr → {a.out}", file=sys.stderr)
+    if a.bigram_out:                       # cặp có trọng số ≥ --bigram-min (seed SeedData, gen-seed-data.py)
+        ks, ws = [], []
+        for name, path in zip(names, a.inputs):
+            cache = path + ".npz"
+            if os.path.exists(cache) and os.path.getmtime(cache) >= os.path.getmtime(path):
+                z = np.load(cache); u2, c2 = z["u2"], z["c2"]
+            else:
+                (u1, c1), (u2, c2), (u3, c3) = np_source_counts(path, np)
+                np.savez(cache, u1=u1, c1=c1, u2=u2, c2=c2, u3=u3, c3=c3)
+            ks.append(u2); ws.append(c2.astype(np.float64) * wts[name])
+        u, inv = np.unique(np.concatenate(ks), return_inverse=True)
+        w = np.bincount(inv, weights=np.concatenate(ws), minlength=len(u))
+        keep = w >= a.bigram_min
+        u, w = u[keep], w[keep]
+        order = np.argsort(-w, kind="stable")
+        with open(a.bigram_out, "w", encoding="utf-8") as f:
+            for j in order:
+                k = int(u[j]); f.write(f"{words[k >> 13]} {words[k & M13]}\t{w[j]:.3f}\n")
+        print(f"bigram: {len(u)} cặp ≥ {a.bigram_min} → {a.bigram_out}", file=sys.stderr)
+
+def cmd_remap(a):
+    """Đổi id trong các luồng .ids từ vnlexicon cũ sang vnlexicon mới (cùng tập âm tiết, khác thứ
+    tự id vì tần suất đổi) — tương đương chạy lại `ids`/lm-chat-prep với lexicon mới (tách âm
+    tiết không phụ thuộc tần suất). Ghi OUT_DIR/<tên file gốc>."""
+    import numpy as np
+    old, _ = load_lexicon(a.old)
+    new, _ = load_lexicon(a.new)
+    assert sorted(old) == sorted(new), "hai vnlexicon phải cùng tập âm tiết"
+    pos = {w: i for i, w in enumerate(new)}
+    lut = np.full(1 << 16, BR, dtype=np.uint16)
+    for i, w in enumerate(old): lut[i] = pos[w]
+    os.makedirs(a.out_dir, exist_ok=True)
+    for path in a.inputs:
+        ids = np.fromfile(path, dtype="<u2")
+        out = lut[ids]
+        assert ((ids == BR) == (out == BR)).all()
+        out.astype("<u2").tofile(os.path.join(a.out_dir, os.path.basename(path)))
+        print(f"{path}: {len(ids)} id", file=sys.stderr)
+
 def cmd_count_np(a):
     """Như `count` nhưng từ các luồng .ids, đếm bằng numpy (chạy trong container — nguồn hội
     thoại hàng trăm triệu âm tiết vượt sức Counter của python). Trọng số:
@@ -338,12 +423,7 @@ def cmd_count_np(a):
         path = spec
         name = os.path.basename(path).split(".")[0]
         srcs.append((name, path))
-    wts = {name: WEIGHTS.get(name, 1) for name, _ in srcs}
-    for spec in a.weight or []:
-        k, v = spec.split("="); wts[k] = float(v)
-    shares = {}
-    for spec in a.share or []:
-        k, v = spec.split("="); shares[k] = float(v)
+    wts, shares = weights_from_args([name for name, _ in srcs], a)
     counts = {}
     for name, path in srcs:
         cache = path + ".npz"
@@ -357,14 +437,7 @@ def cmd_count_np(a):
         print(f"{name}: {int(counts[name][0][1].sum())} âm tiết, {len(counts[name][1][0])} bigram, "
               f"{len(counts[name][2][0])} trigram khác nhau", file=sys.stderr, flush=True)
     mass = {k: float(counts[k][0][1].sum()) for k in counts}
-    if shares:
-        base = [k for k in counts if k not in shares]
-        M = sum(wts[k] * mass[k] for k in base)            # tổng khối lượng giữ như không có nguồn mới
-        rest = 1.0 - sum(shares.values())
-        for k in base: wts[k] = wts[k] * rest
-        for k, p in shares.items(): wts[k] = p * M / mass[k]
-    for k in counts:
-        print(f"  {k}: ×{wts[k]:.6g} → {wts[k] * mass[k] / 1e6:.2f} tr (khối lượng có trọng số)", file=sys.stderr)
+    apply_shares(wts, mass, shares)
     def combine(i):
         ks = np.concatenate([counts[k][i][0] for k in counts])
         raw = np.concatenate([counts[k][i][1] for k in counts])
@@ -958,6 +1031,20 @@ def main():
     p.add_argument("--pre2", type=float, default=2.0)
     p.add_argument("--pre3", type=float, default=4.0)
     p.add_argument("inputs", nargs="+", help="luồng .ids (tên nguồn = tên file trước dấu chấm)")
+    p = sp.add_parser("unigram")
+    p.add_argument("--lexicon", required=True)
+    p.add_argument("--out", required=True)
+    p.add_argument("--per-source", help="TSV số đếm thô từng nguồn")
+    p.add_argument("--bigram-out", help="TSV \"a b<TAB>số đếm có trọng số\" (cặp ≥ --bigram-min)")
+    p.add_argument("--bigram-min", type=float, default=50.0)
+    p.add_argument("--weight", action="append", help="tên=hệ số")
+    p.add_argument("--share", action="append", help="tên=phần khối lượng (0–1)")
+    p.add_argument("inputs", nargs="+", help="luồng .ids")
+    p = sp.add_parser("remap")
+    p.add_argument("--old", required=True, help="vnlexicon.bin đã dùng sinh luồng .ids")
+    p.add_argument("--new", required=True)
+    p.add_argument("--out-dir", required=True)
+    p.add_argument("inputs", nargs="+")
     p = sp.add_parser("chains")
     p.add_argument("--lexicon", required=True)
     p.add_argument("--input", required=True)
@@ -965,7 +1052,7 @@ def main():
     p.add_argument("--limit", type=int, default=0)
     a = ap.parse_args()
     {"count": cmd_count, "build": cmd_build, "chains": cmd_chains, "ids": cmd_ids,
-     "count-np": cmd_count_np}[a.cmd](a)
+     "count-np": cmd_count_np, "unigram": cmd_unigram, "remap": cmd_remap}[a.cmd](a)
 
 if __name__ == "__main__":
     main()

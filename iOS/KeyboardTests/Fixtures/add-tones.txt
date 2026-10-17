@@ -3,7 +3,7 @@
 # cả ba bản phải cho ĐÚNG kết quả này.
 toi di hoc hom nay	tôi đi học hôm nay
 khong co gi	không có gì
-cam on ban rat nhieu	cám ơn bạn rất nhiều
+cam on ban rat nhieu	cảm ơn bạn rất nhiều
 Toi di hoc, hom nay troi dep!	Tôi đi học, hôm nay trời đẹp!
 TOI DI HOC	TÔI ĐI HỌC
   (toi)  di  hoc...  	  (tôi)  đi  học...  
@@ -30,7 +30,7 @@ Ha Noi mua thu dep lam	Hà Nội mùa thứ đẹp lắm
 ong ay la bac si	ông ấy là bác sĩ
 co ay hat rat hay	cô ấy hát rất hay
 xin loi toi den muon	xin lỗi tôi đến muộn
-tui minh di an pho di	tụi mình đi ăn phô đi
+tui minh di an pho di	tụi mình đi ăn phở đi
 mot hai ba bon nam sau bay tam chin muoi	một hai ba bốn năm sau bảy tám chín muồi
 nuoc Viet Nam doc lap tu do hanh phuc	nước Việt Nam độc lập tự do hạnh phúc
 con meo dang ngu tren ghe	con mèo đang ngủ trên ghế
@@ -39,7 +39,7 @@ dat nuoc ta dang phat trien	đất nước ta đang phát triển
 hoc sinh phai chiu kho hoc bai	học sinh phải chịu khó học bài
 anh ay noi tieng Anh rat gioi	anh ấy nói tiếng Anh rất giỏi
 cho toi mot ly ca phe sua da	cho tôi một ly cà phê sữa đã
-may gio roi ban	mấy giờ rồi bắn
+may gio roi ban	mấy giờ rồi bạn
 thoi tiet hom nay the nao	thời tiết hôm nay thế nào
 toi nghi la duoc	tôi nghĩ là được
 bien Nha Trang rat dep	biển Nha Trang rất đẹp
@@ -60,7 +60,7 @@ go vuot tren ban phim	gõ vuốt trên bàn phím
 bop vu	bóp vú
 bop dai	bóp dái
 lam gi co dau	làm gì có đâu
-co dau	có dấu
+co dau	cô dâu
 co dau chu re	cô dâu chú rể
 leu bao	lều báo
 xiu ngang luon	xỉu ngang luôn

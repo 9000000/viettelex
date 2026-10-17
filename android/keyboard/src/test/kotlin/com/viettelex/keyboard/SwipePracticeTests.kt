@@ -44,7 +44,7 @@ class SwipePracticeTests {
     }
 
     companion object {
-        val PARITY_SEED_42 = listOf("hoàn", "head", "phần", "chứng", "first", "hay", "đừng", "vật", "nhau", "từ", "chú", "ít")
+        val PARITY_SEED_42 = listOf("lòng", "head", "tử", "dịch", "first", "tốt", "đấy", "đàn", "bỏ", "cách", "câu", "mạnh")
     }
 
     private fun trace(word: String, lang: SwipeLang, seed: Long, sigma: Double = 0.1): SwipeTrace {
