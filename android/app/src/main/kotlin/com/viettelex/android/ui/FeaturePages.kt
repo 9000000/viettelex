@@ -132,7 +132,7 @@ internal data class FeatureSearchEntry(val viTitle: String, val keywords: String
             FeatureSearchEntry("Khôi phục giao diện gốc", "reset mặc định default", FeaturePage.GiaoDien), // l10n-key
             FeatureSearchEntry("Chiều cao hàng phím", "height cao thấp", FeaturePage.GiaoDien), // l10n-key
             FeatureSearchEntry("Hiện logo Vᴛ", "logo phím cách space", FeaturePage.GiaoDien), // l10n-key
-            FeatureSearchEntry("Lịch sử clipboard", "copy dán clipboard paste", FeaturePage.RiengTu), // l10n-key
+            FeatureSearchEntry("Lịch sử clipboard", "copy dán clipboard paste giữ lịch sử 24 giờ 7 ngày keep history", FeaturePage.RiengTu), // l10n-key
             FeatureSearchEntry("Chế độ ẩn danh", "incognito riêng tư privacy", FeaturePage.RiengTu), // l10n-key
             FeatureSearchEntry("Xuất / nhập file sao lưu", "backup export import restore", FeaturePage.SaoLuu), // l10n-key
         )
@@ -534,7 +534,7 @@ private fun PlusLockedRow(title: String, caption: String) {
 
 /** Hàng chọn một trong vài giá trị chuỗi (nút bấm chia đều): tiêu đề + chú thích + các ô. */
 @Composable
-private fun ChoiceRow(key: String, default: String, title: String, caption: String,
+internal fun ChoiceRow(key: String, default: String, title: String, caption: String,
                       options: List<Pair<String, String>>, normalize: (String) -> String = { it }) {
     val c = LocalVT.current
     var mode by rememberStringPref(key, default)

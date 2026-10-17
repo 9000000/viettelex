@@ -30,6 +30,7 @@ import com.viettelex.keyboard.KeyAlternates
 import com.viettelex.keyboard.Cancellable
 import com.viettelex.keyboard.EmojiData
 import com.viettelex.keyboard.ClipboardHistory
+import com.viettelex.keyboard.ClipboardTTL
 import com.viettelex.keyboard.EmojiRecents
 import com.viettelex.keyboard.FieldTraits
 import com.viettelex.keyboard.FutoSwipe
@@ -198,8 +199,10 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         else if (key == Keys.LONG_PRESS_NUMBERS || key == Keys.LONG_PRESS_SYMBOLS) updateAlternates()
         // Bật/tắt kiểu gõ trong app khi bàn phím đang mở (ô Thử gõ) → áp ngay, không đợi mở lại.
         else if (key in Keys.ENGINE_KEYS) session.bridge.applySettings(settings())
-        // Tắt lịch sử clipboard trong app: bỏ bản RAM (app đã xoá file).
-        else if (key == Keys.CLIPBOARD_HISTORY) syncClipHistory(settings().clipboardHistory)
+        // Tắt lịch sử clipboard trong app: bỏ bản RAM (app đã xoá file). Đổi "Giữ lịch sử" ⇒
+        // hạn mới cho bản RAM (áp ở lần prune kế tiếp).
+        else if (key == Keys.CLIPBOARD_HISTORY || key == Keys.CLIPBOARD_TTL)
+            settings().let { syncClipHistory(it.clipboardHistory, it.clipboardTtl) }
         // Bật/tắt thả nổi trong app khi bàn phím đang mở (ô Thử gõ) → áp ngay.
         else if (key == Keys.FLOATING_KEYBOARD && inputShown) applyFloating(settings().floatingKeyboard)
     }
@@ -250,7 +253,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         session.onAutoCorrectRejected = {
             stateStore().edit().putString(Keys.AUTO_CORRECT_REJECTED, session.autoCorrectRejected.encode()).apply()
         }
-        syncClipHistory(prefs.getBoolean(Keys.CLIPBOARD_HISTORY, false))
+        syncClipHistory(prefs.getBoolean(Keys.CLIPBOARD_HISTORY, false), ClipboardTTL.of(prefs.getString(Keys.CLIPBOARD_TTL, null)))
         clipboard.onChanged = { onClipChanged() }
         // Mời dán một lần mỗi mục clipboard: chỉ lưu id (timestamp ClipDescription), không nội dung.
         session.pasteOnce.reload(stateStore().getLong(Keys.PASTE_OFFERED_ID, Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE })
@@ -374,7 +377,7 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
         // Âm thanh phím riêng: TẮT ⇒ nhả/không dựng gì (tiếng hệ thống như cũ).
         feedback.configureSound(settings.keySound, settings.keySoundVolume, settings.keySoundStyle) { worker().post(it) }
         kb.searchSettings = settings
-        syncClipHistory(settings.clipboardHistory)
+        syncClipHistory(settings.clipboardHistory, settings.clipboardTtl)
         // Copy lúc process IME chưa sống (listener không thấy) → bù khi hiện, không làm mới mục cũ.
         if (session.recordClip(field.isSecure, onlyIfNew = true)) saveClipHistory()
         closeClipboardPane()
@@ -1239,17 +1242,23 @@ class VietTelexIME : InputMethodService(), KeyboardView.Listener, StripView.List
     private var clipPane: ClipboardPane? = null
     private val clipFile by lazy { File(filesDir, Keys.CLIPBOARD_FILE) }
 
-    /** Bật ⇒ nạp file (một lần); tắt ⇒ bỏ RAM + xoá file. */
-    private fun syncClipHistory(enabled: Boolean) {
+    /**
+     * Bật ⇒ nạp file (một lần) + áp hạn [ttl] ("Giữ lịch sử clipboard") rồi prune — rút ngắn
+     * hạn ⇒ mục quá hạn bị bỏ ngay lần hiện kế tiếp; tắt ⇒ bỏ RAM + xoá file.
+     */
+    private fun syncClipHistory(enabled: Boolean, ttl: ClipboardTTL) {
         if (!enabled) {
             if (session.clipHistory != null || clipFile.exists()) { session.clipHistory = null; clipFile.delete() }
             strip?.setExtras(clipButton = false, open = false)
             closeClipboardPane()
             return
         }
-        if (session.clipHistory != null) return
+        session.clipHistory?.let { h ->
+            if (h.ttlMs != ttl.ms) { h.ttlMs = ttl.ms; if (h.prune(System.currentTimeMillis())) saveClipHistory(h) }
+            return
+        }
         val text = try { if (clipFile.exists()) clipFile.readText() else null } catch (_: Exception) { null }
-        session.clipHistory = ClipboardHistory.deserialize(text).also {
+        session.clipHistory = ClipboardHistory.deserialize(text, ttlMs = ttl.ms).also {
             if (it.prune(System.currentTimeMillis())) saveClipHistory(it)
         }
     }

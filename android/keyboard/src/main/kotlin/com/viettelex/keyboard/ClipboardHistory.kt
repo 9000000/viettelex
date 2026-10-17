@@ -1,14 +1,33 @@
 package com.viettelex.keyboard
 
 /**
+ * "Giữ lịch sử clipboard": 1 giờ (mặc định) / 24 giờ / 7 ngày — pref [Keys.CLIPBOARD_TTL]
+ * lưu [id] ("1h"/"24h"/"7d", cùng khoá + id iOS `ClipboardTTL`). Chỉ áp cho mục không ghim,
+ * không "trông như bí mật" (mục bí mật giữ 2 phút). IME đọc khi hiện bàn phím / pref đổi.
+ */
+enum class ClipboardTTL(val id: String, val ms: Long) {
+    HOUR_1("1h", 3_600_000L),
+    HOURS_24("24h", 24 * 3_600_000L),
+    DAYS_7("7d", 7 * 24 * 3_600_000L);
+
+    companion object {
+        val DEFAULT = HOUR_1
+        val IDS: Set<String> = entries.map { it.id }.toCollection(LinkedHashSet())
+        /** Giá trị lạ / thiếu → 1 giờ. */
+        fun of(raw: Any?): ClipboardTTL = entries.firstOrNull { it.id == raw } ?: DEFAULT
+    }
+}
+
+/**
  * Lịch sử clipboard (chỉ trên máy): tối đa [maxItems] mục, mục không ghim hết hạn sau
- * [ttlMs] (mục "trông như bí mật" sau [sensitiveTtlMs]); mục ghim không hết hạn.
+ * [ttlMs] ([ClipboardTTL], đổi được lúc chạy — áp ở lần [prune] kế tiếp; mục "trông như
+ * bí mật" sau [sensitiveTtlMs]); mục ghim không hết hạn.
  * Hàm thuần, không I/O — IME lo đọc/ghi file bằng [serialize]/[deserialize].
  * iOS `ClipboardHistory.swift` port cùng hợp đồng.
  */
 class ClipboardHistory(
     val maxItems: Int = 20,
-    val ttlMs: Long = 3_600_000,
+    var ttlMs: Long = ClipboardTTL.DEFAULT.ms,
     val sensitiveTtlMs: Long = 120_000,
 ) {
     data class Item(val text: String, val at: Long, val pinned: Boolean, val sensitive: Boolean)
@@ -80,8 +99,8 @@ class ClipboardHistory(
     companion object {
         const val MAX_TEXT = 4000
 
-        fun deserialize(s: String?, maxItems: Int = 20): ClipboardHistory {
-            val h = ClipboardHistory(maxItems)
+        fun deserialize(s: String?, maxItems: Int = 20, ttlMs: Long = ClipboardTTL.DEFAULT.ms): ClipboardHistory {
+            val h = ClipboardHistory(maxItems, ttlMs)
             if (s.isNullOrEmpty()) return h
             for (line in s.split('\n')) {
                 val p = line.split('\t', limit = 4)

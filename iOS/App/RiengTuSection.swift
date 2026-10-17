@@ -7,13 +7,31 @@ struct RiengTuSection: View {
     private var clipboardHistory = false
     @AppStorage("incognitoMode", store: UserDefaults(suiteName: "group.com.viettelex"))
     private var incognitoMode = false
+    /// "Giữ lịch sử clipboard": "1h" (mặc định) / "24h" / "7d" — bàn phím đọc khi hiện
+    /// (Keyboard/ClipboardHistory.swift `ClipboardTTL`; cùng khoá + id Android).
+    @AppStorage("clipboardTTL", store: UserDefaults(suiteName: "group.com.viettelex"))
+    private var clipboardTTL = "1h"
 
     var body: some View {
         Section {
             toggle(L("Lịch sử clipboard"),
-                   L("Nút clipboard trên thanh gợi ý mở 20 mục vừa copy; ghim để giữ lâu. Mục không ghim tự xoá sau 1 giờ (mật khẩu/OTP: 2 phút). Chỉ lưu trên máy. Plus: vừa copy STK/SĐT/OTP → chip “Dán …” hiện trên thanh gợi ý."),
+                   L("Nút clipboard trên thanh gợi ý mở 20 mục vừa copy; ghim để giữ lâu. Mục không ghim tự xoá theo mục Giữ lịch sử bên dưới (mật khẩu/OTP: 2 phút). Chỉ lưu trên máy. Plus: vừa copy STK/SĐT/OTP → chip “Dán …” hiện trên thanh gợi ý."),
                    isOn: $clipboardHistory)
             if clipboardHistory {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("Giữ lịch sử clipboard"))
+                    Picker(L("Giữ lịch sử clipboard"), selection: Binding(
+                        get: { ["1h", "24h", "7d"].contains(clipboardTTL) ? clipboardTTL : "1h" },
+                        set: { clipboardTTL = $0 })) {
+                        Text(L("1 giờ")).tag("1h")
+                        Text(L("24 giờ")).tag("24h")
+                        Text(L("7 ngày")).tag("7d")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    Text(L("Mục chỉ nằm trên máy này. Mục trông như mật khẩu/OTP vẫn tự xoá sau 2 phút; ghim để giữ lâu."))
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 FullAccessNotice(reason: L("Lịch sử clipboard"))
                 Text(L("iOS chỉ cho bàn phím đọc clipboard khi đang hiện và có Toàn quyền. Để tự ghi mục mới mà không bị hỏi: Cài đặt → VietTelex → Dán từ ứng dụng khác → Cho phép. Bỏ qua ô mật khẩu."))
                     .font(.footnote).foregroundStyle(.secondary)

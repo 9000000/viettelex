@@ -330,7 +330,12 @@ enum L10n {
         "Nét vuốt chỉ nằm trên máy này (không sao lưu iCloud, không tự gửi đi). Xuất JSON để gửi cho nhà phát triển nếu bạn muốn giúp gõ vuốt chính xác hơn.": "Swipe paths stay on this device (no iCloud backup, never sent automatically). Export JSON to send to the developer if you’d like to help make swipe typing more accurate.",
 
         // Riêng tư
-        "Nút clipboard trên thanh gợi ý mở 20 mục vừa copy; ghim để giữ lâu. Mục không ghim tự xoá sau 1 giờ (mật khẩu/OTP: 2 phút). Chỉ lưu trên máy. Plus: vừa copy STK/SĐT/OTP → chip “Dán …” hiện trên thanh gợi ý.": "The clipboard button on the suggestion bar opens your last 20 copies; pin items to keep them. Unpinned items are deleted after 1 hour (passwords/OTP: 2 minutes). Stored on device only. Plus: copy an account/phone number or OTP → a “Paste …” chip appears on the suggestion bar.",
+        "Nút clipboard trên thanh gợi ý mở 20 mục vừa copy; ghim để giữ lâu. Mục không ghim tự xoá theo mục Giữ lịch sử bên dưới (mật khẩu/OTP: 2 phút). Chỉ lưu trên máy. Plus: vừa copy STK/SĐT/OTP → chip “Dán …” hiện trên thanh gợi ý.": "The clipboard button on the suggestion bar opens your last 20 copies; pin items to keep them. Unpinned items are deleted after the Keep history time below (passwords/OTP: 2 minutes). Stored on device only. Plus: copy an account/phone number or OTP → a “Paste …” chip appears on the suggestion bar.",
+        "Giữ lịch sử clipboard": "Keep clipboard history",
+        "1 giờ": "1 hour",
+        "24 giờ": "24 hours",
+        "7 ngày": "7 days",
+        "Mục chỉ nằm trên máy này. Mục trông như mật khẩu/OTP vẫn tự xoá sau 2 phút; ghim để giữ lâu.": "Items stay on this device only. Items that look like passwords/OTP are still removed after 2 minutes; pin to keep.",
         "iOS chỉ cho bàn phím đọc clipboard khi đang hiện và có Toàn quyền. Để tự ghi mục mới mà không bị hỏi: Cài đặt → VietTelex → Dán từ ứng dụng khác → Cho phép. Bỏ qua ô mật khẩu.": "iOS only lets the keyboard read the clipboard while it’s showing and has Full Access. To record new items without being asked: Settings → VietTelex → Paste from Other Apps → Allow. Password fields are skipped.",
         "Tắt Lịch sử clipboard sẽ xoá toàn bộ mục đã lưu ở lần mở bàn phím kế tiếp.": "Turning off Clipboard history deletes all saved items the next time the keyboard opens.",
         "Giới hạn của iOS: lúc bàn phím ẩn, bàn phím không thấy bạn copy gì — copy nhiều lần trong lúc đó chỉ ghi được mục cuối cùng, khi bàn phím hiện lại. Mở nút clipboard sẽ đọc ngay mục vừa copy. Mục dài quá 10.000 ký tự không được lưu.": "iOS limit: while the keyboard is hidden it can’t see what you copy — several copies made in that time are recorded as just the last one, when the keyboard shows again. Opening the clipboard button reads what you just copied right away. Items longer than 10,000 characters aren’t saved.",
@@ -506,7 +511,7 @@ enum L10n {
         "Dán OTP %@": "Paste OTP %@",
         "Dán SĐT %@": "Paste phone %@",
         "Dán STK %@": "Paste account %@",
-        "iOS chỉ cho bàn phím đọc clipboard khi bàn phím đang hiện, có Toàn quyền truy cập và đã chọn \"Cho phép dán\". Mục copy lúc bàn phím ẩn được ghi khi bạn mở lại bàn phím (hoặc khi chạm Dán). Lưu chỉ trên máy; mục không ghim tự xoá sau 1 giờ.": "iOS only lets the keyboard read the clipboard while it’s showing, with Full Access and \"Allow Paste\" chosen. Things copied while the keyboard is hidden are recorded when you open it again (or tap Paste). Stored on device only; unpinned items are deleted after 1 hour.",
+        "iOS chỉ cho bàn phím đọc clipboard khi bàn phím đang hiện, có Toàn quyền truy cập và đã chọn \"Cho phép dán\". Mục copy lúc bàn phím ẩn được ghi khi bạn mở lại bàn phím (hoặc khi chạm Dán). Lưu chỉ trên máy; mục không ghim tự xoá theo cài đặt Giữ lịch sử clipboard (mặc định 1 giờ).": "iOS only lets the keyboard read the clipboard while it’s showing, with Full Access and \"Allow Paste\" chosen. Things copied while the keyboard is hidden are recorded when you open it again (or tap Paste). Stored on device only; unpinned items are deleted per the Keep clipboard history setting (default 1 hour).",
         "Xoá hết": "Clear all",
         "Đóng clipboard": "Close clipboard",
         "Clipboard · ẩn danh (không lưu)": "Clipboard · incognito (not saved)",

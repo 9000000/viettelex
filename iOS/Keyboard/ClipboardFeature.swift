@@ -16,6 +16,7 @@ final class ClipboardFeature {
     /// App Group keys (app ghi, extension chỉ đọc).
     static let historyKey = "clipboardHistory"   // mặc định TẮT
     static let incognitoKey = "incognitoMode"    // mặc định TẮT
+    static let ttlKey = ClipboardTTL.key         // "1h" (mặc định) / "24h" / "7d"
 
     private(set) var historyEnabled = false
     private(set) var incognito = false
@@ -35,11 +36,13 @@ final class ClipboardFeature {
     }
 
     /// Đọc công tắc mỗi lần bàn phím hiện. Tắt lịch sử → xoá file + bỏ RAM.
-    func load(historyEnabled h: Bool, incognito i: Bool) {
+    /// `ttl` = "Giữ lịch sử clipboard" — áp ở lần prune kế tiếp (mở bảng / thêm mục).
+    func load(historyEnabled h: Bool, incognito i: Bool, ttl: ClipboardTTL = .default) {
         historyEnabled = h
         incognito = i
         if h {
-            if history == nil { history = ClipboardHistory(fileURL: fileURL) }
+            if history == nil { history = ClipboardHistory(fileURL: fileURL, ttl: ttl.seconds) }
+            history?.ttl = ttl.seconds
         } else {
             if history != nil || fileURL.map({ FileManager.default.fileExists(atPath: $0.path) }) == true {
                 ClipboardHistory.wipe(at: fileURL)
@@ -51,7 +54,8 @@ final class ClipboardFeature {
 
     func load(from defaults: UserDefaults?) {
         load(historyEnabled: defaults?.bool(forKey: Self.historyKey) ?? false,
-             incognito: defaults?.bool(forKey: Self.incognitoKey) ?? false)
+             incognito: defaults?.bool(forKey: Self.incognitoKey) ?? false,
+             ttl: ClipboardTTL.parse(defaults?.string(forKey: Self.ttlKey)))
     }
 
     /// Được GHI vào lịch sử không (bật, không ẩn danh, ô không phải mật khẩu,
@@ -71,7 +75,7 @@ final class ClipboardFeature {
     func captured(_ text: String, change: Int, now: TimeInterval, secureField: Bool, concealed: Bool) {
         guard canRecord(secureField: secureField, concealed: concealed) else { return }
         known = (change, text)
-        if let h = history, h.add(text, now: now) { h.save() }
+        if let h = history, h.add(text, now: now) { h.prune(now: now); h.save() }
     }
 
     /// Chip cho clipboard HIỆN TẠI (changeCount khớp nội dung đã biết, chưa dùng).

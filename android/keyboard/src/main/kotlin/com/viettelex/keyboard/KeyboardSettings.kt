@@ -111,6 +111,8 @@ data class KeyboardSettings(
     var debugTouchLog: Boolean = false,
     /** Lịch sử clipboard — mặc định TẮT. */
     var clipboardHistory: Boolean = false,
+    /** "Giữ lịch sử clipboard" (mục không ghim, không bí mật) — mặc định 1 giờ. */
+    var clipboardTtl: ClipboardTTL = ClipboardTTL.DEFAULT,
     /** Ẩn danh thủ công: không học từ, không lưu clipboard. */
     var incognito: Boolean = false,
     /** Giá trị Keys.USERLM_RESET_AT (0 = chưa từng xoá). */
@@ -192,6 +194,7 @@ data class KeyboardSettings(
             s.oneHandMode = (get(Keys.ONE_HAND_MODE) as? String)?.takeIf { it == "left" || it == "right" } ?: "off"
             s.floatingKeyboard = b(Keys.FLOATING_KEYBOARD, s.floatingKeyboard)
             s.clipboardHistory = b(Keys.CLIPBOARD_HISTORY, s.clipboardHistory)
+            s.clipboardTtl = ClipboardTTL.of(get(Keys.CLIPBOARD_TTL))
             s.incognito = b(Keys.INCOGNITO, s.incognito)
             s.rowHeightAdjust = ((get(Keys.ROW_HEIGHT_ADJUST) as? Number)?.toInt() ?: 0).coerceIn(ROW_HEIGHT_MIN, ROW_HEIGHT_MAX)
             s.userlmResetAt = (get(Keys.USERLM_RESET_AT) as? Number)?.toLong() ?: 0

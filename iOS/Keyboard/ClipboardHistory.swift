@@ -1,9 +1,32 @@
 // Lịch sử clipboard — model THUẦN (không UIKit, không đọc UIPasteboard).
 // Lưu CHỈ trên máy: file JSON trong container riêng của extension (không App
 // Group, không mạng). Hợp đồng chung với Android keyboard/ClipboardHistory.kt:
-// tối đa 20 mục, mục không ghim hết hạn sau 1 giờ, mục "giống bí mật" sau 2 phút,
-// ghim không hết hạn, trùng text → đưa lên đầu (giữ ghim).
+// tối đa 20 mục, mục không ghim hết hạn sau 1 giờ / 24 giờ / 7 ngày (ClipboardTTL, mặc
+// định 1 giờ), mục "giống bí mật" LUÔN sau 2 phút, ghim không hết hạn, trùng text → đưa
+// lên đầu (giữ ghim).
 import Foundation
+
+/// "Giữ lịch sử clipboard": 1 giờ (mặc định) / 24 giờ / 7 ngày. App ghi chuỗi id vào App
+/// Group key `clipboardTTL` (cùng key + id với Android `ClipboardTTL`); bàn phím đọc khi hiện.
+/// Chỉ áp cho mục không ghim, không "giống bí mật" (mục bí mật giữ 2 phút).
+enum ClipboardTTL: String, CaseIterable {
+    case hour1 = "1h", hours24 = "24h", days7 = "7d"
+
+    static let key = "clipboardTTL"
+    static let `default`: ClipboardTTL = .hour1
+    static var ids: [String] { allCases.map(\.rawValue) }
+
+    /// Giá trị lạ / thiếu → 1 giờ.
+    static func parse(_ raw: String?) -> ClipboardTTL { raw.flatMap(ClipboardTTL.init(rawValue:)) ?? .default }
+
+    var seconds: TimeInterval {
+        switch self {
+        case .hour1: return 3600
+        case .hours24: return 24 * 3600
+        case .days7: return 7 * 24 * 3600
+        }
+    }
+}
 
 struct ClipItem: Codable, Equatable {
     var text: String
@@ -14,7 +37,9 @@ struct ClipItem: Codable, Equatable {
 
 final class ClipboardHistory {
     let maxItems: Int
-    let ttl: TimeInterval
+    /// Hạn mục thường — đổi được lúc chạy (ClipboardFeature.load đọc `clipboardTTL`);
+    /// áp ở lần prune kế tiếp.
+    var ttl: TimeInterval
     let sensitiveTTL: TimeInterval
     /// Mục dài hơn bị bỏ qua. 4000 cũ làm văn bản nhiều đoạn copy xong "không được lưu"
     /// (tester Plus 15/10/2026); 20 mục × 10k ký tự vẫn nhỏ so với trần RAM extension.

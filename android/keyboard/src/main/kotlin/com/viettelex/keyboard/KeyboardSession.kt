@@ -1285,7 +1285,9 @@ class KeyboardSession(
         if (incognito || fieldSecure || cb.isSensitive()) return false
         val text = cb.readText() ?: return false
         if (onlyIfNew && h.contains(text)) return false
-        return h.add(text, clock())
+        val now = clock()
+        // Thêm mục ⇒ prune luôn (hạn "Giữ lịch sử" vừa rút ngắn áp ngay, không đợi mở bảng).
+        return h.add(text, now).also { if (it) h.prune(now) }
     }
 
     /** Chạm một mục trong bảng lịch sử: chèn nguyên văn, không học, không space. */

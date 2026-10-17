@@ -59,7 +59,7 @@ class ClipboardPane(context: Context, private val theme: ImeTheme) : FrameLayout
             val msg = when {
                 !enabled -> tr("Lịch sử clipboard đang tắt — bật trong app VietTelex › Tính Năng › Riêng tư & clipboard.")
                 incognito -> tr("Đang ẩn danh — không lưu mục mới.")
-                else -> tr("Chưa có mục nào — copy gì đó rồi mở lại. Mục không ghim tự xoá sau 1 giờ.")
+                else -> tr("Chưa có mục nào — copy gì đó rồi mở lại. Ghim để giữ lâu.")
             }
             list.addView(label(msg, 14f, alpha = 0.6f).apply {
                 setPadding(dp(16f), dp(16f), dp(16f), dp(16f)); gravity = Gravity.CENTER

@@ -281,3 +281,62 @@ final class ClipboardFeatureTests: XCTestCase {
         XCTAssertEqual(f.items(now: 121).count, 0)
     }
 }
+
+/// "Giữ lịch sử clipboard" 1 giờ / 24 giờ / 7 ngày (cùng khoá + id Android ClipboardTTLTest).
+final class ClipboardTTLTests: XCTestCase {
+    private let hour: TimeInterval = 3600
+
+    func testParse() {
+        XCTAssertEqual(ClipboardTTL.key, "clipboardTTL")
+        XCTAssertEqual(ClipboardTTL.parse("1h").seconds, 3600)
+        XCTAssertEqual(ClipboardTTL.parse("24h").seconds, 24 * 3600)
+        XCTAssertEqual(ClipboardTTL.parse("7d").seconds, 7 * 24 * 3600)
+        XCTAssertEqual(ClipboardTTL.parse(nil), .hour1)        // chưa đặt → 1 giờ
+        XCTAssertEqual(ClipboardTTL.parse("30d"), .hour1)      // lạ → 1 giờ
+        XCTAssertEqual(ClipboardTTL.parse(""), .hour1)
+        XCTAssertEqual(ClipboardTTL.ids, ["1h", "24h", "7d"])
+    }
+
+    func testPrune24hAnd1h() {
+        let h = ClipboardHistory(fileURL: nil, ttl: ClipboardTTL.hours24.seconds)
+        h.add("hai giờ trước", now: 0)
+        XCTAssertEqual(h.items(now: 2 * hour).map(\.text), ["hai giờ trước"])   // 24h: giữ
+        h.ttl = ClipboardTTL.hour1.seconds                                       // rút ngắn → prune kế tiếp xoá
+        XCTAssertEqual(h.items(now: 2 * hour).map(\.text), [])
+    }
+
+    func testPrune7dSensitivePinned() {
+        let h = ClipboardHistory(fileURL: nil, ttl: ClipboardTTL.days7.seconds)
+        h.add("tám ngày", now: 0)
+        h.add("ghim", now: 0); h.togglePin("ghim")
+        h.add("sáu ngày", now: 2 * 24 * hour)
+        h.add("Xk9#mP2qL", now: 8 * 24 * hour - 200)    // giống mật khẩu
+        // 8 ngày → xoá; bí mật quá 2 phút → xoá dù 7 ngày; ghim giữ.
+        XCTAssertEqual(h.items(now: 8 * 24 * hour).map(\.text), ["ghim", "sáu ngày"])
+    }
+
+    func testFeatureReadsSettingOnLoad() {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("clipttl-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let d = UserDefaults(suiteName: "clipttl-\(UUID().uuidString)")!
+        d.set(true, forKey: ClipboardFeature.historyKey)
+        d.set("7d", forKey: ClipboardFeature.ttlKey)
+        let f = ClipboardFeature(fileURL: url)
+        f.load(from: d)
+        XCTAssertEqual(f.history?.ttl, 7 * 24 * 3600)
+        f.captured("xin chào", change: 1, now: 0, secureField: false, concealed: false)
+        XCTAssertEqual(f.items(now: 3 * 24 * hour).map(\.text), ["xin chào"])
+        d.set("1h", forKey: ClipboardFeature.ttlKey)      // đổi trong app → lần hiện kế tiếp
+        f.load(from: d)
+        XCTAssertEqual(f.history?.ttl, 3600)
+        XCTAssertEqual(f.items(now: 3 * 24 * hour).map(\.text), [])
+    }
+
+    func testBackupSpecIncludesKey() {
+        guard case .string(let def, let allowed)? = BackupSettings.byKey[ClipboardTTL.key]?.kind else {
+            return XCTFail("clipboardTTL phải có trong BackupSettings (.string)")
+        }
+        XCTAssertEqual(def, ClipboardTTL.default.rawValue)
+        XCTAssertEqual(allowed, ClipboardTTL.ids)
+    }
+}

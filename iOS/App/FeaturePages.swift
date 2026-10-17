@@ -135,7 +135,7 @@ struct FeatureSearchEntry: Identifiable {
             .init(viTitle: LK("Nâng bàn phím"), keywords: "raise nâng cao đẩy lên khoảng trống dưới padding bottom", page: .giaoDien),
             .init(viTitle: LK("Hiện logo Vᴛ"), keywords: "logo phím cách", page: .giaoDien),
             .init(viTitle: LK("Bàn phím tách đôi"), keywords: "split tách chia hai nửa gập ngang", page: .giaoDien),
-            .init(viTitle: LK("Lịch sử clipboard"), keywords: "copy dán clipboard", page: .riengTu),
+            .init(viTitle: LK("Lịch sử clipboard"), keywords: "copy dán clipboard giữ lịch sử 24 giờ 7 ngày keep history", page: .riengTu),
             .init(viTitle: LK("Chế độ ẩn danh"), keywords: "incognito riêng tư", page: .riengTu),
             .init(viTitle: LK("Xuất / nhập file sao lưu"), keywords: "backup export import restore", page: .saoLuu),
         ]

@@ -148,6 +148,8 @@ object Keys {
     const val KEY_LABEL_TRANSPARENCY = "keyLabelTransparency"
     /** Lịch sử clipboard (mặc định TẮT — riêng tư). */
     const val CLIPBOARD_HISTORY = "clipboardHistory"
+    /** "Giữ lịch sử clipboard": "1h" (mặc định) / "24h" / "7d" — [ClipboardTTL]. */
+    const val CLIPBOARD_TTL = "clipboardTTL"
     /** Chế độ ẩn danh thủ công: không học từ, không lưu clipboard. */
     const val INCOGNITO = "incognitoMode"
     // nội bộ IME
