@@ -151,6 +151,37 @@ final class CaretSuggestionsTests: XCTestCase {
         XCTAssertEqual(feed(&t, "a b "), [nil, nil])
     }
 
+    /// Hồi quy (Phil 18/10/2026): "Ngay mai minh se den truong hop lop cap 3." không ra gợi ý —
+    /// số "3" làm bộ đếm về 0. Số giữ nguyên trong cụm, không đếm, không ngắt.
+    func testNumbersInsideUnaccentedRunDoNotBreakIt() {
+        var t = ToneRunLogic.Tracker()
+        let trig = feed(&t, "ngay mai minh se den truong hop lop cap 3.")
+        XCTAssertEqual(trig.last, .sentenceEnd)
+        XCTAssertEqual(ToneRunLogic.run(before: "Ngay mai minh se den truong hop lop cap 3."),
+                       "Ngay mai minh se den truong hop lop cap 3.")
+        XCTAssertEqual(ToneRunLogic.run(before: "hen gap luc 10:30 nhe "), "hen gap luc 10:30 nhe ")
+        XCTAssertTrue(ToneRunLogic.isNeutralNumber("3."))
+        XCTAssertTrue(ToneRunLogic.isNeutralNumber("16/10"))
+        XCTAssertFalse(ToneRunLogic.isNeutralNumber("mp3"))
+        XCTAssertFalse(ToneRunLogic.isNeutralNumber("..."))
+        XCTAssertNil(ToneRunLogic.run(before: "toi 3 "))           // chỉ 1 âm tiết + số ⇒ chưa đủ
+    }
+
+    /// Hồi quy (Phil 18/10/2026): "Thu go tieng Viet khong dau xem sao." chỉ gợi ý nửa sau —
+    /// vần không dấu của iê/uô/ươ (tieng, Viet, truong) bị coi là không hợp lệ.
+    func testUnaccentedFormsOfHattedRhymesAreSyllables() {
+        for w in ["tieng", "Viet", "truong", "khong", "nguoi", "yeu", "mua", "muon", "duoc", "hoc"] {
+            XCTAssertTrue(ToneRunLogic.isUnaccentedSyllable(Substring(w)), w)
+        }
+        XCTAssertEqual(ToneRunLogic.run(before: "Thu go tieng Viet khong dau xem sao."),
+                       "Thu go tieng Viet khong dau xem sao.")
+        XCTAssertEqual(ToneRunLogic.run(before: "Minh dang go tieng Viet khong dau."),
+                       "Minh dang go tieng Viet khong dau.")
+        var t = ToneRunLogic.Tracker()
+        XCTAssertEqual(feed(&t, "Minh dang go tieng Viet khong dau.").last, .sentenceEnd)
+        XCTAssertFalse(ToneRunLogic.isUnaccentedSyllable("the"))   // đầu cụm: vẫn coi là tiếng Anh
+    }
+
     func testToneRunFromScreen() {
         XCTAssertEqual(ToneRunLogic.run(before: "toi di hoc "), "toi di hoc ")
         XCTAssertEqual(ToneRunLogic.run(before: "Chiều nào toi di hoc hom nay "), "toi di hoc hom nay ")

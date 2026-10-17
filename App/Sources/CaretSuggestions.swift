@@ -383,7 +383,7 @@ enum ToneRunLogic {
 
     /// Chunk (không khoảng trắng) là âm tiết KHÔNG DẤU hợp lệ — bỏ dấu câu hai đầu; chữ a–z
     /// (hoa đầu được), không phải từ mở mạch tiếng Anh (the, is, you…).
-    static func isUnaccentedSyllable(_ chunk: Substring) -> Bool {
+    static func isUnaccentedSyllable(_ chunk: Substring, insideRun: Bool = false) -> Bool {
         var c = chunk
         while let f = c.first, edgePunct.contains(f) { c = c.dropFirst() }
         while let l = c.last, edgePunct.contains(l) { c = c.dropLast() }
@@ -391,12 +391,35 @@ enum ToneRunLogic {
               c.unicodeScalars.allSatisfy({ ($0.value >= 97 && $0.value <= 122) || ($0.value >= 65 && $0.value <= 90) }),
               !c.dropFirst().contains(where: \.isUppercase) || c.allSatisfy(\.isUppercase) else { return false }
         let w = c.lowercased()
-        guard !EnglishContextLookup.opensEnglishRun(w) else { return false }
-        if SyllableValidator.isValidSyllable(w, teencode: false) { return true }
-        // Vần tắc (-c -ch -p -t) chỉ mang sắc/nặng: "hoc" là dạng không dấu của học/hóc.
-        guard let i = w.firstIndex(where: { "aeiouy".contains($0) }) else { return false }
-        let acute = (String(w[...i]) + "\u{301}" + String(w[w.index(after: i)...])).precomposedStringWithCanonicalMapping
-        return SyllableValidator.isValidSyllable(acute, teencode: false)
+        // Từ mở mạch tiếng Anh (go, the, is…) chỉ chặn ở ĐẦU cụm; đã ở giữa cụm tiếng Việt
+        // không dấu ("Minh dang go tieng Viet") thì là âm tiết Việt (gõ) — Phil 18/10/2026.
+        guard insideRun || !EnglishContextLookup.opensEnglishRun(w) else { return false }
+        // Dạng không dấu của vần bắt buộc mũ/móc: ie→iê (tiếng, Việt), ye→yê (yêu), uo→uô/ươ
+        // (không, trường), ua→ưa (mưa) — Phil 18/10/2026: "tieng", "truong" bị coi là không hợp lệ
+        // nên cụm bị cắt. Mỗi dạng thử cả không dấu lẫn dấu sắc (vần tắc -c -ch -p -t).
+        var forms = [w]
+        for (from, tos) in Self.hatPairs where w.contains(from) {
+            for to in tos { forms.append(w.replacingOccurrences(of: from, with: to)) }
+        }
+        for f in forms {
+            if SyllableValidator.isValidSyllable(f, teencode: false) { return true }
+            guard let i = f.firstIndex(where: { "aeiouyâêôơư".contains($0) }) else { continue }
+            let acute = (String(f[...i]) + "\u{301}" + String(f[f.index(after: i)...])).precomposedStringWithCanonicalMapping
+            if SyllableValidator.isValidSyllable(acute, teencode: false) { return true }
+        }
+        return false
+    }
+
+    static let hatPairs: [(String, [String])] = [("ie", ["iê"]), ("ye", ["yê"]), ("uo", ["uô", "ươ"]), ("ua", ["ưa"])]
+
+    /// Số đứng giữa câu không dấu ("cap 3", "luc 10:30", "ngay 16/10") — giữ nguyên, không
+    /// đếm là âm tiết nhưng cũng KHÔNG ngắt cụm (Phil 18/10/2026: "...hop lop cap 3." không
+    /// ra gợi ý vì "3" làm đếm lại từ đầu). Dấu câu cuối (3. 3,) bỏ qua khi xét.
+    static func isNeutralNumber(_ chunk: Substring) -> Bool {
+        var c = chunk
+        while let l = c.last, ".,!?;:)".contains(l) { c = c.dropLast() }
+        guard !c.isEmpty, c.count <= 12, c.contains(where: \.isNumber) else { return false }
+        return c.allSatisfy { $0.isNumber || ".,:/-".contains($0) }
     }
 
     /// Đếm âm tiết không dấu liên tiếp theo dòng phím (chỉ ở ranh giới — không đọc màn hình).
@@ -411,12 +434,13 @@ enum ToneRunLogic {
             if b.isWhitespace {
                 if chunk.isEmpty { return nil }                                  // hai dấu cách
                 if let l = chunk.last, ".!?".contains(l) { count = 0; return nil }  // câu đã kết (đã xét ở dấu câu)
-                count = isUnaccentedSyllable(Substring(chunk)) ? min(count + 1, maxSyllables) : 0
+                if isNeutralNumber(Substring(chunk)) { return count >= minSyllables ? .pause : nil }
+                count = isUnaccentedSyllable(Substring(chunk), insideRun: count > 0) ? min(count + 1, maxSyllables) : 0
                 return count >= minSyllables ? .pause : nil
             }
             if ".!?".contains(b) {
-                let ok = !chunk.isEmpty && isUnaccentedSyllable(Substring(chunk))
-                let n = ok ? count + 1 : 0
+                let ok = !chunk.isEmpty && isUnaccentedSyllable(Substring(chunk), insideRun: count > 0)
+                let n = ok ? count + 1 : (!chunk.isEmpty && isNeutralNumber(Substring(chunk)) ? count : 0)
                 count = 0
                 return n >= minSyllables ? .sentenceEnd : nil
             }
@@ -443,7 +467,10 @@ enum ToneRunLogic {
             var u = String.UnicodeScalarView(); u.append(contentsOf: s[cs..<ws])
             let chunk = String(u)
             if n > 0, let l = chunk.last, ".!?".contains(l) { break }   // hết câu trước
-            guard isUnaccentedSyllable(Substring(chunk)) else { break }
+            if isNeutralNumber(Substring(chunk)) {                      // số giữ nguyên, không đếm
+                start = cs; end = cs; continue
+            }
+            guard isUnaccentedSyllable(Substring(chunk), insideRun: n > 0) else { break }
             n += 1
             start = cs
             end = cs
