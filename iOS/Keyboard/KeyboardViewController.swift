@@ -273,6 +273,7 @@ final class KeyboardViewController: UIInputViewController {
         appliedFullAccess = hasFullAccess
         keyboard.setClipboardButton(visible: clip.historyEnabled && appliedFullAccess)
         filterSensitive = settings.filterSensitive
+        SwipeVocab.filterSensitive = settings.filterSensitive   // gõ vuốt theo cùng công tắc
         showSuggestionsSetting = settings.showSuggestions
         autoCapitalizeSetting = settings.autoCapitalize
         autoSpaceSetting = settings.autoSpaceAfterPunct

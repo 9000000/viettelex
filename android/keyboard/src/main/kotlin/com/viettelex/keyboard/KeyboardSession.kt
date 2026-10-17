@@ -422,6 +422,7 @@ class KeyboardSession(
         learnEnabled = StripMode.learns(settings.learnWords, field, incognito)
         initialCapsPending = true
         filterSensitive = settings.filterSensitive
+        SwipeVocab.filterSensitive = settings.filterSensitive   // gõ vuốt theo cùng công tắc
         swipeEnglish = settings.swipeEnglish
         autoCapitalize = settings.autoCapitalize
         recentEnglish.clear(); langRecent.clear()
