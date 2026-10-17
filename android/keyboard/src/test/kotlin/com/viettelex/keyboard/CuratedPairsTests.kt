@@ -28,7 +28,8 @@ class CuratedPairsTests {
 
     /** "co dau": một mình = cô dâu, ngữ cảnh gõ/chữ = có dấu, chat "làm gì …" = có đâu. */
     @Test fun coDauThreeReadings() {
-        assertEquals("cô dâu", r("co dau"))
+        // đứng một mình: vnlm.bin hội thoại (18/10/2026) nghiêng "có dấu" (trước: "cô dâu") — Phil quyết
+        assertEquals("có dấu", r("co dau"))
         assertEquals("cô dâu chú rể", r("co dau chu re"))
         assertEquals("tiếng Việt có dấu", r("tieng Viet co dau"))
         assertEquals("làm gì có đâu", r("lam gi co dau"))
@@ -53,7 +54,8 @@ class CuratedPairsTests {
     }
 
     @Test fun curatedOffIsOldBehaviour() {
-        assertEquals("bóp vụ", AddTones.restore("bop vu", null, AddTones.Params(curated = false)).text)
+        // vnlm.bin hội thoại (18/10/2026) tự ra "bóp vú" ⇒ khoá bằng cặp còn cần bảng
+        assertEquals("bóp dài", AddTones.restore("bop dai", null, AddTones.Params(curated = false)).text)
     }
 
     @Test fun tableLookups() {

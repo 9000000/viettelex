@@ -108,3 +108,9 @@ bóc phốt
 #    vuốt (sửa chung cặp với từ vuốt kế): ở Thêm dấu "vai lon" thường là "vài lon (bia)".
 ~ vãi lồn
 ~ ngu vl
+
+# 7. Sau khi dựng lại vnlm.bin với hội thoại (18/10/2026): văn nói làm "dù như thế" lấn "ví dụ như"
+#    khi vuốt ("ví dụ như thế này" → "vì dù như thế này"); "cố gắng" bị "có gắng" (lỗi gõ trong
+#    chat) kéo lệch.
+ví dụ
+cố gắng

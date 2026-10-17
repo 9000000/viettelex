@@ -6,9 +6,9 @@ nguồn và giấy phép riêng, ghi dưới đây.
 ## vnlm.bin — mô hình n-gram âm tiết (gõ vuốt, thanh gợi ý, Thêm dấu)
 
 `iOS/Keyboard/Resources/vnlm.bin` = `android/app/src/main/assets/vnlm.bin` (định dạng v3 từ
-28/09/2026: 1.427.048 byte ≈ 1,36 MiB — trước là 2.652.944 byte; 332.411 bigram, 92.272 ngữ
-cảnh trigram, 260.134 trigram, + 7.184 byte `uniAdj`); app macOS đóng gói cùng file cho Thêm
-dấu. Sinh bởi `Scripts/gen-syllable-lm.py` (lệnh + định dạng ở docstring; mục "Nén v3" dưới).
+28/09/2026; từ 18/10/2026 thêm nguồn hội thoại: 1.991.768 byte ≈ 1,90 MiB — ngân sách 2 MB; trước
+là 1.427.048 byte; 463.463 bigram, 120.073 ngữ cảnh trigram, 398.822 trigram, + 7.184 byte
+`uniAdj`); app macOS / Linux / Windows đóng gói cùng file cho Thêm dấu. Sinh bởi `Scripts/gen-syllable-lm.py` (lệnh + định dạng ở docstring; mục "Nén v3" dưới).
 Chỉ chứa **số liệu thống kê** (điểm log-xác suất lượng tử theo cặp/bộ ba âm tiết), không chứa
 câu hay đoạn văn nào của nguồn.
 
@@ -18,22 +18,33 @@ Android và process con `VietTelex --add-tones` trên macOS).
 
 ### Nguồn
 
+Trọng số = hệ số nhân số đếm; từ 18/10/2026 hai nguồn hội thoại chiếm đúng 25 % / 15 % TỔNG khối
+lượng có trọng số, các nguồn cũ chia 60 % còn lại theo tỉ lệ cũ (×0,6) — tổng khối lượng giữ như
+trước nên ngưỡng cắt tỉa giữ nghĩa (mục "Nguồn hội thoại" dưới).
+
 | Nguồn | Bản dùng | Giấy phép | Trọng số | Âm tiết đếm |
 |---|---|---|---|---|
-| [Wikipedia tiếng Việt](https://vi.wikipedia.org) | CirrusSearch dump `viwiki-20251229-cirrussearch-content.json.gz`, 600 MB nén đầu | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | ×1 | 57,5 tr |
-| [Wikisource tiếng Việt](https://vi.wikisource.org) | `viwikisource-20251229-cirrussearch-content` | CC BY-SA 4.0 (nhiều tác phẩm là phạm vi công cộng) | ×1 | 33,0 tr |
-| [Wikibooks](https://vi.wikibooks.org), [Wikivoyage](https://vi.wikivoyage.org), [Wikiquote](https://vi.wikiquote.org) tiếng Việt | `…-20251229-cirrussearch-content` | CC BY-SA 4.0 | ×1 / ×1 / ×2 | 2,6 / 1,3 / 0,6 tr |
-| [Tatoeba](https://tatoeba.org) (câu tiếng Việt) | `downloads.tatoeba.org/exports/per_language/vie/vie_sentences.tsv.bz2` (09/2026) | [CC BY 2.0 FR](https://creativecommons.org/licenses/by/2.0/fr/) | ×30 | 0,25 tr |
+| [Wikipedia tiếng Việt](https://vi.wikipedia.org) | CirrusSearch dump `viwiki-20251229-cirrussearch-content.json.gz`, 600 MB nén đầu | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | ×0,6 (trước ×1) | 57,5 tr |
+| [Wikisource tiếng Việt](https://vi.wikisource.org) | `viwikisource-20251229-cirrussearch-content` | CC BY-SA 4.0 (nhiều tác phẩm là phạm vi công cộng) | ×0,6 | 33,0 tr |
+| [Wikibooks](https://vi.wikibooks.org), [Wikivoyage](https://vi.wikivoyage.org), [Wikiquote](https://vi.wikiquote.org) tiếng Việt | `…-20251229-cirrussearch-content` | CC BY-SA 4.0 | ×0,6 / ×0,6 / ×1,2 | 2,6 / 1,3 / 0,6 tr |
+| [Tatoeba](https://tatoeba.org) (câu tiếng Việt) | `downloads.tatoeba.org/exports/per_language/vie/vie_sentences.tsv.bz2` (bản xuất 17/10/2026; trước 09/2026) | [CC BY 2.0 FR](https://creativecommons.org/licenses/by/2.0/fr/) | ×18 (trước ×30) | 0,25 tr |
+| [OpenSubtitles](http://www.opensubtitles.org/) qua [OPUS OpenSubtitles v2024](https://opus.nlpl.eu/OpenSubtitles/corpus/version/OpenSubtitles) — đơn ngữ tiếng Việt `https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2024/mono/vi.txt.gz` (919 MB nén) | lọc + khử trùng: giữ 35,7 tr / 79,2 tr câu | OPUS không ghi giấy phép cho bộ này; điều kiện của OPUS: ghi liên kết http://www.opensubtitles.org/ và trích Lison & Tiedemann 2016 (LREC). **Phil chấp nhận 18/10/2026** | 25 % khối lượng (×0,0857) | 300,8 tr |
+| [FineWeb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2) `vie_Latn` (commit `af9c1333`) — lát cắt trang diễn đàn/hỏi đáp/bình luận (crawl ≥ 2018), đọc thẳng parquet qua HTTP Range, 1.691 row group / 3,65 GB tải luồng, 19.319 tên miền (≤ 3 % mỗi miền) | 2,0 tr câu giữ lại | [ODC-By 1.0](https://opendatacommons.org/licenses/by/1-0/), kèm [Common Crawl Terms of Use](https://commoncrawl.org/terms-of-use). **Phil chấp nhận 18/10/2026** | 15 % khối lượng (×0,387) | 40,0 tr |
+| [ViSoLex](https://github.com/HaDung2002/visolex) `dict/dictionary.json` (commit `53c62c72`) | chỉ để CHUẨN HOÁ teencode trước khi đếm (k/ko/khum → không, đc → được…) — không đóng gói | MIT (© 2024 HaDung2002) | — | — |
+| [ViLexNorm](https://github.com/ngxtnhi/ViLexNorm) cột `normalized` (dev + test) | chỉ làm TẬP DEV nội bộ (không đếm, không đóng gói, không commit) | CC BY-NC-SA 4.0, chỉ dùng nghiên cứu | — | — |
 
 Dump Wikimedia lấy tại https://dumps.wikimedia.org/other/cirrussearch/20251229/ (trường
-`text` đã là văn bản thuần). Tatoeba nhỏ nhưng là câu hội thoại, gần văn phong bàn phím
+`text` đã là văn bản thuần; dump mới từ 09/2026 ở https://dumps.wikimedia.org/other/cirrus_search_index/
+— bản 20251229 vẫn còn ở chỗ cũ ngày 18/10/2026). Tatoeba nhỏ nhưng là câu hội thoại, gần văn phong bàn phím
 nhất ⇒ trọng số cao (chọn trên tập dev, xem dưới).
 
 ### Giấy phép của vnlm.bin
 
 Số đếm n-gram là dữ liệu thống kê, nhưng để an toàn ta **coi vnlm.bin là tác phẩm phái
 sinh** của các nguồn trên và phát hành nó theo **CC BY-SA 4.0** (Tatoeba CC BY 2.0 FR cho
-phép gộp vào tác phẩm CC BY-SA khi ghi công). Hệ quả:
+phép gộp vào tác phẩm CC BY-SA khi ghi công; FineWeb-2 ODC-By chỉ đòi ghi công). Phần
+OpenSubtitles không có giấy phép rõ ràng — Phil đã chấp nhận rủi ro này 18/10/2026; ta tôn trọng
+yêu cầu của OPUS (liên kết opensubtitles.org + trích dẫn). Hệ quả:
 
 - Dùng thương mại được (cả CC BY-SA lẫn CC BY đều cho phép).
 - ShareAlike chỉ áp lên **file dữ liệu** (và bản sửa của nó), không lên mã nguồn app đọc
@@ -45,19 +56,28 @@ phép gộp vào tác phẩm CC BY-SA khi ghi công). Hệ quả:
 
 > vnlm.bin chứa số liệu thống kê n-gram âm tiết suy ra từ nội dung Wikipedia,
 > Wikisource, Wikibooks, Wikivoyage và Wikiquote tiếng Việt (© các tác giả Wikimedia,
-> CC BY-SA 4.0) và từ câu tiếng Việt của Tatoeba (© các thành viên Tatoeba, CC BY 2.0 FR).
-> Đã biến đổi: tách âm tiết, đếm n-gram, làm trơn Kneser-Ney, cắt tỉa, lượng tử hoá,
-> nén. vnlm.bin phát hành theo CC BY-SA 4.0.
+> CC BY-SA 4.0), từ câu tiếng Việt của Tatoeba (© các thành viên Tatoeba, CC BY 2.0 FR), từ
+> phụ đề tiếng Việt của OpenSubtitles (http://www.opensubtitles.org/, qua OPUS: P. Lison và
+> J. Tiedemann, 2016, "OpenSubtitles2016: Extracting Large Parallel Corpora from Movie and TV
+> Subtitles", LREC 2016) và từ một phần FineWeb-2 (© Hugging Face, ODC-By 1.0; nội dung theo
+> Điều khoản Common Crawl). Teencode chuẩn hoá bằng từ điển ViSoLex (MIT). Đã biến đổi: lọc
+> câu, chuẩn hoá, tách âm tiết, đếm n-gram, làm trơn Kneser-Ney, cắt tỉa, lượng tử hoá, nén.
+> vnlm.bin phát hành theo CC BY-SA 4.0.
 
 ### Nguồn KHÔNG dùng (và lý do)
 
-- **OpenSubtitles thô / OPUS OpenSubtitles**: phụ đề thuộc bản quyền phim + người dịch;
-  điều khoản của opensubtitles.org/OPUS không cấp rõ quyền phân phối số liệu phái sinh
-  cho app thương mại.
 - **Báo điện tử (VnExpress, Tuổi Trẻ…), corpus VLSP / corpus tin tức cào web**: bản
-  quyền thuộc toà soạn; phần lớn chỉ cho phép dùng nghiên cứu.
-- **Common Crawl / OSCAR / CC-100**: bản quyền từng trang không xác định (bộ dữ liệu chỉ
-  cấp phép phần đóng gói), không đủ rõ cho repo công khai + app thương mại.
+  quyền thuộc toà soạn; phần lớn chỉ cho phép dùng nghiên cứu. (FineWeb-2 lọc bỏ tên miền báo.)
+- **OSCAR / CC-100**: như Common Crawl dưới, chưa được duyệt riêng.
+- **Văn bản LLM sinh, cào web trực tiếp**: không dùng (giai đoạn 1).
+
+Đã từng nằm ở đây, **Phil chấp nhận 18/10/2026** (chuyển lên bảng nguồn):
+
+- ~~OpenSubtitles thô / OPUS OpenSubtitles~~ (lý do cũ: phụ đề thuộc bản quyền phim + người
+  dịch; điều khoản opensubtitles.org/OPUS không cấp rõ quyền phân phối số liệu phái sinh cho app
+  thương mại) — dùng bản OPUS v2024 đơn ngữ, chỉ số liệu thống kê đi vào app.
+- ~~Common Crawl~~ (lý do cũ: bản quyền từng trang không xác định) — dùng qua FineWeb-2 (ODC-By),
+  chỉ lát cắt diễn đàn/hỏi đáp, chỉ số liệu thống kê đi vào app.
 
 ### Tái tạo
 
@@ -70,6 +90,151 @@ tạo đúng, `count` của script mới = script cũ trên Tatoeba).
   tiết có trong vnlexicon; chuỗi đứt ở dấu câu/số/từ lạ.
 - Câu có `blake2b(câu) % 20 == 0` là **tập kiểm thử**, `== 1` là **tập dev** — cả hai bị
   loại khỏi phép đếm. Trọng số nguồn/hệ số chấm điểm chỉnh trên tập dev.
+
+### Nguồn hội thoại (18/10/2026, giai đoạn 1)
+
+Mục tiêu: thêm văn nói/chat hiện đại (OpenSubtitles + lát diễn đàn FineWeb-2) trong ngân sách 2 MB,
+cùng định dạng v3 (lượng tử 6/4/4) ⇒ reader 5 nền tảng không đổi. **vnlexicon.bin không đổi**.
+
+**Tái tạo nền.** Dump 20251229 còn nguyên ⇒ chạy lại `count` + `build`: 332.432 bigram / 92.285 ngữ
+cảnh / 260.186 trigram, 1.427.216 byte — KHÔNG trùng từng byte với bản cũ (1.427.048) chỉ vì bản xuất
+Tatoeba đã khác (17/10/2026 thay 09/2026; Tatoeba chỉ giữ bản xuất mới nhất). Số đo trên tập dev
+y hệt bản cũ (±0,01). Đường đếm mới (`ids` → `count-np`, numpy) cho file **trùng từng byte** với
+`count` cũ trên cùng nguồn — đã kiểm.
+
+**Làm sạch** (`Scripts/lm-chat-prep.py`, chạy trong container; mỗi câu): NFC → (phụ đề: tách rác
+"\N" dính chữ: "Nvà", "biếtN") → URL/email/@mention/#hashtag thành chỗ đứt chuỗi → tách câu ở
+. ! ? …, xuống dòng, " - " → chữ thường → câu kiểm thử/dev (blake2b % 20 ∈ {0, 1}, như Tatoeba) giữ
+lại, không đếm → kéo dài ("điiii" → "đi") → teencode ViSoLex → kiểu dấu cũ → id vnlexicon. Bỏ câu:
+< 2 âm tiết Việt; có từ chỉ hợp lệ khi không dấu (khong, duoc); ≥ 5 âm tiết mà < 30 % có dấu (hoặc
+≥ 3 âm tiết mà không âm tiết nào có dấu); > 50 % từ không phải âm tiết Việt; số điện thoại / ≥ 2 từ
+khoá quảng cáo; một âm tiết lặp ≥ 4 lần liền hay quá ít âm tiết khác nhau; **từ tục/tình dục**
+(dưới). Trùng lặp theo câu ĐÃ chuẩn hoá: câu ≥ 5 âm tiết đếm một lần (lọc Bloom 2^32 bit), câu ngắn
+tối đa 8 lần mỗi nguồn ("cảm ơn", "được rồi" vẫn giữ tần suất tương đối).
+
+- Teencode ViSoLex (3.091 khoá → giữ 1.382 + 16 khoá chọn tay như khum/thui/nhìu/lun/bít/iu): chỉ
+  khoá KHÔNG phải âm tiết vnlexicon, một đáp án duy nhất, đáp án toàn âm tiết vnlexicon, không phải
+  chỉ là dạng không dấu (khong → không là gõ không dấu — bộ lọc câu lo), khoá giống đáp án (loại
+  nhiễu nsfw → nữa); 280 khoá mơ hồ (t, r, v, mk…) KHÔNG thay (chỉ đứt chuỗi).
+- OpenSubtitles: 79,2 tr câu → giữ 35,7 tr (300,8 tr âm tiết); bỏ 12,3 tr trùng dài + 15,2 tr trùng
+  ngắn quá trần, 8,3 tr câu < 2 âm tiết, 288 nghìn câu tục, 247 nghìn câu không dấu, 182 nghìn câu
+  tiếng Anh.
+- FineWeb-2: trang crawl ≥ 2018, bỏ tên miền báo/truyện/cá cược/18+; chọn theo URL diễn đàn (forum,
+  threads, hỏi đáp, bình luận, voz/tinhte/webtretho/lamchame/otofun…) hoặc mật độ từ hội thoại ≥ 7 %
+  trên trang .vn / slug tiếng Việt. 1,69 tr trang đọc → 65 nghìn trang chọn → 2,0 tr câu (40,0 tr âm
+  tiết; 47,6 nghìn câu tục bỏ). Nhiều nhất: webtretho, spiderum, lamchame, blogradio, tinhte, voz…
+- **Lỗi gõ sai dấu** (`lm-chat-prep.py detypo`): cặp (a, b) mà một cặp cùng dạng không dấu phổ biến
+  hơn ≥ 300 lần trong chính nguồn hội thoại (cặp đó ≥ 500 lần) ⇒ đứt chuỗi giữa a và b (344.610 cặp;
+  1,2 tr + 0,26 tr chỗ: cô thế, có thẻ, cô ây, tai sao, có gắng…). Không có bước này "có gắng" lên
+  −1,4 nat (Wikipedia: −6,1) và sửa từ vuốt theo từ gõ không lật "có gắng" về "cố gắng"
+  (SwipeTypingTests); số đo tập dev không đổi (±0,1).
+
+**Từ tục / tình dục (chính sách).** Với nguồn hội thoại, câu chứa một từ của SensitiveWords.swift
+(đcm, đm, vl, lồn, cặc, buồi, đĩ, điếm, đụ, địt, dâm, cứt, fuck…) + chịch, xoạc, nứng, đéo, loz, cmn,
+đmm, sex, porn…, hoặc "làm tình", hoặc teencode mà đáp án ViSoLex chứa từ tục (clgt, cmnr…) bị **bỏ
+cả câu** ⇒ n-gram chứa chúng chỉ còn từ Wikipedia/Tatoeba như trước (không tăng). Từ cơ thể thường
+(vú, dái, cu) không lọc (Phil cần "bóp vú/bóp dái" khi tắt bộ lọc).
+
+**Trộn + cắt tỉa** (`count-np --share`): tổng khối lượng có trọng số giữ bằng của nguồn cũ ⇒ ngưỡng
+cắt tỉa giữ nghĩa. Chọn trên tập DEV (suggest-dev.txt Tatoeba; dev hội thoại: ViLexNorm chuẩn hoá —
+riêng tư, OpenSubtitles/FineWeb `% 20 == 1`; dev Wikimedia `% 20 == 1` để canh văn viết), đo một lần
+trên tập kiểm thử. Ngưỡng cũ 10/20, chỉ OpenSubtitles (cột: dev Tatoeba Thêm dấu âm tiết / từ kế
+top-1 / vuốt top-1; ViLexNorm và Wikimedia: Thêm dấu âm tiết):
+
+| phần hội thoại | cỡ | dev Thêm dấu | dev kế top1 | dev vuốt | ViLexNorm | Wikimedia |
+|---|---|---|---|---|---|---|
+| 0 % (nền) | 1,43 MB | 95,71 | 21,84 | 88,78 | 83,51 | 93,32 |
+| 5 % | 1,33 MB | 95,76 | 22,08 | — | 82,78 | — |
+| 10 % | 1,31 MB | 95,95 | 22,26 | 89,22 | 83,52 | 92,86 |
+| 20 % | 1,29 MB | 96,28 | 22,95 | — | 84,47 | — |
+| 30 % | 1,26 MB | 96,42 | 22,96 | 89,48 | 84,86 | 92,72 |
+| 50 % | 1,22 MB | 96,47 | 23,33 | 89,44 | 85,40 | 92,51 |
+
+Hội thoại giúp cả dev Tatoeba (câu dịch, văn nói) mà kéo văn viết xuống ⇒ hạ ngưỡng cắt tỉa (5/10)
+để dùng ngân sách 2 MB, rồi trộn OpenSubtitles + FineWeb (ngưỡng 5/10):
+
+| opus / FineWeb | cỡ (byte) | dev Thêm dấu | dev kế top1/top3 | dev vuốt | ViLexNorm | FineWeb dev | Wikimedia Thêm dấu / vuốt |
+|---|---|---|---|---|---|---|---|
+| 30 % / 0 | 1.984.296 | 96,50 | 24,04 / 39,89 | 90,05 | 85,47 | 92,14 | 93,40 / 85,98 |
+| 5 % / 5 % | 2.037.272 | 96,13 | 23,05 / 38,62 | 89,61 | 84,10 | 92,38 | 93,38 / 86,65 |
+| 10 % / 10 % | 2.027.952 | 96,49 | 23,41 / 39,30 | 89,90 | 84,95 | 93,16 | 93,35 / 86,46 |
+| 20 % / 10 % | 1.997.544 | 96,62 | 24,12 / 40,08 | 89,99 | 85,58 | 93,42 | 93,48 / 86,18 |
+| 15 % / 15 % | 2.018.920 | 96,70 | 23,78 / 39,77 | 90,10 | 85,68 | 93,62 | 93,37 / 86,16 |
+| 25 % / 15 % | 1.984.824 | 96,78 | 24,22 / 39,93 | 90,18 | 86,11 | 93,72 | 93,32 / 85,75 |
+| 30 % / 20 % | 1.967.376 | 96,81 | 24,30 / 40,15 | 90,24 | 86,52 | 94,03 | 93,21 / 85,43 |
+| **25 % / 15 % + detypo (chọn)** | **1.991.768** | 96,76 | 24,09 / 40,16 | 90,18 | 86,16 | 93,70 | 93,36 / 85,77 |
+
+Chọn 25 % / 15 % (40 % hội thoại): văn viết (Wikimedia) giữ ngang nền; 50 % thêm ~+0,4 điểm hội
+thoại nhưng Wikimedia −0,1 (vuốt −0,4). Ngưỡng 5/9 (2,08 MB) vượt ngân sách. suggest-dev không tụt ở
+cấu hình nào (+0,4…+2,4 điểm).
+
+**Kết quả** (tập kiểm thử, JVM; iOS cùng số Thêm dấu 0,9727 / câu 0,853; "trước" = main 18/10/2026
+đã có CuratedPairs):
+
+| | trước | sau |
+|---|---|---|
+| Thêm dấu heldout — âm tiết / câu đúng hết | 96,45 / 81,1 % | **97,27 / 85,3 %** |
+| Thêm dấu + seed UserLangModel | (không đo lại) | 97,25 % |
+| Từ kế tiếp top-1 / top-3 (người dùng mới) | 22,27 / 37,19 % | **24,04 / 40,35 %** |
+| Đang gõ slot1 / 3 slot | 85,44 / 94,74 % | **87,11 / 95,69 %** |
+| Phím tiết kiệm | 57,15 % | **58,84 %** |
+| Học dần: kế tiếp top-1 / top-3 · slot1 · phím | 23,3 / 38,1 · 88,2 · 57,9 % (28/09) | 24,73 / 41,01 · 89,11 · 59,25 % |
+| Gõ vuốt heldout top-1 / top-3 | 89,2 / 96,1 % | **90,6 / 96,9 %** |
+| — bật vuốt tiếng Anh | 89,1 / 96,0 % | 90,6 / 96,8 % |
+| Câu trộn Việt–Anh top-1 / top-3 (n = 270) | 230 / 267 | 218 / 269 |
+| Vuốt xen gõ + sửa theo từ gõ | 94,47 % (sửa sai 12) | 94,92 % (sửa sai 9) |
+| Vuốt tuần tự + sửa chung cặp | 91,13 % | 92,74 % |
+| TypoFix (macOS) P / R | 97,2 / 23,6 % | 97,2 / 23,6 % (không dùng vnlm) |
+| Kiểm thử OpenSubtitles: Thêm dấu / kế top-1 / vuốt top-1 | 91,98 / 15,25 / 84,47 | **94,63 / 18,55 / 87,46** |
+| Kiểm thử FineWeb: Thêm dấu / kế top-1 / vuốt top-1 | 90,81 / 16,72 / 82,17 | **93,32 / 20,11 / 85,16** |
+| Dev ViLexNorm (bình luận MXH): Thêm dấu câu đúng hết | 37,1 % | 44,6 % |
+| chat-cases.txt (52 câu; 6 câu Phil) | 43 / 52 | 44 / 52 (6 / 6) |
+| **An toàn** — Thêm dấu ra từ tục khi đáp án lành (safety-cases + heldout + dev + 4 tập hội thoại) | 10 | **3** |
+| — gõ vuốt ra từ tục | 0 | 0 |
+
+Câu trộn Việt–Anh: thêm lỗi "em gửi → em gì" (5/10 đường) và "tôi nay → tôi này" (câu mẫu gõ nhầm
+"tôi nay" thay "tối nay"), bớt "cho sếp → sắp/áp" (3). Độ trễ JVM như cũ (nhiễu máy lớn hơn khác
+biệt); iOS simulator Debug Thêm dấu 30 âm tiết: 3,7–22 ms trước / 8,4–12 ms sau qua nhiều lần chạy
+(nhiễu lớn; ngưỡng test 10 ms sát). RAM: mmap trang sạch như cũ; app +0,56 MB.
+
+Còn cần Phil quyết (bảng chọn tay KHÔNG sửa trong giai đoạn này):
+- Vuốt "ví dụ như thế này" đường sạch ra "vì dù như thế này" — "dù như thế (nào)" là văn nói thật
+  (+6,2 nat); `SwipeReviseTests.phraseViDuNhuTheNay` đỏ. Thêm `ví dụ` vào Scripts/curated-pairs.txt
+  sửa được (đã thử, rồi bỏ). Cấu hình ≤ 10 % hội thoại thì không đỏ nhưng mất phần lớn mức tăng.
+- "co dau" đứng một mình nay ra "có dấu" (trước "cô dâu"); "co dau chu re" vẫn "cô dâu chú rể".
+- 22 cặp chọn tay nay vnlm.bin tự giải khi tắt bảng (`LMDataEvalTests.curatedRedundancy`): bóc phốt,
+  bóp vú, bản có dấu, chuyển khoản, chốt đơn, chờ xíu, cà khịa, cái nịt, còn hàng, căng đét, gõ tắt,
+  khét lẹt, lỗi nha, mã giảm, nhà mình, quá trời, sống ảo, tan làm, thả thính, tăng ca, được chưa,
+  ổn mà (+4 cặp vốn tự đúng: chữ/gõ/viết/việt có dấu). Chưa bỏ.
+
+**Tập đánh giá mới.** `iOS/KeyboardTests/Fixtures/chat-cases.txt` (câu Phil + câu chat tự soạn),
+`safety-cases.txt` (câu lành có dạng không dấu trùng từ tục: lon, cac, buoi, di, diem, du, dam, cut,
+deo, chich, nung, dit), `LMDataEvalTests` (Kotlin: khoá câu Phil + an toàn; `VT_LM_EVAL=1 VT_LM=…
+VT_CHAT_SETS=tên=đường-dẫn;…` in mọi số đo cho một vnlm.bin ứng viên). Tập dev/kiểm thử hội thoại
+(câu OpenSubtitles/FineWeb giữ lại, ViLexNorm) **không commit** (bản quyền / giấy phép chỉ nghiên
+cứu): `lm-chat-prep.py` ghi `*.test.txt` / `*.dev.txt` cạnh luồng id, giữ ngoài repo.
+
+**Tái tạo** (dữ liệu thô ~1,7 GB tạm: dump Wikimedia 0,73 GB + OpenSubtitles 0,92 GB; FineWeb đọc
+luồng ~3,7 GB qua mạng, không ghi đĩa; luồng id + cache numpy ~2,5 GB; container
+`python:3.12-slim` + `pip install numpy pyarrow`, dùng một lần):
+
+    W=/tmp/lm   # vi.txt.gz (OPUS), dictionary.json (ViSoLex), các dump Wikimedia + Tatoeba ở đây
+    python3 Scripts/gen-syllable-lm.py ids --lexicon iOS/Keyboard/Resources/vnlexicon.bin --out-dir $W/ids \
+        $W/viwiki-part.json.gz $W/viwiki{books,quote,source,voyage}.json.gz $W/vie_sentences.tsv.bz2
+    D="docker run --rm -v $PWD:/repo:ro -v $W:/w IMAGE python -I"
+    $D /repo/Scripts/lm-chat-prep.py opus /w/vi.txt.gz --out /w/ids/opus --visolex /w/dictionary.json
+    $D /repo/Scripts/lm-chat-prep.py fineweb URL… --out /w/ids/fineweb --visolex /w/dictionary.json \
+        --workers 5 --max-rg-per-shard 110 --rg-step 9 --max-syllables 40e6
+        # URL… = …/fineweb-2/resolve/main/data/vie_Latn/train/{004,003,002,001}_0000{0..5}.parquet,
+        #         xen kẽ theo i rồi nhóm (004_00000, 003_00000, 002_00000, 001_00000, 004_00001, …)
+    $D /repo/Scripts/lm-chat-prep.py detypo /w/ids/opus.ids /w/ids/fineweb.ids --ratio-inv 300 --min-max 500
+    $D /repo/Scripts/gen-syllable-lm.py count-np --lexicon /repo/iOS/Keyboard/Resources/vnlexicon.bin \
+        --cache /w/lm.pkl /w/ids/viwiki.ids /w/ids/viwikibooks.ids /w/ids/viwikiquote.ids \
+        /w/ids/viwikisource.ids /w/ids/viwikivoyage.ids /w/ids/tatoeba.ids \
+        /w/ids/opus.dt.ids /w/ids/fineweb.dt.ids --share opus=0.25 --share fineweb=0.15
+    python3 Scripts/gen-syllable-lm.py build --lexicon iOS/Keyboard/Resources/vnlexicon.bin \
+        --cache $W/lm.pkl --th2 5 --th3 10 --out iOS/Keyboard/Resources/vnlm.bin \
+        --parity iOS/KeyboardTests/Fixtures/vnlm-parity.txt --chains iOS/KeyboardTests/Fixtures/bigram-heldout.txt
 
 ### vnbigram.bin (đã bỏ 28/09/2026)
 
@@ -112,6 +277,8 @@ sạch).
 Fixture `add-tones.txt`: "tự do", "biển Nha Trang" đúng ra; "năm sáu" (đếm số) → "năm sau".
 Câu Phil 18/10/2026 "…gõ tiếng Việt không dấu" vẫn ra "không đâu": vnlm.bin không có mục
 (không, dấu) nào — bigram lẫn trigram — nên đây là thiếu dữ liệu, không phải thiếu ngữ cảnh.
+(Cùng ngày: cặp chọn tay CuratedPairs sửa; rồi nguồn hội thoại — mục "Nguồn hội thoại" — đưa
+(không, dấu) vào mô hình.)
 
 **18/10/2026 — cặp chọn tay (`Scripts/curated-pairs.txt` → `CuratedPairs` Swift/Kotlin/C++,
 `Scripts/gen-curated-pairs.py [--check]`).** ~70 cặp/bộ ba chỉ để PHÂN ĐỊNH DẤU ở chỗ vnlm.bin

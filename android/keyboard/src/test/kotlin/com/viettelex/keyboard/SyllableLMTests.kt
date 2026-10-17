@@ -32,7 +32,7 @@ class SyllableLMTests {
         assertTrue("bigram ${m.biEntries}", m.biEntries in 100_000..600_000)
         assertTrue("trigram ${m.triEntries}", m.triEntries in 100_000..600_000)
         val size = KeyboardData.buffer(Keys.ASSET_LM).capacity()
-        assertTrue("kích thước $size", size <= 1_500_000)       // v3 (28/09/2026): 1.427.048 byte
+        assertTrue("kích thước $size", size <= 2_000_000)       // v3 28/09/2026: 1.427.048 byte; +hội thoại 18/10/2026: 1.991.768 (ngân sách 2 MB)
     }
 
     private fun pmi(a: String, b: String) = lm.bigram(id(a)).pmi(id(b))

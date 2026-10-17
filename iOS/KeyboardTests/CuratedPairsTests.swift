@@ -23,7 +23,8 @@ final class CuratedPairsTests: XCTestCase {
     /// Ba cách đọc của "co dau": đứng một mình = cô dâu (vnlm.bin: PMI cô→dâu +4,5 trội hẳn), ngữ cảnh
     /// gõ/chữ = có dấu, chat "làm gì …" = có đâu.
     func testCoDauThreeReadings() {
-        XCTAssertEqual(r("co dau"), "cô dâu")
+        // đứng một mình: vnlm.bin hội thoại (18/10/2026) nghiêng "có dấu" (trước: "cô dâu") — Phil quyết
+        XCTAssertEqual(r("co dau"), "có dấu")
         XCTAssertEqual(r("co dau chu re"), "cô dâu chú rể")
         XCTAssertEqual(r("tieng Viet co dau"), "tiếng Việt có dấu")
         XCTAssertEqual(r("lam gi co dau"), "làm gì có đâu")
@@ -50,7 +51,8 @@ final class CuratedPairsTests: XCTestCase {
 
     func testCuratedOffIsOldBehaviour() {
         var p = AddTones.Params(); p.curated = false
-        XCTAssertEqual(AddTones.restore("bop vu", p).text, "bóp vụ")
+        // vnlm.bin hội thoại (18/10/2026) tự ra "bóp vú" ⇒ khoá bằng cặp còn cần bảng
+        XCTAssertEqual(AddTones.restore("bop dai", p).text, "bóp dài")
     }
 
     // MARK: bảng

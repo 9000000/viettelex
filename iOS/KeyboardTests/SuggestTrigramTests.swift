@@ -64,9 +64,9 @@ final class SuggestTrigramTests: XCTestCase {
     }
 
     func testTrigramExamples() {
-        XCTAssertEqual(SuggestRank.contextNext("không", prev2: "tôi", limit: 3), ["biết", "muốn", "nghĩ"])
+        XCTAssertEqual(SuggestRank.contextNext("không", prev2: "tôi", limit: 3), ["biết", "thể", "muốn"])   // vnlm hội thoại 18/10/2026 (trước: biết, muốn, nghĩ)
         XCTAssertEqual(SuggestRank.contextNext("có", prev2: "bạn", limit: 3).first, "thể")
-        XCTAssertEqual(SuggestRank.contextNext("mừng", prev2: "chúc", limit: 3).first, "giáng")
+        XCTAssertEqual(SuggestRank.contextNext("mừng", prev2: "chúc", limit: 3).first, "sinh")   // vnlm hội thoại 18/10/2026 (trước: giáng)
         XCTAssertEqual(SuggestRank.contextNext("điện", prev2: "hello", limit: 3), SuggestRank.bigramNext("điện", limit: 3))
         XCTAssertEqual(SuggestRank.contextNext("điện", prev2: nil, limit: 3), SuggestRank.bigramNext("điện", limit: 3))
         XCTAssertTrue(SuggestRank.contextNext("hello", prev2: "tôi", limit: 3).isEmpty)
@@ -76,9 +76,9 @@ final class SuggestTrigramTests: XCTestCase {
         let m = seeded()
         func personal() -> [String] { SensitiveWords.filter(m.nextWords(after: "không", prev2: "tôi", limit: 6), enabled: true) }
         let tc = { (w: String) in m.trigramCount("tôi", "không", w) }
-        XCTAssertEqual(SuggestRank.nextFill("không", prev2: "tôi", personal: personal(), triCount: tc), ["biết", "muốn", "nghĩ"])
+        XCTAssertEqual(SuggestRank.nextFill("không", prev2: "tôi", personal: personal(), triCount: tc), ["biết", "thể", "muốn"])
         for _ in 0..<3 { m.record(word: "tôi", after: nil); m.record(word: "không", after: "tôi"); m.record(word: "đi", after: "không", prev2: "tôi") }
-        XCTAssertEqual(SuggestRank.nextFill("không", prev2: "tôi", personal: personal(), triCount: tc), ["đi", "biết", "muốn"])
+        XCTAssertEqual(SuggestRank.nextFill("không", prev2: "tôi", personal: personal(), triCount: tc), ["đi", "biết", "thể"])
         let p1 = SensitiveWords.filter(m.nextWords(after: "không", limit: 6), enabled: true)
         XCTAssertEqual(SuggestRank.nextFill("không", prev2: nil, personal: p1, triCount: { _ in 0 }), Array(p1.prefix(3)))
     }

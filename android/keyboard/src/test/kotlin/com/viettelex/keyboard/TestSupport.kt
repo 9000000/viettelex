@@ -15,8 +15,12 @@ object TestAssets {
         if (installed) return
         synchronized(this) {
             if (installed) return
+            // VT_LM=đường-dẫn: đo một vnlm.bin ứng viên (Scripts/gen-syllable-lm.py build --out …)
+            // mà không chép đè asset — LMDataEvalTests / lưới trọng số nguồn dữ liệu.
+            val lmOverride = System.getenv("VT_LM")?.let { File(it) }
             KeyboardData.install { name ->
-                RandomAccessFile(File(dir, name), "r").use { f ->
+                val file = if (name == Keys.ASSET_LM && lmOverride != null) lmOverride else File(dir, name)
+                RandomAccessFile(file, "r").use { f ->
                     f.channel.map(FileChannel.MapMode.READ_ONLY, 0, f.length())
                 }
             }

@@ -26,7 +26,7 @@ final class SyllableLMTests: XCTestCase {
         XCTAssertEqual(m.count, VNLexicon2Data.count)
         XCTAssertTrue((100_000...600_000).contains(m.biEntries), "bigram \(m.biEntries)")
         XCTAssertTrue((100_000...600_000).contains(m.triEntries), "trigram \(m.triEntries)")
-        XCTAssertLessThanOrEqual(try blob().count, 1_500_000)   // v3 (28/09/2026): 1.427.048 byte
+        XCTAssertLessThanOrEqual(try blob().count, 2_000_000)   // v3 28/09/2026: 1.427.048 byte; +hội thoại 18/10/2026: 1.991.768 (ngân sách 2 MB)
     }
 
     private func pmi(_ a: String, _ b: String) -> Float { lm.bigram(id(a)).pmi(id(b)) }
