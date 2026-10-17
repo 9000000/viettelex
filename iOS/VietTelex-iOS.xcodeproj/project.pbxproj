@@ -86,6 +86,7 @@
 		3114B687743026F5D4FA7DCA /* TranslateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7340E73EA99323208B2E25A7 /* TranslateSettingsView.swift */; };
 		345C0FDDA5EDC2A478E087F7 /* SyllableLMTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5BC327E13C13C9D09229C0F /* SyllableLMTests.swift */; };
 		36C564FD8BADBFB0BCC1E645 /* DisplayCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B7D70220F7D14EBC3C3AACD /* DisplayCase.swift */; };
+		347857F18C1F997F51833FF4 /* SwipeReviseParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76A283D98F951FB082F620E /* SwipeReviseParityTests.swift */; };
 		36DBD03FE63A6B9E03DF751C /* emoji.bin in Resources */ = {isa = PBXBuildFile; fileRef = 0EBD4D68E1E032F0E0FBB27B /* emoji.bin */; };
 		37029C6BAEE8201C5C7CA64F /* AdjacentKeyFixer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A25C830B85508BCD22F38A /* AdjacentKeyFixer.swift */; };
 		38B4DF4EC6EAD2BC87B560CE /* KeyboardBenchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5143281A235F9FF66DF0ABAE /* KeyboardBenchTests.swift */; };
@@ -161,6 +162,7 @@
 		733D3888524809658B6A04D3 /* VTCatch.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F35DEB1416616443DB332E0 /* VTCatch.m */; };
 		752FB9D5D429DB659988F787 /* ICloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AD519DC648CF654359B2C8 /* ICloudSync.swift */; };
 		7535E3D6E42FAAF982A6BC34 /* SuggestionSlots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E2A0AFF771A8FB37173583D /* SuggestionSlots.swift */; };
+		75CEE998C4D51E149D31F03D /* swipe-revise.tsv in Resources */ = {isa = PBXBuildFile; fileRef = 6E5245DDF6AEAD53DBD8A504 /* swipe-revise.tsv */; };
 		762A75417D368A04E70970E7 /* TranslateEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD345381A7158ECF3B158383 /* TranslateEngine.swift */; };
 		76E858DA9F6E92C01F7D638B /* KeySound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AF5F8C17DF806D66D530AA6 /* KeySound.swift */; };
 		777DFD50684EBFD29E6F41C8 /* ios-mau-cau.yml in Resources */ = {isa = PBXBuildFile; fileRef = E07A3B8533DF185DE4EC05F4 /* ios-mau-cau.yml */; };
@@ -490,6 +492,7 @@
 		6C7EDE7A95356B8F9043D32F /* vnlm.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; path = vnlm.bin; sourceTree = "<group>"; };
 		6C928B7D91A4C54D1642E70F /* TouchTargetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TouchTargetTests.swift; sourceTree = "<group>"; };
 		6CD1ABEB72F0DCCF278A46E7 /* EmojiSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiSearch.swift; sourceTree = "<group>"; };
+		6E5245DDF6AEAD53DBD8A504 /* swipe-revise.tsv */ = {isa = PBXFileReference; path = "swipe-revise.tsv"; sourceTree = "<group>"; };
 		6EAE46AEF3EF71266329303C /* TextToolRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToolRunner.swift; sourceTree = "<group>"; };
 		6EAFABBBF6544841D633BFD9 /* PlaneCacheLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaneCacheLayoutTests.swift; sourceTree = "<group>"; };
 		6F98B87CC6DBF96F8D09A899 /* KeySoundSynth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeySoundSynth.swift; sourceTree = "<group>"; };
@@ -617,6 +620,7 @@
 		F2C9781CE8B936C962B3EBA8 /* TelexCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TelexCore; path = ../TelexCore; sourceTree = SOURCE_ROOT; };
 		F316CA910C58A9377DC754A0 /* UserLangModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserLangModel.swift; sourceTree = "<group>"; };
 		F537D71E7DF6CC1F3FA95C1B /* WallpaperEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperEditorView.swift; sourceTree = "<group>"; };
+		F76A283D98F951FB082F620E /* SwipeReviseParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeReviseParityTests.swift; sourceTree = "<group>"; };
 		F98CF75D5CF9E5845F830381 /* backup-ios-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "backup-ios-v1.json"; sourceTree = "<group>"; };
 		F9A392056B54E623933F9CD3 /* SuggestionSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionSupport.swift; sourceTree = "<group>"; };
 		FC4C7AA642979C79BA435C61 /* SwipeEnglishTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeEnglishTests.swift; sourceTree = "<group>"; };
@@ -718,6 +722,7 @@
 				38966B5E3DF4C19B07287B0C /* swipe-paths-en.txt */,
 				A42C0808FA2107FC8B2A9D05 /* swipe-paths-timed.txt */,
 				E7BF9D54E0DFCE9D7395F598 /* swipe-paths.txt */,
+				6E5245DDF6AEAD53DBD8A504 /* swipe-revise.tsv */,
 				5E8B28C264666A6160445981 /* swipe-traces-sample.json */,
 				8CCBF78039DA75E228D4CDC2 /* text-tools.txt */,
 				208D0B979D689BDA140031CD /* userlm-legacy-android-v1.bin */,
@@ -843,6 +848,7 @@
 				0A6B5A4EF96EB6E3DFBA7109 /* SwipeDecoderTests.swift */,
 				FC4C7AA642979C79BA435C61 /* SwipeEnglishTests.swift */,
 				5D0C7CC44A57FCB3E41047D7 /* SwipePracticeTests.swift */,
+				F76A283D98F951FB082F620E /* SwipeReviseParityTests.swift */,
 				5934AB6CE713D08F46A5E0C1 /* SwipeReviseTests.swift */,
 				821BD7CBEE8349CC782C3E41 /* SwipeTypingTests.swift */,
 				C5BC327E13C13C9D09229C0F /* SyllableLMTests.swift */,
@@ -1202,6 +1208,7 @@
 				28C579703223D53D46A60F0D /* swipe-paths-en.txt in Resources */,
 				A2CEEACB594EB47AF40541A3 /* swipe-paths-timed.txt in Resources */,
 				4C0088B0166B00B8536D2B75 /* swipe-paths.txt in Resources */,
+				75CEE998C4D51E149D31F03D /* swipe-revise.tsv in Resources */,
 				8230AC1E2000E3632E55037B /* swipe-traces-sample.json in Resources */,
 				03B12CE64D361D1987537103 /* text-tools.txt in Resources */,
 				E0A2DD33986C1D3ED43EA245 /* userlm-legacy-android-v1.bin in Resources */,
@@ -1490,6 +1497,7 @@
 				0E9B932EADC04178D1A36C72 /* SwipePractice.swift in Sources */,
 				2B0B920D87566C26DAABB175 /* SwipePracticeTests.swift in Sources */,
 				E971817D1FA24FB167538336 /* SwipeRevise.swift in Sources */,
+				347857F18C1F997F51833FF4 /* SwipeReviseParityTests.swift in Sources */,
 				6774A0A250BD2EC8623C7C77 /* SwipeReviseTests.swift in Sources */,
 				7933EDB9373812AE6B96C22A /* SwipeTyping.swift in Sources */,
 				CA1662D03BD4C629C3C2AB2C /* SwipeTypingTests.swift in Sources */,
