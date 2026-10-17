@@ -113,6 +113,7 @@
 		45143ADE3A7BEAE0B4841933 /* NumberChipsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7FCB71A2846557F9B5442F7 /* NumberChipsTests.swift */; };
 		4518F1378037764E853AA99B /* KeyHitBiasTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AF0B5D15512A88DDB6CFF7 /* KeyHitBiasTests.swift */; };
 		4569D97A1018CAFF39BC9E3D /* KeyGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBCB7D7DAA868C8FB4B96C87 /* KeyGeometry.swift */; };
+		467594276DC8BAEF5AC22F0E /* chat-cases.txt in Resources */ = {isa = PBXBuildFile; fileRef = F79F82B042565CDF4CA8558E /* chat-cases.txt */; };
 		47D0834606BB8E66AB2213D1 /* ScrollEdgeEffectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBD24780DBDAEB07E6645C3E /* ScrollEdgeEffectTests.swift */; };
 		47E7F5A4D1C2F4DB41A97D74 /* SwipeVocabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32954DB2D38C5B9675E4964D /* SwipeVocabTests.swift */; };
 		4934EAD525E4B9A0DFBE254F /* vnlm.bin in Resources */ = {isa = PBXBuildFile; fileRef = 6C7EDE7A95356B8F9043D32F /* vnlm.bin */; };
@@ -252,6 +253,7 @@
 		B4F749EDE42751B7565B39F6 /* SyncMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E2E27B46842AE6F5EB0A74 /* SyncMerge.swift */; };
 		B5C9CB675A5310946844B520 /* PerfSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0129B5AA6C2F6547A9634969 /* PerfSwitchTests.swift */; };
 		B5DA1E90A8B99B4F53BCFF96 /* PlusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8197742D5A3A7B8F8BE4C8DC /* PlusTests.swift */; };
+		B6C7B7E478B6AEAF66C2D94B /* safety-cases.txt in Resources */ = {isa = PBXBuildFile; fileRef = E0343317988BCCDF53A97142 /* safety-cases.txt */; };
 		B73BB0C8504D9159A129AB5F /* Translation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 575059AED927C97A7E6E33CD /* Translation.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		B77B19F8C2DD1B47583F091D /* SwipeLexicon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3994C0C17115101811283049 /* SwipeLexicon.swift */; };
 		B7ABF18E21AA806DFDB67928 /* NumberChips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF8BE49B914D1B4B31116F3 /* NumberChips.swift */; };
@@ -612,6 +614,7 @@
 		DBCB7D7DAA868C8FB4B96C87 /* KeyGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyGeometry.swift; sourceTree = "<group>"; };
 		DD345381A7158ECF3B158383 /* TranslateEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslateEngine.swift; sourceTree = "<group>"; };
 		DF447D2ACACB4E96B9438498 /* key-alternates.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "key-alternates.txt"; sourceTree = "<group>"; };
+		E0343317988BCCDF53A97142 /* safety-cases.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "safety-cases.txt"; sourceTree = "<group>"; };
 		E07A3B8533DF185DE4EC05F4 /* ios-mau-cau.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = "ios-mau-cau.yml"; sourceTree = "<group>"; };
 		E20D4C3E7DAFC3853FBEF994 /* BackupSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSection.swift; sourceTree = "<group>"; };
 		E2A6BDCAE323FDEA73473DB7 /* PlanePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanePolicyTests.swift; sourceTree = "<group>"; };
@@ -636,6 +639,7 @@
 		F316CA910C58A9377DC754A0 /* UserLangModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserLangModel.swift; sourceTree = "<group>"; };
 		F537D71E7DF6CC1F3FA95C1B /* WallpaperEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperEditorView.swift; sourceTree = "<group>"; };
 		F76A283D98F951FB082F620E /* SwipeReviseParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeReviseParityTests.swift; sourceTree = "<group>"; };
+		F79F82B042565CDF4CA8558E /* chat-cases.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "chat-cases.txt"; sourceTree = "<group>"; };
 		F98CF75D5CF9E5845F830381 /* backup-ios-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "backup-ios-v1.json"; sourceTree = "<group>"; };
 		F9A392056B54E623933F9CD3 /* SuggestionSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionSupport.swift; sourceTree = "<group>"; };
 		FC4C7AA642979C79BA435C61 /* SwipeEnglishTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeEnglishTests.swift; sourceTree = "<group>"; };
@@ -727,10 +731,12 @@
 				F98CF75D5CF9E5845F830381 /* backup-ios-v1.json */,
 				283B18B560C805EFBE10D839 /* backup-too-new.json */,
 				874923DAE33DB7FA95441F18 /* bigram-heldout.txt */,
+				F79F82B042565CDF4CA8558E /* chat-cases.txt */,
 				5A0609A6319273F70D4F03A6 /* futo-swipe-fixture.txt */,
 				DF447D2ACACB4E96B9438498 /* key-alternates.txt */,
 				209C000B31A56F2E72663A5D /* math-results.txt */,
 				2B96A58C6EE35D288C488202 /* number-chips.txt */,
+				E0343317988BCCDF53A97142 /* safety-cases.txt */,
 				F0FC8F0608409E1FDA1707BD /* suggest-dev.txt */,
 				C39CAE56C7A6C95E09637270 /* suggest-trigram-parity.txt */,
 				CFEF10E3C02C542D5C49792E /* swipe-lang-sentences.txt */,
@@ -1214,6 +1220,7 @@
 				F280DF8330021685A18751B8 /* backup-ios-v1.json in Resources */,
 				0BA146A5605A6C79C1FD23BC /* backup-too-new.json in Resources */,
 				0D74B9E1C49AB9872006D893 /* bigram-heldout.txt in Resources */,
+				467594276DC8BAEF5AC22F0E /* chat-cases.txt in Resources */,
 				20F63EA1CEB8F35CCDFB7724 /* emoji.bin in Resources */,
 				5F2C618E98766EB94AA1D538 /* enlexicon.bin in Resources */,
 				E25796C6DF51C528137161EB /* futo-swipe-fixture.txt in Resources */,
@@ -1221,6 +1228,7 @@
 				1ECBD8089C0345854667709E /* key-alternates.txt in Resources */,
 				9E05D33874006BB326EDC4C6 /* math-results.txt in Resources */,
 				DF225D04D7CF81C8C54070B8 /* number-chips.txt in Resources */,
+				B6C7B7E478B6AEAF66C2D94B /* safety-cases.txt in Resources */,
 				59C66E8A96CED913A07EA832 /* sample-shortcuts.yml in Resources */,
 				93E768311710062913552601 /* suggest-dev.txt in Resources */,
 				B92E282E8D0ABE8BEBD693E7 /* suggest-trigram-parity.txt in Resources */,
