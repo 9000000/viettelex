@@ -684,7 +684,9 @@ Chạy lại: `SWIPE_LANG_TUNE=1 SWIPE_LANG_CFGS='old;base' [SWIPE_TEST=1] ./gra
   tên riêng tiếng Việt như tran, nguyen), không phải số La Mã; lấy theo hạng tới khi đủ
   20.000 từ tổng.
 - Tần suất: tỉ lệ token quy về cùng thang với `vnlexicon.bin` (255·ln(count)/ln(max) trên
-  corpus OpenSubtitles tiếng Việt ~26,4 triệu token) để decoder so hai từ điển trên một thang.
+  corpus OpenSubtitles tiếng Việt ~26,4 triệu token) để decoder so hai từ điển trên một thang. (Số đó là
+  của hermitdave 2018; vnlexicon thật dùng bản 2016 — chênh ~5 byte, GIỮ vì ngưỡng đã chỉnh trên thang
+  này, xem mục vnlexicon.)
 
 ## FUTO Swipe
 
@@ -805,11 +807,124 @@ tắt: không tạo đối tượng, không đọc file — đường gõ vuốt
 
 ## vnlexicon.bin — danh sách âm tiết + tần suất
 
-Có từ trước (không đổi trong đợt bigram); nguồn ghi ở `Scripts/gen-vnlexicon.py`:
-danh sách 7.184 âm tiết của hieuthi (gist GitHub) và tần suất từ
-[hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) (nội dung
-CC BY-SA 4.0 theo README dự án; số liệu suy ra từ OpenSubtitles). Danh sách âm tiết
-gist hieuthi: maintainer đã rà soát 27/09/2026 — được sử dụng tự do.
+`iOS/Keyboard/Resources/vnlexicon.bin` = `android/app/src/main/assets/vnlexicon.bin` (VNL2, 150.700 byte,
+7.184 âm tiết + tần suất 1 byte; bố cục ở docstring `Scripts/gen-vnlexicon.py`). Danh sách âm tiết: gist
+hieuthi (raw `7d729de4…`, maintainer đã rà soát 27/09/2026 — được sử dụng tự do).
+
+**Tái tạo (18/10/2026, giai đoạn 2).** `gen-vnlexicon.py` nay ghi thẳng VNL2 (`--out`) và vá bảng
+`firstCharTop` trong `VNLexicon2.swift` / `VNLexicon2.kt` (`--patch-sources`). Bản cũ tái tạo **trùng từng
+byte** từ hieuthi + hermitdave/FrequencyWords `content/2016/vi/vi_50k.txt` (commit `b4618471`) — KHÔNG phải
+bản 2018 như từng ghi (2018 lệch tần suất; `gen-enlexicon.py` N_VI/CMAX_VI là số của bản 2018).
+
+**Tần suất từ corpus trộn (giai đoạn 2).** Thay thiên lệch phụ đề OpenSubtitles 2016 (mày 203 > máy 183,
+cám 182 ≈ cảm 196) bằng số đếm unigram có trọng số trên chính các luồng id của vnlm.bin
+(`gen-syllable-lm.py unigram`), cùng lọc/chuẩn hoá teencode/bỏ câu tục của mục "Nguồn hội thoại":
+
+| Nguồn | phần khối lượng | ghi chú |
+|---|---|---|
+| OpenSubtitles v2024 | 50 % | chạy lại `lm-chat-prep.py opus --short-cap 1e12 --min-syllables 1`: KHÔNG giới hạn câu ngắn ("xin chào", "vâng", "chào" — trần 8 lần/câu của vnlm.bin kéo chúng xuống: chào 194 → 168) |
+| FineWeb-2 (lát diễn đàn) | 30 % | luồng của vnlm.bin |
+| Tatoeba | 15 % | |
+| Wikimedia | 5 % | chỉ để âm tiết hiếm không về 1 |
+
+Thang giữ như bản cũ (token-rate): c' = c·17.011.917/Σc, f = min(255, int(255·ln c' / ln 479.988)) (tổng /
+max của hermitdave 2016) ⇒ ngưỡng 0–255 ở mọi nền tảng và thang enlexicon giữ nghĩa. Từ tục bị nguồn hội
+thoại bỏ cả câu (lm-chat-prep VULGAR + vãi, vú, ngu, dái, cu) lấy max(cũ, mới) (`--keep-vulgar-from`):
+không thì cứt 130 → 8, vãi 126 → 114 — gõ vuốt khi TẮT lọc không ra được. Chọn trên tập DEV (lưới: trọng số
+vnlm.bin 60 % văn viết / 25 % / 15 %; 35 / 40 / 25; chỉ hội thoại; hội thoại + 5 % Wikimedia): càng nhiều hội
+thoại càng tốt cho dev Tatoeba/FineWeb, OpenSubtitles dev ±0,1; giữ 5 % Wikimedia.
+
+| âm tiết | 2016 | mới | | âm tiết | 2016 | mới |
+|---|---|---|---|---|---|---|
+| máy / mày | 183 / 203 | **188 / 186** | | cảm / cám | 196 / 182 | **203 / 160** |
+| chào / vâng | 194 / 188 | 188 / 185 | | phím / việt | 87 / 120 | 120 / 175 |
+| hắn / ngài | 210 / 190 | 191 / 174 | | tôi / không | 255 / 253 | 238 / 242 |
+
+Phân vị tần suất (10/25/50/75/90 %): 7/27/73/119/156 → 4/41/82/126/161; số âm tiết ≥ 150: 849 → 1.044. Kho
+âm tiết GIỮ 7.184 (không âm tiết phổ thông nào thiếu; mẫu 27,6 tr token OpenSubtitles: ngoài kho chỉ còn
+thán từ ừm 67/tr, suỵt 26/tr, alô 20/tr, hừm 17/tr, đếch 14/tr + rác mã hoá — Phil quyết có thêm không).
+
+Vì id trong vnlexicon xếp theo (dạng không dấu, tần suất giảm) nên id đổi ⇒ vnlm.bin dựng lại
+(`gen-syllable-lm.py remap` đổi id các luồng .ids cũ — tương đương chạy lại `ids`, tách âm tiết không phụ
+thuộc tần suất); mô hình y hệt (463.463 bigram / 398.822 trigram, 1.991.768 byte), chỉ lexHash + thứ tự id đổi.
+
+    W=…   # luồng .ids của mục "Nguồn hội thoại" (vnlexicon CŨ) + opusfull.ids:
+    $D /repo/Scripts/lm-chat-prep.py opus /w/vi.txt.gz --out /w/ids/opusfull --visolex /w/dictionary.json \
+        --short-cap 1e12 --min-syllables 1
+    E="--weight viwiki=0.026 --weight viwikibooks=0.026 --weight viwikiquote=0.026 --weight viwikisource=0.026 --weight viwikivoyage=0.026"
+    $D /repo/Scripts/gen-syllable-lm.py unigram --lexicon OLD.bin --out /w/uni.tsv viwiki.ids viwikibooks.ids \
+        viwikiquote.ids viwikisource.ids viwikivoyage.ids tatoeba.ids opusfull.ids fineweb.dt.ids $E \
+        --share opusfull=0.5 --share fineweb=0.3
+    python3 Scripts/gen-vnlexicon.py syllables.txt --counts $W/uni.tsv --keep-vulgar-from OLD.bin \
+        --out iOS/Keyboard/Resources/vnlexicon.bin --patch-sources        # OLD.bin = vnlexicon.bin ở commit 05051963
+    cp iOS/Keyboard/Resources/vnlexicon.bin android/app/src/main/assets/
+    $D /repo/Scripts/gen-syllable-lm.py remap --old /w/OLD.bin --new /repo/iOS/Keyboard/Resources/vnlexicon.bin \
+        --out-dir /w/ids-new /w/ids/*.ids      # rồi count-np + build như mục "Nguồn hội thoại" trên /w/ids-new
+
+Kiểm: dựng lại vnlm.bin cũ từ dump/luồng tải lại 18/10/2026 ra **trùng từng byte** bản 05051963.
+
+**Giấy phép.** Tần suất mới suy ra từ cùng nguồn với vnlm.bin ⇒ vnlexicon.bin (phần tần suất) và SeedData
+theo **CC BY-SA 4.0** với cùng thông báo ghi công của vnlm.bin (mục trên); 11 tần suất từ tục giữ từ bản cũ
+(hermitdave/FrequencyWords, CC BY-SA 4.0). Danh sách âm tiết: gist hieuthi như trước.
+
+**Ngưỡng 0–255 chỉnh lại trên DEV** (đo MỘT lần trên kiểm thử, bảng dưới):
+- AutoCorrect (iOS/Android) minFreq 170 → **175** (margin 30): DEV P 98,7 % (170: 98,0; cũ 98,8), R 27,0 % (cũ 26,8).
+- TypoFix tiếng Anh (macOS/Linux/Windows) minFreq 140 → **135**: DEV R 36,0 % (140: 35,4; cũ 35,9), oan trên
+  tập giữ nguyên 20 → 14, EN P 95,2 % (cũ 95,4).
+- Giữ: TypoFix tiếng Việt 150/80 (vẫn tốt nhất lưới DEV: P 97,3 / R 22,4 %, cũ 97,0 / 22,3), prefersEnglish
+  150/80/60, SwipeVocab (bảng chat, nắc 140, sàn nhạy cảm 150, gõ tắt 120/100), λ tần suất gõ vuốt / Thêm dấu.
+  Gõ vuốt tiếng Anh (SwipeLangTune DEV): câu Anh y hệt, câu trộn +1,2–1,7, câu Việt +1,4–1,7 điểm.
+- enlexicon.bin KHÔNG đổi: đổi N_VI/CMAX_VI sang số 2016 "đúng thang" làm DEV tệ hơn (TypoFix Anh R 35,4 →
+  34,5 %, Việt P 97,3 → 96,8 %) — ngưỡng Anh/Việt đã chỉnh trên thang hiện tại.
+- emoji.bin (SKEN) không đổi: chỉ dùng dạng không dấu của vnlexicon (section folded y hệt).
+
+## SeedData — seed ban đầu của UserLangModel (18/10/2026)
+
+`iOS/Keyboard/SeedData.swift` sinh bởi `Scripts/gen-seed-data.py` (stdlib) từ số đếm hội thoại (Tatoeba 20 % /
+OpenSubtitles `opusfull` 50 % / FineWeb 30 %; `gen-syllable-lm.py unigram --bigram-out --bigram-min 20`) +
+lớp chọn tay `Scripts/seed-curated.txt` (teencode/chat, ~105 từ tiếng Anh cap ≤ 18, tên riêng/họ/đệm, hệ điều
+hành, từ nhạy cảm cho SwipeVocab, cặp hội thoại của seed cũ — anh ơi, ăn chưa…; `[pin]` em 50 > anh 49 > tôi
+48; `[exclude]` tom — tên trong câu Tatoeba). Phần corpus: 800 âm tiết + 600 cặp có PMI ≥ 1 (lưới DEV: 500/380,
+800/600, 1200/900 · PMI 0/1/2; 1200/900 chỉ +0,05), trọng số 50·(c/c_max)^0,3 (khớp bảng cũ). 1.139 unigram /
+933 bigram (cũ 882 / 509). Rồi: `android/keyboard/scripts/export-ios-data.py` (seed.tsv 17,0 → 27,0 KB),
+`Scripts/gen-seed-next.sh`, `windows/app/tools/gen_seed_unigrams.py`, `windows/app/tools/gen_prediction_golden.sh`.
+Seed cũ (OpenSubtitles2018) có "cám ơn" 25 — nay chỉ "cảm ơn".
+
+    python3 Scripts/gen-seed-data.py --unigrams $W/uni-chatfull.tsv --bigrams $W/bi-chatfull.tsv --n-uni 800 --n-bi 600
+
+### Đo trước / sau giai đoạn 2 (tập KIỂM THỬ, JVM; "trước" = main 18/10/2026 sau giai đoạn 1)
+
+| | trước | sau |
+|---|---|---|
+| Thêm dấu heldout — âm tiết / câu đúng hết | 97,27 / 85,3 % | **97,53 / 86,3 %** |
+| Thêm dấu + seed UserLangModel | 97,25 % | **97,51 %** |
+| Từ kế tiếp top-1 / top-3 (người dùng mới) | 24,04 / 40,35 % | **26,07 / 42,37 %** |
+| Đang gõ slot1 / 3 slot | 87,11 / 95,69 % | **89,68 / 96,43 %** |
+| Phím tiết kiệm | 58,84 % | **60,04 %** |
+| Học dần: kế tiếp top-1 / top-3 · slot1 · phím | 24,73 / 41,01 · 89,11 · 59,25 % | 25,83 / 42,11 · 89,81 · 59,97 % |
+| Gõ chạm SuggestBigram (seed + bigram): slot1 / 3 slot / kế tiếp top-3 | 0,851 / 0,948 / 0,285 | 0,879 / 0,960 / 0,323 |
+| Gõ vuốt heldout top-1 / top-3 | 90,6 / 96,9 % | 90,7 / 96,9 % |
+| Câu trộn Việt–Anh top-1 / top-3 (n = 270) | 218 / 269 | 222 / 269 |
+| Vuốt xen gõ + sửa theo từ gõ | 94,92 % | 95,39 % |
+| Vuốt tuần tự + sửa chung cặp | 92,74 % | 93,61 % |
+| AutoCorrect (Android TouchSim) P / R | 97,1 / 23,5 % | 97,2 / 24,4 % |
+| TypoFix tiếng Việt (macOS) P / R | 97,2 / 23,6 % | 97,8 / 23,6 % |
+| TypoFix tiếng Anh (macOS) P / R; oan tập giữ nguyên | 97,5 / 38,7 %; 20 | 97,8 / 38,5 %; 14 |
+| Kiểm thử OpenSubtitles (4.000 câu): Thêm dấu / kế top-1 / slot1 / vuốt top-1 | 94,29 / 19,02 / 83,18 / 87,43 | 94,17 / 19,44 / 85,30 / 87,19 |
+| Kiểm thử FineWeb (4.000 câu): Thêm dấu / kế top-1 / slot1 / vuốt top-1 | 92,91 / 20,09 / 80,55 / 84,75 | 93,40 / 21,23 / 83,64 / 85,08 |
+| chat-cases.txt (52 câu; 6 câu Phil) | 44 / 52 (6 / 6) | 45 / 52 (6 / 6) |
+| An toàn — Thêm dấu / vuốt ra từ tục (heldout + safety-cases + 2 tập kiểm thử) | 1 / 0 | 0 / 0 |
+
+Giá phải trả: tập OpenSubtitles (nguồn tần suất cũ) Thêm dấu −0,12, vuốt −0,24 điểm. Cỡ: vnlexicon 150.700 B,
+vnlm.bin 1.991.768 B, enlexicon 183.469 B, keyprior.bin 568.925 B (không đổi); seed.tsv 17.002 → 27.036 B,
+SeedData.swift 25,6 → 40,9 KB (computed var, chỉ dựng khi seed), SeedNextData.swift 10,3 KB. RAM: mmap như cũ.
+Cặp chọn tay mà vnlm.bin + tần suất mới tự giải khi tắt bảng: 30 (thêm "rảnh chưa"; giai đoạn 1: 29) — chưa bỏ.
+
+Đổi hành vi cần Phil xem: "co dau" đứng một mình về lại "cô dâu" (giai đoạn 1: "có dấu"); add-tones.txt: cám ơn →
+**cảm ơn**, ăn phô → **phở**, mấy giờ rồi bắn → **bạn**. Vuốt tắt lọc (SwipeVocabTests): đụ → Dù (trước Đủ),
+vú → Vụ, dâm → Đảm, "Ngu" rơi khỏi thanh gợi ý (ngữ 129 → 162), "mò cu" → Mơ chứ (cặp chọn tay không áp
+được: "cu" hạng 8 trong dạng "cu"), "sờ cu" → So cứ. iOS: vuốt "nay" + "mai" nay ra "Ngày mai" (chip ↩︎ trả lại).
+Gợi ý macOS "tôi hi": "tôi hiểu" là cặp seed nên học "tôi hiền" 5 lần chưa vượt (test đổi sang "anh hi").
 
 ## emoji.bin — bàn phím emoji: bộ emoji, tìm kiếm tiếng Việt, kaomoji
 

@@ -11,6 +11,8 @@ Wikibooks/Wikiquote tiếng Việt — CC BY-SA 4.0; Tatoeba — CC BY 2.0 FR; t
 OpenSubtitles (OPUS v2024) + lát diễn đàn FineWeb-2 (ODC-By) qua Scripts/lm-chat-prep.py →
 `ids` / `count-np --share` — lệnh đầy đủ: docs/DATA-SOURCES.md mục "Nguồn hội thoại"). Bản dưới
 là đường cũ (chỉ Wikimedia + Tatoeba; `ids` + `count-np` không --share cho file y hệt `count`).
+Giai đoạn 2 (18/10/2026): `unigram` (số đếm unigram/bigram có trọng số → gen-vnlexicon.py --counts,
+gen-seed-data.py) và `remap` (đổi id luồng .ids khi vnlexicon đổi thứ tự) — docs mục "vnlexicon.bin".
 Dữ liệu thô KHÔNG commit; tải về thư mục tạm rồi chạy:
 
   B=https://dumps.wikimedia.org/other/cirrussearch/20251229

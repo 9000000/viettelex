@@ -200,10 +200,14 @@ final class SwipeReviseTests: XCTestCase {
             g.swipe(next, layout, sim: &sim)
             XCTAssertEqual(g.p.text, want)
         }
+        // 18/10/2026 (tần suất vnlexicon corpus hội thoại: dạng "ngay" 196 → 206, "nay" 228 → 227) — vuốt
+        // "nay" rồi "mai" nay cũng sửa thành "Ngày mai" (trước giữ "Này "); chip ↩︎ vẫn trả lại được.
         let h = Flow(layout)
         h.swipe("nay", layout, sim: &sim, case: .capitalized)
         h.swipe("mai", layout, sim: &sim)
-        XCTAssertTrue(h.p.text.hasPrefix("Này "), h.p.text)
+        XCTAssertEqual(h.p.text, "Ngày mai")
+        XCTAssertTrue(h.b.restoreRevisedWord(old: "Này", new: "Ngày", proxy: h.p))
+        XCTAssertEqual(h.p.text, "Này mai")
     }
 
     /// Chi phí thêm trên đường chốt cú vuốt (Debug, simulator): SwipeTyping.finish khi có từ vuốt

@@ -234,7 +234,9 @@ enum TypoFixLogic {
         var longMinFreq: Int = 255
     }
 
-    static let englishDefaults = EnglishParams(minFreq: 140, margin: 60, insDelMinLen: 5, longMinLen: 7, longMinFreq: 60)
+    // 18/10/2026 (tần suất vnlexicon corpus hội thoại — đối thủ Việt mạnh lên): minFreq 140 → 135 giữ recall DEV
+    // (35,9 → 36,0 %; 140: 35,4 %), oan trên tập giữ nguyên 20 → 14, EN P 95,4 → 95,2 %.
+    static let englishDefaults = EnglishParams(minFreq: 135, margin: 60, insDelMinLen: 5, longMinLen: 7, longMinFreq: 60)
 
     /// Mọi chuỗi MỘT sửa của `lower` (a–z) có trong enlexicon (`frequency`), khác chính nó.
     static func englishCandidates(_ lower: String, frequency: (String) -> Int?) -> [Cand] {

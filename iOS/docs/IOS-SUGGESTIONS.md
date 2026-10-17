@@ -104,10 +104,11 @@ QuickType). Tự tắt ở field từ chối gợi ý (`isSecureTextEntry`,
 ### 3. `SeedData` — mồi ban đầu
 
 Inject qua `seedIfEmpty()` khi datastore trống (cài mới / sau nút **Xóa từ đã
-học**). ~700 unigram + ~470 bigram:
+học**). ~1.140 unigram + ~930 bigram, sinh bởi `Scripts/gen-seed-data.py` (18/10/2026; docs/DATA-SOURCES.md
+mục "SeedData"):
 
-- Lõi hội thoại từ **OpenSubtitles2018 tiếng Việt** (lọc bias phim ảnh) + lớp
-  chat/teencode curated (ko, đc, nhé, nha, haha…), weight log-scale **max 50**.
+- Lõi hội thoại: 800 âm tiết + 600 cặp (PMI ≥ 1) từ OpenSubtitles v2024 + lát diễn đàn FineWeb-2 + Tatoeba,
+  + lớp chọn tay `Scripts/seed-curated.txt` (ko, đc, haha…, cặp hội thoại của seed cũ), weight log-scale **max 50**.
 - ~112 từ tiếng Anh hay pha trong chat Việt (ok, thanks, meeting…), cap ≤18.
 - Proper noun (weight 3-15, dưới lớp hội thoại): địa danh VN/quốc tế, thương
   hiệu (SenPrints, FPT, VinFast…), tech (GitHub, Claude, ChatGPT…), OS, crypto,
