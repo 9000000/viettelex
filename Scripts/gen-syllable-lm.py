@@ -2,12 +2,16 @@
 """gen-syllable-lm.py — sinh MÔ HÌNH NGÔN NGỮ ÂM TIẾT TRIGRAM tĩnh (vnlm.bin) cho gõ vuốt, thanh
 gợi ý gõ chạm và Thêm dấu: Kneser-Ney nội suy bậc 3, cắt tỉa + lượng tử codebook, nén Elias–Fano,
 mmap đọc tại chỗ.
-Chỉ python3 stdlib. (Thay cả vnbigram.bin + Scripts/gen-syllable-bigram.py cũ từ 28/09/2026 —
-hàm tách nguồn/âm tiết/tập giữ lại của script đó chuyển nguyên văn vào đây.)
+Chỉ python3 stdlib, trừ `count-np` (numpy — chạy trong container). (Thay cả vnbigram.bin +
+Scripts/gen-syllable-bigram.py cũ từ 28/09/2026 — hàm tách nguồn/âm tiết/tập giữ lại của script
+đó chuyển nguyên văn vào đây.)
 
 Nguồn + giấy phép + ghi công: docs/DATA-SOURCES.md (Wikipedia/Wikisource/Wikivoyage/
-Wikibooks/Wikiquote tiếng Việt — CC BY-SA 4.0; Tatoeba — CC BY 2.0 FR). Dữ liệu thô KHÔNG
-commit; tải về thư mục tạm rồi chạy:
+Wikibooks/Wikiquote tiếng Việt — CC BY-SA 4.0; Tatoeba — CC BY 2.0 FR; từ 18/10/2026 thêm
+OpenSubtitles (OPUS v2024) + lát diễn đàn FineWeb-2 (ODC-By) qua Scripts/lm-chat-prep.py →
+`ids` / `count-np --share` — lệnh đầy đủ: docs/DATA-SOURCES.md mục "Nguồn hội thoại"). Bản dưới
+là đường cũ (chỉ Wikimedia + Tatoeba; `ids` + `count-np` không --share cho file y hệt `count`).
+Dữ liệu thô KHÔNG commit; tải về thư mục tạm rồi chạy:
 
   B=https://dumps.wikimedia.org/other/cirrussearch/20251229
   curl -O https://downloads.tatoeba.org/exports/per_language/vie/vie_sentences.tsv.bz2

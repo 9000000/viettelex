@@ -88,7 +88,8 @@ class LMDataEvalTests {
         val s = safetyOn(cs)
         println("SAFETY safety-cases: ${s.fmt()}")
         assertTrue(s.fmt(), s.probes >= 40)
-        // 18/10/2026 trước khi thêm nguồn hội thoại: Thêm dấu 0, vuốt 0 — không được tăng
+        // 18/10/2026: vnlm.bin cũ (chỉ Wikimedia + Tatoeba) ra từ tục 4/53 ở Thêm dấu (điếm thì,
+        // bị cứt, cứt ra, trạm điếm), vuốt 0; thêm nguồn hội thoại: 0 / 0 — không được tăng lại
         assertEquals(s.fmt(), 0, s.addTones)
         assertEquals(s.fmt(), 0, s.swipe)
     }
@@ -125,6 +126,42 @@ class LMDataEvalTests {
             if (c.word == w || w in c.alternatives.take(2)) t3++
         }
         return String.format(Locale.ROOT, "vuốt top1 %.2f top3 %.2f (n=%d)", 100.0 * t1 / n, 100.0 * t3 / n, n)
+    }
+
+    /**
+     * Cặp chọn tay (CuratedPairs) mà vnlm.bin TỰ giải đúng khi tắt bảng (VT_LM_EVAL=1, in ra):
+     * Thêm dấu cặp/bộ ba không dấu → đúng nguyên văn; vuốt (nextOnly) không đo ở đây.
+     */
+    @Test fun curatedRedundancy() {
+        if (System.getenv("VT_LM_EVAL") == null) return
+        val off = AddTones.Params(curated = false)
+        val ok = ArrayList<String>(); val no = ArrayList<String>()
+        for (k in (CuratedPairs.pairs + CuratedPairs.triples).sorted()) {
+            val got = AddTones.restore(k.split(' ').joinToString(" ") { SwipeSuggest.fold(it) }, null, off).text
+            val tail = k.split(' ').takeLast(2).joinToString(" ")
+            if (got.endsWith(tail)) ok += k else no += "$k (→ $got)"
+        }
+        println("CURATED tự đúng khi tắt bảng ${ok.size}: " + ok.joinToString(" | "))
+        println("CURATED vẫn cần bảng ${no.size}: " + no.joinToString(" | "))
+    }
+
+    /** Lỗi từng từ trên câu trộn Việt–Anh của SyllableLMTests.mixedSentencesKeepEnglish (VT_LM_EVAL=1). */
+    @Test fun mixedDump() {
+        if (System.getenv("VT_LM_EVAL") == null) return
+        val sentences = listOf("mình đang check mail", "gửi file cho anh", "em gửi email cho sếp", "tôi nay có meeting không",
+            "share link cho mình", "deadline là thứ sáu", "anh ấy đang online", "cho mình xin link nhé").map { it.split(' ') }
+        val d = SwipeDecoder().also { it.setLayout(layout) }; val sim = SwipeSim(99)
+        val errs = HashMap<String, Int>()
+        repeat(10) {
+            for (s in sentences) for (i in 1 until s.size) {
+                val prior = SwipeLangContext.prior(SwipeLangContext.classify(s[i - 1]), SwipeLangContext.classify(s.getOrNull(i - 2)))
+                val ctx = SwipeSuggest.context(null, s[i - 1], s.getOrNull(i - 2), prior, lm = SyllableLM.shared)
+                val c = SwipeSuggest.choose(d.decode(sim.path(SwipeSuggest.fold(s[i]), layout), SwipeSuggest.TOP_K,
+                    ctx.folded, ctx.english, ctx.englishWord), ctx.word, lambdaFreq = ctx.lambdaFreq) ?: continue
+                if (c.word != s[i]) errs.merge("${s[i - 1]} ${s[i]} → ${c.word}", 1, Int::plus)
+            }
+        }
+        println("MIXED lỗi ${errs.values.sum()}: " + errs.entries.sortedByDescending { it.value }.joinToString(" | ") { "${it.key} ×${it.value}" })
     }
 
     @Test fun eval() {

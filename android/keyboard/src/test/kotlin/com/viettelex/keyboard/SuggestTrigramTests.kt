@@ -169,9 +169,9 @@ class SuggestTrigramTests {
     }
 
     @Test fun trigramExamples() {
-        assertEquals(listOf("biết", "muốn", "nghĩ"), SuggestRank.contextNext("không", "tôi", 3))
+        assertEquals(listOf("biết", "thể", "muốn"), SuggestRank.contextNext("không", "tôi", 3))   // vnlm hội thoại 18/10/2026 (trước: biết, muốn, nghĩ)
         assertEquals("thể", SuggestRank.contextNext("có", "bạn", 3)[0])
-        assertEquals("giáng", SuggestRank.contextNext("mừng", "chúc", 3)[0])
+        assertEquals("sinh", SuggestRank.contextNext("mừng", "chúc", 3)[0])   // vnlm hội thoại 18/10/2026 (trước: giáng)
         // không dòng trigram / không prev2 ⇒ y hệt bigram
         assertEquals(SuggestRank.bigramNext("điện", 3), SuggestRank.contextNext("điện", "hello", 3))
         assertEquals(SuggestRank.bigramNext("điện", 3), SuggestRank.contextNext("điện", null, 3))
@@ -183,11 +183,11 @@ class SuggestTrigramTests {
         val personal = { SensitiveWords.filter(m.nextWords("không", "tôi", 6), true) }
         val tc = { w: String -> m.trigramCount("tôi", "không", w) }
         // người dùng mới: trigram tĩnh dẫn
-        assertEquals(listOf("biết", "muốn", "nghĩ"), SuggestRank.nextFill("không", "tôi", personal(), tc))
+        assertEquals(listOf("biết", "thể", "muốn"), SuggestRank.nextFill("không", "tôi", personal(), tc))
         // gõ "tôi không đi" vài lượt ⇒ "đi" lên đầu, còn lại trigram tĩnh
         repeat(3) { m.record("tôi", null); m.record("không", "tôi"); m.record("đi", "không", "tôi") }
         val f = SuggestRank.nextFill("không", "tôi", personal(), tc)
-        assertEquals(listOf("đi", "biết", "muốn"), f)
+        assertEquals(listOf("đi", "biết", "thể"), f)
         // không prev2 ⇒ như cũ: cá nhân/seed trước
         val p1 = SensitiveWords.filter(m.nextWords("không", null, 6), true)
         assertEquals(p1.take(3), SuggestRank.nextFill("không", null, p1, { 0 }))

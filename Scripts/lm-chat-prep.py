@@ -332,6 +332,48 @@ def fineweb_batches(urls, stats, max_rg_per_shard, rg_step):
         stats["bytes-fetched"] += f.fetched
         print(f"{url}: {taken} row group, {f.fetched / 1e6:.0f} MB", file=sys.stderr, flush=True)
 
+# ---- lọc lỗi gõ sai dấu (sau khi có luồng id) --------------------------------------------
+
+def detypo(a):
+    """Nguồn hội thoại có lỗi gõ SAI DẤU ("có gắng" thay "cố gắng", 0,3 % số lần): chúng làm cặp
+    sai có điểm dương/ít âm hơn hẳn Wikipedia. Cặp (a, b) bị coi là lỗi gõ khi một cặp cùng dạng
+    không dấu (a', b') phổ biến hơn ≥ 1/ratio lần trong CHÍNH các nguồn hội thoại (và cặp đó
+    xuất hiện ≥ --min-max lần) ⇒ chèn chỗ đứt chuỗi giữa a và b (bỏ bigram + các trigram qua nó).
+    Cần numpy. Ghi NAME.dt.ids cạnh mỗi luồng."""
+    import numpy as np
+    words, _ = G.load_lexicon(a.lexicon)
+    fid = {}; fold_of = np.array([fid.setdefault(fold(w), len(fid)) for w in words], dtype=np.int64)
+    F = len(fid)
+    def bigrams(ids):
+        x = ids[:-1].astype(np.int64); y = ids[1:].astype(np.int64)
+        ok = (x != BR) & (y != BR)
+        return np.flatnonzero(ok), (x[ok] << 13) | y[ok]
+    keys, cnts = [], []
+    streams = [np.fromfile(p, dtype="<u2") for p in a.inputs]
+    for ids in streams:
+        _, k = bigrams(ids)
+        u, c = np.unique(k, return_counts=True); keys.append(u); cnts.append(c)
+    k = np.concatenate(keys); c = np.concatenate(cnts)
+    u, inv = np.unique(k, return_inverse=True); c = np.bincount(inv, weights=c).astype(np.int64)
+    fk = fold_of[u >> 13] * F + fold_of[u & 0x1FFF]
+    order = np.argsort(fk, kind="stable"); fks = fk[order]
+    starts = np.flatnonzero(np.r_[True, fks[1:] != fks[:-1]])
+    mx = np.maximum.reduceat(c[order], starts)
+    grp = np.repeat(np.arange(len(starts)), np.diff(np.r_[starts, len(fks)]))
+    gmax = np.empty_like(c); gmax[order] = mx[grp]
+    bad = u[(gmax >= a.min_max) & (c * a.ratio_inv < gmax)]
+    print(f"cặp lỗi gõ dấu: {len(bad)} / {len(u)} (≥{a.min_max}, < 1/{a.ratio_inv} cặp cùng dạng)", file=sys.stderr)
+    wl = words
+    for i in np.argsort(-c[np.isin(u, bad)])[:40]:
+        kk = u[np.isin(u, bad)][i]
+        print("  ", wl[kk >> 13], wl[kk & 0x1FFF], int(c[np.isin(u, bad)][i]), file=sys.stderr)
+    for p, ids in zip(a.inputs, streams):
+        pos, k = bigrams(ids)
+        hit = pos[np.isin(k, bad)]
+        out = np.insert(ids, hit + 1, BR)
+        out.astype("<u2").tofile(p[:-4] + ".dt.ids")
+        print(f"{os.path.basename(p)}: đứt thêm {len(hit)} chỗ", file=sys.stderr)
+
 # ---- main --------------------------------------------------------------------------------
 
 class Bloom:
@@ -347,6 +389,13 @@ class Bloom:
         return seen
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "detypo":
+        ap = argparse.ArgumentParser()
+        ap.add_argument("cmd"); ap.add_argument("inputs", nargs="+")
+        ap.add_argument("--lexicon", default=os.path.join(HERE, "..", "iOS/Keyboard/Resources/vnlexicon.bin"))
+        ap.add_argument("--ratio-inv", type=int, default=100)
+        ap.add_argument("--min-max", type=int, default=50)
+        return detypo(ap.parse_args())
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=["opus", "fineweb"])
     ap.add_argument("inputs", nargs="+")

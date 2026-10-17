@@ -8,9 +8,12 @@ License: MIT
 
 Files: iOS/Keyboard/Resources/vnlm.bin
 Copyright: Wikimedia contributors (Vietnamese Wikipedia, Wikisource, Wikibooks,
- Wikivoyage, Wikiquote); Tatoeba contributors
+ Wikivoyage, Wikiquote); Tatoeba contributors; OpenSubtitles (http://www.opensubtitles.org/,
+ via OPUS OpenSubtitles v2024, P. Lison and J. Tiedemann 2016); FineWeb-2 (Hugging Face,
+ ODC-By 1.0, subject to Common Crawl Terms of Use)
 Comment: Installed as /usr/share/viettelex/vnlm.bin (viettelex-text-tools). Syllable
- n-gram statistics derived from those texts (CC BY-SA 4.0 / CC BY 2.0 FR); transformed:
+ n-gram statistics derived from those texts (CC BY-SA 4.0 / CC BY 2.0 FR / ODC-By 1.0;
+ teencode normalised with the ViSoLex dictionary, MIT); transformed:
  syllable split, n-gram counts, Kneser-Ney smoothing, pruning, quantisation,
  compression. Released under CC BY-SA 4.0. Sources: docs/DATA-SOURCES.md.
 License: CC-BY-SA-4.0

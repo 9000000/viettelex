@@ -54,18 +54,18 @@ Thu go tieng Viet khong dau xem sao.	Thử gõ tiếng Việt không dấu xem s
 Ngay mai minh se den truong hop lop cap 3.	Ngày mai mình sẽ đến trường hợp lớp cấp 3.
 chuc mung sinh nhat phan nhieu nguoi ta viet ve chuyen cuoc doi hang ngay toi khong biet y cua ban la gi cai nay rat la hap dan cuoc	chúc mừng sinh nhật phần nhiều người ta viết về chuyện cuộc đời hằng ngày tôi không biết ý của bạn là gì cái này rất là hấp dẫn cuộc
 tieng Viet co dau	tiếng Việt có dấu
-van ban khong dau nhe	văn bản không đâu nhé
+van ban khong dau nhe	văn bản không dấu nhé
 Thu go dau xem	Thử gõ dấu xem
 go vuot tren ban phim	gõ vuốt trên bàn phím
 bop vu	bóp vú
 bop dai	bóp dái
 lam gi co dau	làm gì có đâu
-co dau	cô dâu
+co dau	có dấu
 co dau chu re	cô dâu chú rể
 leu bao	lều báo
 xiu ngang luon	xỉu ngang luôn
 chuyen khoan cho minh nhe	chuyển khoản cho mình nhé
-so cu khong dung nua	sở cứ không dùng nữa
+so cu khong dung nua	sở cũ không dùng nữa
 xin so dien thoai	xin số điện thoại
 di qua dinh nui	đi qua đỉnh núi
 co hoi viec lam	cơ hội việc làm

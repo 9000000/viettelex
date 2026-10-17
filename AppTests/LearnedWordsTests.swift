@@ -112,11 +112,12 @@ final class LearnedWordsTests: XCTestCase {
 
     func testLearnedTrigramLeadsStaticTrigram() {
         let m = model()
-        type(m, "cảm ơn anh", times: 3)
-        XCTAssertEqual(next("cảm ơn ", m).first, "anh")
+        // "sếp": không phải top trigram tĩnh sau "cảm ơn" (vnlm hội thoại 18/10/2026: anh; trước: cậu)
+        type(m, "cảm ơn sếp", times: 3)
+        XCTAssertEqual(next("cảm ơn ", m).first, "sếp")
         let once = model()
-        type(once, "cảm ơn anh")
-        XCTAssertNotEqual(next("cảm ơn ", once).first, "anh")
+        type(once, "cảm ơn sếp")
+        XCTAssertNotEqual(next("cảm ơn ", once).first, "sếp")
     }
 
     func testUnknownWordNeedsThreeTimes() {
