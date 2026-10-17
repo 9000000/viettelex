@@ -265,7 +265,29 @@ enum FocusedRole {
         #if DEBUG
         if let v = _testOverride { return v }
         #endif
-        return capitalizesAtStart(role: focusedRole())
+        // KHÔNG đọc AX trong handle(): app (Notes) đang chờ IME trả phím ⇒ AX hết giờ
+        // (-25204, đo 17/10/2026). Dùng vai trò đã đọc lúc kích hoạt ô (refreshAsync).
+        let cached = lock.withLock { cachedRole }
+        if let cached { return capitalizesAtStart(role: cached.isEmpty ? nil : cached) }
+        return capitalizesAtStart(role: nil)
+    }
+
+    private static let lock = NSLock()
+    private static var cachedRole: String?          // nil = chưa đọc; "" = đọc không được
+    private static var generation = 0
+
+    #if DEBUG
+    static func _testSetCachedRole(_ r: String?) { lock.withLock { cachedRole = r } }
+    #endif
+
+    /// Gọi ở activateServer (ô mới): xoá vai trò cũ, đọc lại NGOÀI lượt phím (app rảnh).
+    /// Chỉ khi cài đặt viết hoa đang bật ⇒ tắt = không tốn gì.
+    static func refreshAsync() {
+        let gen: Int = lock.withLock { generation += 1; cachedRole = nil; return generation }
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.05) {
+            let role = focusedRole() ?? ""
+            lock.withLock { if generation == gen { cachedRole = role } }
+        }
     }
 
     static func capitalizesAtStart(role: String?) -> Bool {
@@ -281,16 +303,46 @@ enum FocusedRole {
         let sys = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(sys, 0.05)
         var ref: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(sys, kAXFocusedUIElementAttribute as CFString, &ref) == .success,
-              let f = ref, CFGetTypeID(f) == AXUIElementGetTypeID() else { return nil }
+        var err = AXUIElementCopyAttributeValue(sys, kAXFocusedUIElementAttribute as CFString, &ref)
+        if err != .success, let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier {
+            // Hệ thống không trả phần tử focus (Notes: ô tìm / thay thế ⌘F) ⇒ hỏi thẳng app.
+            let app = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(app, 0.05)
+            err = AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &ref)
+        }
+        guard err == .success, let f = ref, CFGetTypeID(f) == AXUIElementGetTypeID() else {
+            if AppState.shared.debugLogging {
+                Signposts.log.notice("focused role unavailable err=\(err.rawValue, privacy: .public)")
+            }
+            return nil
+        }
         let el = f as! AXUIElement
         AXUIElementSetMessagingTimeout(el, 0.05)
         var roleRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(el, kAXRoleAttribute as CFString, &roleRef) == .success,
               let role = roleRef as? String else { return nil }
         var sub: CFTypeRef?
-        if AXUIElementCopyAttributeValue(el, kAXSubroleAttribute as CFString, &sub) == .success,
-           (sub as? String) == (kAXSearchFieldSubrole as String) { return "AXSearchField" }
+        let subrole = AXUIElementCopyAttributeValue(el, kAXSubroleAttribute as CFString, &sub) == .success
+            ? sub as? String : nil
+        if AppState.shared.debugLogging {
+            var parentRole = "-"
+            var p: CFTypeRef?
+            if AXUIElementCopyAttributeValue(el, kAXParentAttribute as CFString, &p) == .success, let p,
+               CFGetTypeID(p) == AXUIElementGetTypeID() {
+                var pr: CFTypeRef?
+                if AXUIElementCopyAttributeValue(p as! AXUIElement, kAXRoleAttribute as CFString, &pr) == .success {
+                    parentRole = (pr as? String) ?? "-"
+                }
+            }
+            var sz = CGSize.zero
+            var sv: CFTypeRef?
+            if AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &sv) == .success, let sv,
+               CFGetTypeID(sv) == AXValueGetTypeID() { AXValueGetValue(sv as! AXValue, .cgSize, &sz) }
+            let line = "focused role=\(role) subrole=\(subrole ?? "-") parent=\(parentRole) size=\(Int(sz.width))x\(Int(sz.height))"
+            DebugLog.log(line)
+            Signposts.log.notice("\(line, privacy: .public)")
+        }
+        if subrole == (kAXSearchFieldSubrole as String) { return "AXSearchField" }
         return role
     }
 }

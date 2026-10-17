@@ -2196,6 +2196,11 @@ final class TelexInputController: IMKInputController {
                 }
             }
         }
+        if AppState.shared.debugLogging {
+            let line = "autocap \(id ?? "?"): known=\(known.map { "\($0.count)ch" } ?? "nil") caret=\(caret.map(String.init) ?? "nil") → \(ctx)"
+            DebugLog.log(line)
+            Signposts.log.notice("\(line, privacy: .public)")
+        }
         return ctx == .capitalize
     }
 
@@ -2425,6 +2430,7 @@ final class TelexInputController: IMKInputController {
         // Dấu chấm đúp-cách / viết hoa đầu câu / ngoặc cong-gạch dài: đọc lại cài đặt macOS
         // (≤ 1 lần/giây) — đổi trong System Settings rồi quay lại app là có hiệu lực.
         SystemAutoTextSettings.shared.refresh()
+        if SystemAutoTextSettings.shared.current.capitalize { FocusedRole.refreshAsync() }
         // Tap-side view of this activation: focus epoch for re-edit(tap) (#111) and
         // the overlay-launcher latch (#110). Before anything else reads the client.
         ClientFocus.noteActivated(client: activatedClient != nil ? AppState.shared.currentBundleID : nil)

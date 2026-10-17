@@ -186,4 +186,16 @@ final class SystemAutoTextTests: XCTestCase {
         XCTAssertFalse(FocusedRole.capitalizesAtStart(role: "AXSearchField"))
         XCTAssertFalse(FocusedRole.capitalizesAtStart(role: "AXComboBox"))
     }
+
+    /// Hồi quy (Phil 17/10/2026): ô tìm/thay thế ⌘F của Notes bị viết hoa — đọc AX trong lượt
+    /// phím hết giờ (-25204) ⇒ coi là ô soạn thảo. Nay dùng vai trò đọc lúc kích hoạt ô.
+    func testTextStartUsesRoleCachedAtActivation() {
+        defer { FocusedRole._testSetCachedRole(nil) }
+        FocusedRole._testSetCachedRole("AXTextField")
+        XCTAssertFalse(FocusedRole.isMultilineText())
+        FocusedRole._testSetCachedRole("AXTextArea")
+        XCTAssertTrue(FocusedRole.isMultilineText())
+        FocusedRole._testSetCachedRole("")            // đọc không được ⇒ như ô soạn thảo
+        XCTAssertTrue(FocusedRole.isMultilineText())
+    }
 }
