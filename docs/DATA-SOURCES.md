@@ -113,6 +113,17 @@ Fixture `add-tones.txt`: "tự do", "biển Nha Trang" đúng ra; "năm sáu" (�
 Câu Phil 18/10/2026 "…gõ tiếng Việt không dấu" vẫn ra "không đâu": vnlm.bin không có mục
 (không, dấu) nào — bigram lẫn trigram — nên đây là thiếu dữ liệu, không phải thiếu ngữ cảnh.
 
+**18/10/2026 — cặp chọn tay (`Scripts/curated-pairs.txt` → `CuratedPairs` Swift/Kotlin/C++,
+`Scripts/gen-curated-pairs.py [--check]`).** ~70 cặp/bộ ba chỉ để PHÂN ĐỊNH DẤU ở chỗ vnlm.bin
+thiếu/yếu (gõ dấu, thử gõ, [việt] không dấu, bóp vú, lều báo, tiếng lóng Gen-Z…) — không nạp vào
+UserLangModel, không phải seed từ kế tiếp. Thêm dấu: chuyển có trong bảng ⇒ số hạng cặp ≥
+`curatedW` = 8 nat (6 chưa lật nửa số cặp lóng; 8 ≈ 10), mọi nền tảng; người dùng đã gõ cặp khác
+≥ 3 lần ở vị trí đó ⇒ bảng tắt. Vuốt: từ chọn tay sau (prev2, prev) +3.0 trong `Context.word`, và
+sửa chung hai từ vuốt (`SwipeRevise.revise`) cộng cùng mức cho cặp. Gợi ý đang gõ dở: từ chọn tay
+vào `ctx` của `rankInline`. Heldout Thêm dấu giữ nguyên **96,45 % / 81,1 %** (không câu nào đổi).
+Mỗi cặp thử thêm trên câu thường; cặp lật câu thường bị bỏ (từ từ → tự tử, cơ hội → có hơi mệt,
+quá đỉnh → qua đỉnh núi…) hoặc chỉ cho vuốt (`~`: sờ cu ↔ số cũ, xịn sò ↔ xin số, cô dâu).
+
 ### Mô hình
 
 Kneser-Ney nội suy bậc 3 (D = 0.75), lưu s = ln(P(c | 2 âm tiết trước) / P₁(c)) — có cả

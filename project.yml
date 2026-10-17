@@ -59,6 +59,8 @@ targets:
       # L("…") của TextTools (giao diện tiếng Anh, b8da26e) — chỉ Foundation.
       - path: iOS/Shared/L10n.swift
       - path: iOS/Keyboard/AddTones.swift
+      #  • cặp chọn tay (Scripts/curated-pairs.txt) — Thêm dấu dùng chung với iOS/Android/Windows.
+      - path: iOS/Keyboard/CuratedPairs.swift
       - path: iOS/Keyboard/SwipeLexicon.swift
       - path: iOS/Keyboard/SwipeEnglish.swift
       - path: iOS/Keyboard/VNSuggest.swift

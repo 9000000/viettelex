@@ -1702,8 +1702,10 @@ final class KeyboardViewController: UIInputViewController {
             // nextWords mỗi keystroke trong lúc đang gõ dở một từ.
             let ctxKey = (lastWord ?? "") + "\u{1}" + (lastWord2 ?? "")
             if ctxKey != ctxCacheKey {
+                // + cặp chọn tay (CuratedPairs) — chỉ xếp gợi ý đang gõ dở, không thêm từ kế tiếp
                 ctxCache = lastWord.map {
-                    Set(langModel.nextWords(after: $0, prev2: lastWord2, limit: 24))
+                    Set(CuratedPairs.withNext(langModel.nextWords(after: $0, prev2: lastWord2, limit: 24),
+                                              after: $0, prev2: lastWord2))
                 } ?? []
                 ctxCacheKey = ctxKey
             }

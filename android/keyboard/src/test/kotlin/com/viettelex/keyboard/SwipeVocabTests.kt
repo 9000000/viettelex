@@ -88,11 +88,12 @@ class SwipeVocabTests {
         return p.text to (s.swipeAlternatives ?: emptyList())
     }
 
-    /** Muốn gõ → (lọc tắt) ra thực tế. Lệch còn lại do LM thiếu cặp (vãi/vài, ngu/ngủ, vú/vụ…), xem báo cáo. */
+    /** Muốn gõ → (lọc tắt) ra thực tế. Cặp chọn tay (CuratedPairs, 18/10/2026) sửa vãi lồn, ngu vl, bóp dái/vú,
+     *  mò cu; còn lệch: "vãi cả lồn" (cặp không liền), "sờ cu" (decoder ra dạng "chu" trước khi bung dấu). */
     private val phil = listOf(
-        "địt con mẹ" to "Địt con mẹ", "vãi lồn" to "Vài lồn", "vãi cả lồn" to "Vài cả lồn",
-        "dkm" to "Đkm", "đcm" to "Đcm", "ngu vl" to "Ngủ vl", "buscu" to "Buscu",
-        "ko" to "Ko", "bóp dái" to "Bóp dài", "sờ cu" to "Sợ chứ", "mò cu" to "Mở chứ", "bóp vú" to "Bóp vũ",
+        "địt con mẹ" to "Địt con mẹ", "vãi lồn" to "Vãi lồn", "vãi cả lồn" to "Vài cả lồn",
+        "dkm" to "Đkm", "đcm" to "Đcm", "ngu vl" to "Ngu vl", "buscu" to "Buscu",
+        "ko" to "Ko", "bóp dái" to "Bóp dái", "sờ cu" to "Sợ chứ", "mò cu" to "Mò cu", "bóp vú" to "Bóp vú",
         "móc lồn" to "Móc lớn",
     )
 

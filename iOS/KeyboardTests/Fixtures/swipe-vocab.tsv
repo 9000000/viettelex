@@ -45,10 +45,10 @@ P	1	F	đcm	Đêm
 P	1	F	ngu vl	Như vợ
 P	1	F	buscu	Nhau
 P	1	F	ko	Ko
-P	1	F	bóp dái	Bóp đại
-P	1	F	sờ cu	Sơ cứu
-P	1	F	mò cu	Mộ cụ
-P	1	F	bóp vú	Bóp vụ
+P	1	F	bóp dái	Bóp dái
+P	1	F	sờ cu	Sờ cu
+P	1	F	mò cu	Mò cu
+P	1	F	bóp vú	Bóp vú
 P	1	F	móc lồn	Móc lớn
 P	1	F	lồn	Lớn
 P	1	F	địt	Đít
@@ -134,17 +134,17 @@ E	0	vl	vl:1.4706
 E	0	vs	vs:1.0784
 E	0	wtf	wtf:1.4706
 P	0	F	địt con mẹ	Địt con mẹ
-P	0	F	vãi lồn	Vài lồn
+P	0	F	vãi lồn	Vãi lồn
 P	0	F	vãi cả lồn	Vài cá lớn
 P	0	F	dkm	Đkm
 P	0	F	đcm	Đcm
-P	0	F	ngu vl	Ngủ vl
+P	0	F	ngu vl	Ngu vl
 P	0	F	buscu	Buscu
 P	0	F	ko	Ko
-P	0	F	bóp dái	Bóp đại
-P	0	F	sờ cu	Sơ cứu
-P	0	F	mò cu	Mộ cụ
-P	0	F	bóp vú	Bóp vụ
+P	0	F	bóp dái	Bóp dái
+P	0	F	sờ cu	Sờ cu
+P	0	F	mò cu	Mò cu
+P	0	F	bóp vú	Bóp vú
 P	0	F	móc lồn	Móc lồn
 P	0	F	lồn	Lớn
 P	0	F	địt	Địt

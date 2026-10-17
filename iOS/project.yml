@@ -207,6 +207,7 @@ targets:
       - App/Backup/BackupStore.swift
       - Keyboard/SwipeEnglish.swift
       - Keyboard/AddTones.swift
+      - Keyboard/CuratedPairs.swift
       - Keyboard/SyllableLM.swift
       - Keyboard/FutoSwipeModel.swift
       - Keyboard/FutoSwipe.swift

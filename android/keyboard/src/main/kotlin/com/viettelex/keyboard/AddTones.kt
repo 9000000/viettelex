@@ -22,6 +22,10 @@ import kotlin.math.min
  *              i−1, ứng viên i); có mục trigram TƯỜNG MINH (q, r, s) trong vnlm.bin thì PMI của
  *              chuyển r → s = s3 + uniAdj (Context.trigram) thay cho PMI bigram, thiếu thì giữ
  *              bigram (không cộng phạt lùi γ3 — đo trên tập dev: kém hơn).
+ *   CẶP CHỌN TAY (18/10/2026, [CuratedPairs] — Scripts/curated-pairs.txt): chuyển (r → s) hoặc
+ *              (q, r → s) có trong bảng ⇒ số hạng cặp = max(cá nhân, CURATED_W) — mọi nền tảng.
+ *              NGƯỜI DÙNG THẮNG: ở vị trí mà người dùng đã gõ một cặp KHÔNG trong bảng
+ *              ≥ CURATED_YIELD lần (count cặp cá nhân, gồm seed), bảng tắt cho vị trí đó.
  * Chuỗi bị cắt ở dấu câu / token giữ nguyên. GIỮ NGUYÊN: token không phải dạng Việt (tiếng
  * Anh, tên riêng lạ, số, URL, email, chữ có số/ký hiệu bên trong, camelCase), token có dấu.
  * Token vừa là dạng Việt vừa là từ Anh (the, can, to…) giữ nguyên khi kề một từ chắc chắn
@@ -42,6 +46,10 @@ object AddTones {
         val personalBi: Double = PERSONAL_BI,
         /** Viterbi bậc 2 dùng trigram tường minh; false = chỉ bigram (mốc đo heldout). */
         val trigram: Boolean = true,
+        /** Cộng cặp chọn tay ([CuratedPairs]); false = mốc đo. */
+        val curated: Boolean = true,
+        val curatedW: Double = CURATED_W,
+        val curatedYield: Int = CURATED_YIELD,
     )
 
     const val FREQ_W = 10.0
@@ -49,6 +57,11 @@ object AddTones {
     const val PMI_FLOOR = -2.5
     const val PERSONAL_UNI = 0.1
     const val PERSONAL_BI = 1.0
+    /** Số hạng cặp tối thiểu của chuyển có trong [CuratedPairs] (nat). Chọn 18/10/2026: 6 chưa lật
+     *  được nửa số cặp lóng, 8 ≈ 10; heldout giữ nguyên 0.9645 / câu 0.811. */
+    const val CURATED_W = 8.0
+    /** Người dùng gõ một cặp khác (không trong bảng) ≥ chừng này lần ở cùng vị trí ⇒ bảng tắt. */
+    const val CURATED_YIELD = 3
     /** Trần count cá nhân (đừng để một từ gõ nhiều lấn hết ngữ cảnh). */
     const val PERSONAL_CAP = 50
     /** Giới hạn độ dài xử lý (âm tiết ứng viên trong đoạn). */
@@ -56,6 +69,31 @@ object AddTones {
 
     /** Dữ liệu cá nhân (UserLangModel) — null ⇒ chỉ dữ liệu tĩnh. */
     class Personal(val count: (String) -> Int, val pair: (String, String) -> Int)
+
+    /**
+     * Số hạng cặp (a → b): cá nhân PERSONAL_BI·ln(1 + min(count, trần)); [on] và (x, a → b) có trong
+     * [CuratedPairs] ([x] = âm tiết trước a, null = không xét bộ ba) ⇒ max(…, curatedW).
+     */
+    private fun pairTerm(personal: Personal?, p: Params, on: Boolean, x: String?, a: String, b: String): Double {
+        var t = 0.0
+        if (personal != null) {
+            val c = min(personal.pair(a, b), PERSONAL_CAP)
+            if (c > 0) t = p.personalBi * ln(1.0 + c)
+        }
+        if (on && CuratedPairs.has(x, a, b)) t = maxOf(t, p.curatedW)
+        return t
+    }
+
+    /** Bảng chọn tay có áp ở chuyển giữa hai cột ứng viên không: tắt khi người dùng đã gõ một
+     *  cặp (a[r], b[s]) KHÔNG trong bảng ≥ curatedYield lần. */
+    private fun curatedOn(personal: Personal?, p: Params, a: Array<String>, b: Array<String>): Boolean {
+        if (!p.curated) return false
+        if (personal == null) return true
+        for (x in a) for (y in b) {
+            if (personal.pair(x, y) >= p.curatedYield && !CuratedPairs.anyContext(x, y)) return false
+        }
+        return true
+    }
 
     /** Kết quả khôi phục một đoạn. */
     class Result(val text: String, val vnTokens: Int, val enTokens: Int, val changed: Int)
@@ -227,6 +265,7 @@ object AddTones {
         val back = Array(n) { IntArray(ids[it].size) }
         for (i in 0 until n) {
             val rows = if (i > 0 && lm != null) Array(ids[i - 1].size) { lm.bigram(ids[i - 1][it]) } else null
+            val on = i > 0 && curatedOn(personal, p, words[i - 1], words[i])
             for (s in ids[i].indices) {
                 var emit = p.freqW * VNSuggest.freq(ids[i][s]) / 255.0
                 if (personal != null) {
@@ -241,10 +280,7 @@ object AddTones {
                         val row = rows[r]
                         if (row.size > 0) tr = p.bigramW * maxOf(p.floor, row.pmi(ids[i][s]).toDouble())
                     }
-                    if (personal != null) {
-                        val c = min(personal.pair(words[i - 1][r], words[i][s]), PERSONAL_CAP)
-                        if (c > 0) tr += p.personalBi * ln(1.0 + c)
-                    }
+                    tr += pairTerm(personal, p, on, null, words[i - 1][r], words[i][s])
                     val v = score[i - 1][r] + tr
                     if (v > best) { best = v; arg = r }
                 }
@@ -279,14 +315,11 @@ object AddTones {
             }
             return e
         }
-        fun pairs(i: Int): DoubleArray? {
-            if (personal == null) return null
+        /** Cặp (r ở i−1, s ở i), cá nhân + chọn tay không kèm bộ ba: pers[r·kc + s]. */
+        fun pairs(i: Int, on: Boolean): DoubleArray {
             val kb = ids[i - 1].size; val kc = ids[i].size
             val out = DoubleArray(kb * kc)
-            for (r in 0 until kb) for (s in 0 until kc) {
-                val c = min(personal.pair(words[i - 1][r], words[i][s]), PERSONAL_CAP)
-                if (c > 0) out[r * kc + s] = p.personalBi * ln(1.0 + c)
-            }
+            for (r in 0 until kb) for (s in 0 until kc) out[r * kc + s] = pairTerm(personal, p, on, null, words[i - 1][r], words[i][s])
             return out
         }
         fun bigrams(i: Int): DoubleArray {
@@ -302,12 +335,12 @@ object AddTones {
         val k1 = ids[1].size
         var prev = DoubleArray(ids[0].size * k1)
         run {
-            val bi = bigrams(1); val pers = pairs(1)
+            val bi = bigrams(1); val pers = pairs(1, curatedOn(personal, p, words[0], words[1]))
             for (r in ids[0].indices) {
                 val e0 = emit(0, r)
                 for (s in 0 until k1) {
                     var tr = bi[r * k1 + s]
-                    if (pers != null) tr += pers[r * k1 + s]
+                    tr += pers[r * k1 + s]
                     prev[r * k1 + s] = e0 + tr + emit(1, s)
                 }
             }
@@ -316,7 +349,8 @@ object AddTones {
         for (i in 2 until n) {
             val a = ids[i - 2]; val b = ids[i - 1]; val c = ids[i]
             val ka = a.size; val kb = b.size; val kc = c.size
-            val bi = bigrams(i); val pers = pairs(i)
+            val on = curatedOn(personal, p, words[i - 1], words[i])
+            val bi = bigrams(i); val pers = pairs(i, on)
             val em = DoubleArray(kc) { emit(i, it) }
             // tr[(q·kb + r)·kc + s]: bigram, mục trigram tường minh đè lên
             val tr = DoubleArray(ka * kb * kc)
@@ -330,7 +364,17 @@ object AddTones {
                     if (!v.isNaN()) tr[base + s] = p.bigramW * maxOf(p.floor, v.toDouble())
                 }
             }
-            if (pers != null) for (q in 0 until ka) for (j in 0 until kb * kc) tr[q * kb * kc + j] += pers[j]
+            // cặp: cá nhân + chọn tay; bộ ba chọn tay (q, r → s) tính lại số hạng cặp với ngữ cảnh q
+            for (q in 0 until ka) {
+                val wq = words[i - 2][q]
+                for (r in 0 until kb) {
+                    val tq = on && CuratedPairs.hasTriple(wq, words[i - 1][r])
+                    val base = (q * kb + r) * kc
+                    for (s in 0 until kc) {
+                        tr[base + s] += if (tq) pairTerm(personal, p, on, wq, words[i - 1][r], words[i][s]) else pers[r * kc + s]
+                    }
+                }
+            }
             val cur = DoubleArray(kb * kc)
             val bk = IntArray(kb * kc)
             for (r in 0 until kb) for (s in 0 until kc) {

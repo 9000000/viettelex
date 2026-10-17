@@ -216,6 +216,11 @@ struct Params {
     /// Second-order Viterbi: an explicit trigram entry (prev2, prev1, next) overrides the bigram
     /// PMI of the transition; false = first-order bigram only (measurement baseline).
     bool trigram = true;
+    /// Hand-curated pairs (curated_pairs.inc, Scripts/curated-pairs.txt): a transition (r → s) or
+    /// (q, r → s) in the table scores at least curatedW (no personal model on Windows, so the
+    /// "user wins" yield of the Swift/Kotlin code never triggers here). false = measurement baseline.
+    bool curated = true;
+    double curatedW = 8.0;
 };
 
 struct Result {
