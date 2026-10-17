@@ -4,6 +4,16 @@
 import XCTest
 
 final class AddTonesTests: XCTestCase {
+    /// Ba câu Phil thử trên macOS 18/10/2026 (số trong câu, vần iê/uô/ươ, "go" giữa câu) —
+    /// chip Thêm dấu iOS phải thay CẢ câu.
+    func testPhilSentencesFromMacFeedback() {
+        let cases = ["Ngay mai minh se den truong hop lop cap 3.", "Thu go tieng Viet khong dau xem sao.",
+                     "Minh dang go tieng Viet khong dau."]
+        for c in cases {
+            XCTAssertNotNil(AddTones.plan(c), c)
+        }
+    }
+
     private func fixture(_ name: String) throws -> [String] {
         let url = try XCTUnwrap(Bundle(for: AddTonesTests.self).url(forResource: name, withExtension: "txt"))
         return try String(contentsOf: url, encoding: .utf8).components(separatedBy: "\n")
