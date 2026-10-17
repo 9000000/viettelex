@@ -110,6 +110,9 @@ public:
     public:
         bool hasTrigram() const { return triBase_ >= 0; }
         int bigramSize() const { return bi_.hi - bi_.lo; }
+        /// Explicit trigram entry (prev2, prev1, w) only: true + pmi = s3 + uniAdj
+        /// (Swift SyllableLM.forEachTrigram — Thêm dấu's second-order Viterbi).
+        bool trigramPmi(int w, float& pmi) const;
         /// PMI of an EXPLICIT entry: trigram s3 + uniAdj, else bigram s2 + uniAdj, else 0
         /// (Context.explicit / explicitAll).
         float explicitPmi(int w) const;
@@ -210,6 +213,9 @@ struct Params {
     double freqW = 10.0;
     double bigramW = 1.0;
     double floor = -2.5;
+    /// Second-order Viterbi: an explicit trigram entry (prev2, prev1, next) overrides the bigram
+    /// PMI of the transition; false = first-order bigram only (measurement baseline).
+    bool trigram = true;
 };
 
 struct Result {

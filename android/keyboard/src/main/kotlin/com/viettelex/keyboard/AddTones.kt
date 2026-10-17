@@ -18,6 +18,10 @@ import kotlin.math.min
  *   chuyển   = BIGRAM_W·max(PMI_FLOOR, PMI(âm tiết trước → âm tiết này)) + PERSONAL_BI·ln(1+count
  *              cặp cá nhân); PMI = bigram Kneser-Ney của vnlm.bin (SyllableLM.bigram — có điểm
  *              ÂM, thiếu mục ⇒ lùi γ2); âm tiết trước không có dòng bigram nào ⇒ 0.
+ *   TRIGRAM (18/10/2026, [viterbi3], chuỗi ≥ 3 âm tiết): Viterbi bậc 2, trạng thái = (ứng viên
+ *              i−1, ứng viên i); có mục trigram TƯỜNG MINH (q, r, s) trong vnlm.bin thì PMI của
+ *              chuyển r → s = s3 + uniAdj (Context.trigram) thay cho PMI bigram, thiếu thì giữ
+ *              bigram (không cộng phạt lùi γ3 — đo trên tập dev: kém hơn).
  * Chuỗi bị cắt ở dấu câu / token giữ nguyên. GIỮ NGUYÊN: token không phải dạng Việt (tiếng
  * Anh, tên riêng lạ, số, URL, email, chữ có số/ký hiệu bên trong, camelCase), token có dấu.
  * Token vừa là dạng Việt vừa là từ Anh (the, can, to…) giữ nguyên khi kề một từ chắc chắn
@@ -36,6 +40,8 @@ object AddTones {
         val floor: Double = PMI_FLOOR,
         val personalUni: Double = PERSONAL_UNI,
         val personalBi: Double = PERSONAL_BI,
+        /** Viterbi bậc 2 dùng trigram tường minh; false = chỉ bigram (mốc đo heldout). */
+        val trigram: Boolean = true,
     )
 
     const val FREQ_W = 10.0
@@ -213,6 +219,10 @@ object AddTones {
             IntArray(forms.idStart[f + 1] - forms.idStart[f]) { forms.idStart[f] + it }
         }
         val words = Array(n) { i -> Array(ids[i].size) { VNSuggest.display(ids[i][it]) } }
+        if (p.trigram && lm != null && n >= 3) {
+            viterbi3(ids, words, from, personal, p, lm, chosen)
+            return
+        }
         val score = Array(n) { DoubleArray(ids[it].size) }
         val back = Array(n) { IntArray(ids[it].size) }
         for (i in 0 until n) {
@@ -248,6 +258,106 @@ object AddTones {
             chosen[from + i] = words[i][s]
             s = back[i][s]
         }
+    }
+
+    /**
+     * Viterbi bậc 2 (song sinh Swift `viterbi3` + C++ windows/engine/src/add_tones.cpp — giữ y hệt
+     * thứ tự phép tính để ra cùng kết quả). Trạng thái (r ở i−1, s ở i):
+     *   S1[r][s] = emit0[r] + tr(·, r, s) + emit1[s]
+     *   Si[r][s] = max_q S(i−1)[q][r] + tr(q, r, s) + emit_i[s]   (hoà → q nhỏ nhất)
+     * tr(q, r, s) = bigramW·max(floor, pmi) + cá nhân(r, s): pmi = trigram tường minh (q, r, s)
+     * nếu có, không thì PMI bigram r → s như bậc 1 (0 nếu r không có dòng bigram).
+     */
+    private fun viterbi3(ids: Array<IntArray>, words: Array<Array<String>>, from: Int, personal: Personal?,
+                         p: Params, lm: SyllableLM, chosen: Array<String?>) {
+        val n = ids.size
+        fun emit(i: Int, s: Int): Double {
+            var e = p.freqW * VNSuggest.freq(ids[i][s]) / 255.0
+            if (personal != null) {
+                val c = min(personal.count(words[i][s]), PERSONAL_CAP)
+                if (c > 0) e += p.personalUni * ln(1.0 + c)
+            }
+            return e
+        }
+        fun pairs(i: Int): DoubleArray? {
+            if (personal == null) return null
+            val kb = ids[i - 1].size; val kc = ids[i].size
+            val out = DoubleArray(kb * kc)
+            for (r in 0 until kb) for (s in 0 until kc) {
+                val c = min(personal.pair(words[i - 1][r], words[i][s]), PERSONAL_CAP)
+                if (c > 0) out[r * kc + s] = p.personalBi * ln(1.0 + c)
+            }
+            return out
+        }
+        fun bigrams(i: Int): DoubleArray {
+            val b = ids[i - 1]; val c = ids[i]
+            val out = DoubleArray(b.size * c.size)
+            for (r in b.indices) {
+                val row = lm.bigram(b[r])
+                if (row.size <= 0) continue
+                for (s in c.indices) out[r * c.size + s] = p.bigramW * maxOf(p.floor, row.pmi(c[s]).toDouble())
+            }
+            return out
+        }
+        val k1 = ids[1].size
+        var prev = DoubleArray(ids[0].size * k1)
+        run {
+            val bi = bigrams(1); val pers = pairs(1)
+            for (r in ids[0].indices) {
+                val e0 = emit(0, r)
+                for (s in 0 until k1) {
+                    var tr = bi[r * k1 + s]
+                    if (pers != null) tr += pers[r * k1 + s]
+                    prev[r * k1 + s] = e0 + tr + emit(1, s)
+                }
+            }
+        }
+        val back = arrayOfNulls<IntArray>(n)
+        for (i in 2 until n) {
+            val a = ids[i - 2]; val b = ids[i - 1]; val c = ids[i]
+            val ka = a.size; val kb = b.size; val kc = c.size
+            val bi = bigrams(i); val pers = pairs(i)
+            val em = DoubleArray(kc) { emit(i, it) }
+            // tr[(q·kb + r)·kc + s]: bigram, mục trigram tường minh đè lên
+            val tr = DoubleArray(ka * kb * kc)
+            for (q in 0 until ka) for (r in 0 until kb) {
+                val base = (q * kb + r) * kc
+                System.arraycopy(bi, r * kc, tr, base, kc)
+                val x = lm.context(a[q], b[r]) ?: continue
+                if (!x.hasTrigram) continue
+                for (s in 0 until kc) {
+                    val v = x.trigram(c[s])
+                    if (!v.isNaN()) tr[base + s] = p.bigramW * maxOf(p.floor, v.toDouble())
+                }
+            }
+            if (pers != null) for (q in 0 until ka) for (j in 0 until kb * kc) tr[q * kb * kc + j] += pers[j]
+            val cur = DoubleArray(kb * kc)
+            val bk = IntArray(kb * kc)
+            for (r in 0 until kb) for (s in 0 until kc) {
+                var best = Double.NEGATIVE_INFINITY; var arg = 0
+                for (q in 0 until ka) {
+                    val v = prev[q * kb + r] + tr[(q * kb + r) * kc + s]
+                    if (v > best) { best = v; arg = q }
+                }
+                cur[r * kc + s] = best + em[s]
+                bk[r * kc + s] = arg
+            }
+            back[i] = bk
+            prev = cur
+        }
+        val kc = ids[n - 1].size
+        var top = 0
+        for (x in 1 until prev.size) if (prev[x] > prev[top]) top = x
+        var r = top / kc; var s = top % kc
+        var i = n - 1
+        while (i >= 1) {
+            chosen[from + i] = words[i][s]
+            if (i == 1) break
+            val q = back[i]!![r * ids[i].size + s]
+            s = r; r = q
+            i--
+        }
+        chosen[from] = words[0][r]
     }
 
     /**

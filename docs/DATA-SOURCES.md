@@ -95,6 +95,24 @@ bảng cũ chỉ có "thiếu cặp = −0.5"). Đổi trên fixture parity `add
 tỉa (+0,3–0,9 MB) chỉ +0,05 điểm, không sửa được 2 câu trên; Viterbi trigram −0,6 điểm ⇒ không
 giữ.
 
+**18/10/2026 — Thêm dấu dùng trigram (Viterbi bậc 2, `AddTones.viterbi3`).** Bản trigram −0,6 điểm
+ở trên chấm cả phần lùi Kneser-Ney (γ3 + s2): chuỗi đi qua ngữ cảnh có dòng trigram "đầy" bị phạt
+γ3 < 0 cho mọi tiếp nối vắng mặt. Bản giữ lại chỉ dùng mục trigram TƯỜNG MINH (q, r, s) thay PMI
+bigram của chuyển r → s, thiếu thì giữ bigram (tham số cũ, chọn trên tập dev: λ trộn 1, sàn −2.5,
+freqW 10; thêm phạt γ3 với hệ số 0,25–1 đều kém hơn). Không thêm dữ liệu, RAM bẩn +≈0 (trang mmap
+sạch).
+
+| Thêm dấu (heldout, n = 13 938 âm tiết / 1 911 câu) | âm tiết | câu đúng hết |
+|---|---|---|
+| chỉ unigram | 76,35 % | 20,9 % |
+| + bigram | 95,50 % | 76,7 % |
+| + trigram tường minh | **96,45 %** | **81,1 %** |
+| (tập dev: bigram → trigram) | 95,01 → 95,71 % | 75,4 → 78,6 % |
+
+Fixture `add-tones.txt`: "tự do", "biển Nha Trang" đúng ra; "năm sáu" (đếm số) → "năm sau".
+Câu Phil 18/10/2026 "…gõ tiếng Việt không dấu" vẫn ra "không đâu": vnlm.bin không có mục
+(không, dấu) nào — bigram lẫn trigram — nên đây là thiếu dữ liệu, không phải thiếu ngữ cảnh.
+
 ### Mô hình
 
 Kneser-Ney nội suy bậc 3 (D = 0.75), lưu s = ln(P(c | 2 âm tiết trước) / P₁(c)) — có cả

@@ -178,7 +178,7 @@ final class SuggestBigramTests: XCTestCase {
         XCTAssertLessThan(dirty, 256, "bảng phải đọc tại chỗ (mmap), không copy vào heap")
     }
 
-    private static func footprint() -> Int64 {
+    static func footprint() -> Int64 {
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
         let kr = withUnsafeMutablePointer(to: &info) {

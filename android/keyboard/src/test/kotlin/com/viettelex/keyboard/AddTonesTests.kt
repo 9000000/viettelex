@@ -114,15 +114,34 @@ class AddTonesTests {
 
     @Test fun heldoutAccuracy() {
         val uni = measure(AddTones.Params(), lm = null)
+        val bi = measure(AddTones.Params(trigram = false))
         val full = measure(AddTones.Params())
         val m = UserLangModel().apply { isKnownWord = { VNSuggest.contains(it) }; seedIfEmpty() }
         val seeded = measure(AddTones.Params(), personal = AddTones.Personal(m::count, m::bigramCount))
         println("ADDTONES heldout Kotlin + seed UserLangModel: ${seeded.fmt()}")
         assertTrue(seeded.fmt(), seeded.r >= full.r - 0.002)
-        println("ADDTONES heldout Kotlin: chỉ unigram ${uni.fmt()} | + bigram ${full.fmt()}")
-        // đo 27/09/2026: 0.7635 → 0.9463 (câu 0.209 → 0.732); cùng ngưỡng với Swift
-        assertTrue(full.fmt(), full.r >= 0.94)
+        println("ADDTONES heldout Kotlin: chỉ unigram ${uni.fmt()} | + bigram ${bi.fmt()} | + trigram ${full.fmt()}")
+        // đo 27/09/2026: 0.7635 → 0.9463 (câu 0.209 → 0.732); 18/10/2026 trigram: bigram 0.9550
+        // (câu 0.767) → trigram 0.9645 (câu 0.811). Cùng ngưỡng với Swift.
+        assertTrue(full.fmt(), full.r >= 0.96)
         assertTrue(full.r - uni.r >= 0.15)
+        assertTrue("trigram phải hơn bigram", full.r - bi.r >= 0.005 && full.rs > bi.rs)
+    }
+
+    /**
+     * Ba câu Phil thử 18/10/2026. "không dấu" / "Thử gõ" CHƯA đúng: vnlm.bin không có mục
+     * (không, dấu) nào — cả bigram lẫn trigram — nên "không đâu" (phổ biến hơn trong dữ liệu)
+     * thắng; cần dữ liệu, trigram không đủ. Chỉ khoá phần còn lại + chip vẫn mời cả câu.
+     */
+    @Test fun philSentences() {
+        val a = r("Minh dang go tieng Viet khong dau.")
+        assertTrue(a, a.startsWith("Mình đang gõ tiếng Việt không "))
+        val b = r("Thu go tieng Viet khong dau xem sao.")
+        assertTrue(b, b.contains(" gõ tiếng Việt không ") && b.endsWith(" xem sao."))
+        val c = r("Ngay mai minh se den truong hop lop cap 3.")     // họp/hợp: mơ hồ thật, không khoá
+        assertTrue(c, c.startsWith("Ngày mai mình sẽ đến trường ") && c.endsWith(" lớp cấp 3."))
+        for (x in listOf("Minh dang go tieng Viet khong dau.", "Thu go tieng Viet khong dau xem sao.",
+                         "Ngay mai minh se den truong hop lop cap 3.")) assertNotNull(x, AddTones.plan(x))
     }
 
     /**

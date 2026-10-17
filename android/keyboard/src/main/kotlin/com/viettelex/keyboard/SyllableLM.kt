@@ -256,6 +256,17 @@ class SyllableLM private constructor(@PublishedApi internal val buf: ByteBuffer,
         }
 
         /**
+         * PMI của mục TRIGRAM tường minh (prev2, prev1, [w]) = s3 + uniAdj; Float.NaN nếu dòng
+         * trigram không có [w] (hoặc không có dòng) — Thêm dấu (Viterbi bậc 2) chỉ dùng mục
+         * trigram thật, thiếu thì về bigram (Swift: `SyllableLM.forEachTrigram`, duyệt theo dải id).
+         */
+        fun trigram(w: Int): Float {
+            if (triBase < 0 || w < 0 || w >= count) return Float.NaN
+            val t = triScanFind(triLo, triPos, triBase + w)
+            return if (t >= 0) q(cbValue(cb3Base, triScore, t, bits3)) + adj(w) else Float.NaN
+        }
+
+        /**
          * PMI của mục TƯỜNG MINH (thanh gợi ý chấm ứng viên đang gõ): có mục trigram → s3 + uniAdj;
          * không thì mục bigram → s2 + uniAdj (không cộng γ3 — đo trên dev: cộng γ3 kém hơn);
          * thiếu cả hai → 0. Không dòng trigram ⇒ = [Bigram.explicit].

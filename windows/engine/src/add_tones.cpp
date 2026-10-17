@@ -494,6 +494,14 @@ bool SyllableLM::context(int prev2, int prev1, Context& out) const {
     return true;
 }
 
+bool SyllableLM::Context::trigramPmi(int w, float& pmi) const {
+    if (!lm_ || triBase_ < 0 || w < 0 || w >= lm_->count_) return false;
+    const int t = lm_->scanFind(lm_->tri_, triLo_, triPos_, triBase_ + w);
+    if (t < 0) return false;
+    pmi = lm_->q(lm_->cbValue(lm_->cb3Base_, lm_->triScore_, t, lm_->bits3_)) + lm_->adj(w);
+    return true;
+}
+
 float SyllableLM::Context::explicitPmi(int w) const {
     if (!lm_ || w < 0 || w >= lm_->count_) return 0;
     if (triBase_ >= 0) {
@@ -745,6 +753,99 @@ void classify(std::vector<Tok>& toks, const LanguageData& d) {
     }
 }
 
+// Second-order Viterbi (AddTones.viterbi3 — twin of the Swift / Kotlin code, keep identical).
+// State = (candidate r at i−1, candidate s at i):
+//   S1[r][s] = emit0[r] + tr(·, r, s) + emit1[s]
+//   Si[r][s] = max_q S(i−1)[q][r] + tr(q, r, s) + emit_i[s]   (ties → smallest q)
+// tr(q, r, s) = bigramW·max(floor, pmi): pmi = the EXPLICIT trigram entry (q, r, s) of vnlm.bin
+// (s3 + uniAdj) when there is one, else the bigram PMI(r → s) as in the first-order path (no γ3
+// back-off penalty — measured worse on the dev set); 0 when r has no bigram row and no trigram.
+void viterbi3(const std::vector<std::vector<int>>& ids, const std::vector<std::vector<std::u32string>>& words,
+              int from, const LanguageData& d, const Params& p, std::vector<std::u32string>& chosen,
+              std::vector<bool>& hasChoice) {
+    const int n = static_cast<int>(ids.size());
+    auto emit = [&](int id) { return p.freqW * static_cast<double>(d.lexicon.freq(id)) / 255.0; };
+    // bigram transition matrix between positions i−1 and i: bi[r·kc + s]
+    std::vector<double> bi;
+    std::vector<bool> biKnown;
+    auto bigrams = [&](const std::vector<int>& b, const std::vector<int>& c) {
+        bi.assign(b.size() * c.size(), 0.0);
+        biKnown.assign(b.size(), false);
+        for (size_t r = 0; r < b.size(); ++r) {
+            const SyllableLM::Bigram row = d.lm.bigram(b[r]);
+            if (row.size() <= 0) continue;
+            biKnown[r] = true;
+            for (size_t s = 0; s < c.size(); ++s)
+                bi[r * c.size() + s] = p.bigramW * std::max(p.floor, static_cast<double>(row.pmi(c[s])));
+        }
+    };
+    const std::vector<int>& c0 = ids[0];
+    const std::vector<int>& c1 = ids[1];
+    bigrams(c0, c1);
+    std::vector<double> prev(c0.size() * c1.size());
+    for (size_t r = 0; r < c0.size(); ++r) {
+        const double e0 = emit(c0[r]);
+        for (size_t s = 0; s < c1.size(); ++s) prev[r * c1.size() + s] = e0 + bi[r * c1.size() + s] + emit(c1[s]);
+    }
+    std::vector<std::vector<int>> back(static_cast<size_t>(n));
+    std::vector<double> cur, tr;
+    SyllableLM::Context x;
+    for (int i = 2; i < n; ++i) {
+        const std::vector<int>& a = ids[static_cast<size_t>(i - 2)];
+        const std::vector<int>& b = ids[static_cast<size_t>(i - 1)];
+        const std::vector<int>& c = ids[static_cast<size_t>(i)];
+        const size_t ka = a.size(), kb = b.size(), kc = c.size();
+        bigrams(b, c);
+        // tr[(q·kb + r)·kc + s]: bigram, overridden by explicit trigram entries
+        tr.resize(ka * kb * kc);
+        for (size_t q = 0; q < ka; ++q)
+            for (size_t r = 0; r < kb; ++r) {
+                double* t = &tr[(q * kb + r) * kc];
+                std::copy(bi.begin() + static_cast<std::ptrdiff_t>(r * kc),
+                          bi.begin() + static_cast<std::ptrdiff_t>((r + 1) * kc), t);
+                if (!d.lm.context(a[q], b[r], x) || !x.hasTrigram()) continue;
+                for (size_t s = 0; s < kc; ++s) {
+                    float v;
+                    if (x.trigramPmi(c[s], v)) t[s] = p.bigramW * std::max(p.floor, static_cast<double>(v));
+                }
+            }
+        cur.assign(kb * kc, 0.0);
+        std::vector<int>& bk = back[static_cast<size_t>(i)];
+        bk.assign(kb * kc, 0);
+        for (size_t r = 0; r < kb; ++r)
+            for (size_t s = 0; s < kc; ++s) {
+                double best = -INFINITY;
+                int arg = 0;
+                for (size_t q = 0; q < ka; ++q) {
+                    const double v = prev[q * kb + r] + tr[(q * kb + r) * kc + s];
+                    if (v > best) {
+                        best = v;
+                        arg = static_cast<int>(q);
+                    }
+                }
+                cur[r * kc + s] = best + emit(c[s]);
+                bk[r * kc + s] = arg;
+            }
+        prev.swap(cur);
+    }
+    const size_t kc = ids[static_cast<size_t>(n - 1)].size();
+    size_t top = 0;
+    for (size_t x2 = 1; x2 < prev.size(); ++x2)
+        if (prev[x2] > prev[top]) top = x2;
+    int r = static_cast<int>(top / kc), s = static_cast<int>(top % kc);
+    for (int i = n - 1; i >= 1; --i) {
+        chosen[static_cast<size_t>(from + i)] = words[static_cast<size_t>(i)][static_cast<size_t>(s)];
+        hasChoice[static_cast<size_t>(from + i)] = true;
+        if (i == 1) break;
+        const int q = back[static_cast<size_t>(i)][static_cast<size_t>(r) * ids[static_cast<size_t>(i)].size() +
+                                                   static_cast<size_t>(s)];
+        s = r;
+        r = q;
+    }
+    chosen[static_cast<size_t>(from)] = words[0][static_cast<size_t>(r)];
+    hasChoice[static_cast<size_t>(from)] = true;
+}
+
 void viterbi(const std::vector<Tok>& toks, int from, int to, const LanguageData& d, const Params& p,
              std::vector<std::u32string>& chosen, std::vector<bool>& hasChoice) {
     const int n = to - from;
@@ -759,6 +860,10 @@ void viterbi(const std::vector<Tok>& toks, int from, int to, const LanguageData&
         }
     }
     const bool haveLm = d.lm.ok();
+    if (p.trigram && haveLm && n >= 3) {
+        viterbi3(ids, words, from, d, p, chosen, hasChoice);
+        return;
+    }
     std::vector<std::vector<double>> score(static_cast<size_t>(n));
     std::vector<std::vector<int>> back(static_cast<size_t>(n));
     for (int i = 0; i < n; ++i) {

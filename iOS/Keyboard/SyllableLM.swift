@@ -515,6 +515,30 @@ final class SyllableLM {
         }
     }
 
+    /// Thêm dấu (Viterbi bậc 2): duyệt MỌI mục trigram tường minh (prev2, b, c) với b trong dải
+    /// id [bLo, bHi) và c trong [cLo, cHi) — ứng viên của một dạng không dấu là một dải id liền
+    /// nhau: body(b, c, s3 + uniAdj). Một lần withUnsafeBytes cho cả dải b (mỗi b: biFind trong
+    /// dòng prev2 + một lowerBound trong dòng trigram) thay vì một `context` cho từng cặp.
+    func forEachTrigram(prev2 a: Int, prev1 bLo: Int, _ bHi: Int, next cLo: Int, _ cHi: Int,
+                        _ body: (_ prev1: Int, _ next: Int, _ pmi: Float) -> Void) {
+        let lo = max(0, bLo), hi = min(bHi, count)
+        guard a >= 0, a < count, lo < hi, cLo < cHi else { return }
+        blob.withUnsafeBytes { raw in
+            let row = biRowAt(raw, a)
+            guard row.hi > row.lo else { return }
+            for b in lo..<hi {
+                let j = biFind(raw, row, b)
+                guard j >= 0 else { continue }
+                let k = context(raw, bigramIndex: j)
+                guard k >= 0 else { continue }
+                let base = k * count
+                let (m, pos) = Self.lowerBound(raw, tri, base + max(0, cLo))
+                var t = triStart(raw, lo: m, pos: pos, base: base)
+                while t.c < cHi { body(b, t.c, t.v + adj(raw, t.c)); triNext(raw, &t) }
+            }
+        }
+    }
+
     /// s (nat) của `w` sau (`prev2`, `prev1`); 0 nếu không có ngữ cảnh.
     func score(prev2: Int, prev1: Int, _ w: Int) -> Float {
         context(prev2: prev2, prev1: prev1)?.score(w) ?? 0

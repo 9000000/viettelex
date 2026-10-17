@@ -11,6 +11,11 @@
 //   chuyển  = bigramW·max(floor, PMI(âm tiết trước → này)) + personalBi·ln(1+count cặp cá nhân);
 //             PMI = bigram Kneser-Ney của vnlm.bin (SyllableLM.bigram — có điểm ÂM, thiếu mục ⇒
 //             lùi γ2); âm tiết trước không có dòng bigram nào ⇒ 0.
+//   TRIGRAM (18/10/2026, `viterbi3`, chuỗi ≥ 3 âm tiết): Viterbi bậc 2, trạng thái = (ứng viên
+//             i−1, ứng viên i); có mục trigram TƯỜNG MINH (q, r, s) trong vnlm.bin thì PMI của
+//             chuyển r → s = s3 + uniAdj (SyllableLM.forEachTrigram) thay cho PMI bigram, thiếu thì giữ
+//             bigram (không cộng phạt lùi γ3 — đo trên tập dev: kém hơn). Heldout: âm tiết
+//             0.9550 → 0.9645, câu đúng hết 0.767 → 0.811.
 // Chuỗi bị cắt ở dấu câu / token giữ nguyên. GIỮ NGUYÊN: token không phải dạng Việt (tiếng
 // Anh, tên riêng lạ, số, URL, email, chữ lẫn số/ký hiệu, camelCase), token có dấu. Token vừa
 // là dạng Việt vừa là từ Anh (the, can…) giữ nguyên khi kề một từ chắc chắn Anh. Giữ
@@ -29,6 +34,8 @@ enum AddTones {
         var floor = -2.5
         var personalUni = 0.1
         var personalBi = 1.0
+        /// Viterbi bậc 2 dùng trigram tường minh; false = chỉ bigram (mốc đo heldout).
+        var trigram = true
     }
 
     /// Trần count cá nhân.
@@ -214,6 +221,10 @@ enum AddTones {
             return Array(Int(forms.idStart[f])..<Int(forms.idStart[f + 1]))
         }
         let words: [[String]] = ids.map { $0.map { VNSuggest.display($0) } }
+        if p.trigram, let lm, n >= 3 {
+            viterbi3(ids, words, from, personal, p, lm, &chosen)
+            return
+        }
         var score = ids.map { [Double](repeating: 0, count: $0.count) }
         var back = ids.map { [Int](repeating: 0, count: $0.count) }
         for i in 0..<n {
@@ -249,6 +260,110 @@ enum AddTones {
             chosen[from + i] = words[i][s]
             s = back[i][s]
         }
+    }
+
+    /// Viterbi bậc 2 (song sinh Kotlin `viterbi3` + C++ windows/engine/src/add_tones.cpp — giữ
+    /// y hệt thứ tự phép tính để ra cùng kết quả). Trạng thái (r ở i−1, s ở i):
+    ///   S1[r][s] = emit0[r] + tr(·, r, s) + emit1[s]
+    ///   Si[r][s] = max_q S(i−1)[q][r] + tr(q, r, s) + emit_i[s]   (hoà → q nhỏ nhất)
+    /// tr(q, r, s) = bigramW·max(floor, pmi) + cá nhân(r, s): pmi = trigram tường minh (q, r, s)
+    /// nếu có, không thì PMI bigram r → s như bậc 1 (0 nếu r không có dòng bigram).
+    /// Chi phí: K(i−2)·K(i−1) ngữ cảnh mỗi vị trí; dòng có trigram: một lowerBound + duyệt các
+    /// mục rơi vào dải id ứng viên (không tra từng ứng viên).
+    private static func viterbi3(_ ids: [[Int]], _ words: [[String]], _ from: Int, _ personal: Personal?,
+                                 _ p: Params, _ lm: SyllableLM, _ chosen: inout [String?]) {
+        let n = ids.count
+        func emit(_ i: Int, _ s: Int) -> Double {
+            var e = p.freqW * Double(VNSuggest.freq(id: ids[i][s])) / 255.0
+            if let personal {
+                let c = min(personal.count(words[i][s]), personalCap)
+                if c > 0 { e += p.personalUni * log(1.0 + Double(c)) }
+            }
+            return e
+        }
+        /// Cá nhân của cặp (r ở i−1, s ở i): pers[r·kc + s] (nil = không có dữ liệu cá nhân).
+        func pairs(_ i: Int) -> [Double]? {
+            guard let personal else { return nil }
+            let kb = ids[i - 1].count, kc = ids[i].count
+            var out = [Double](repeating: 0, count: kb * kc)
+            for r in 0..<kb {
+                for s in 0..<kc {
+                    let c = min(personal.pair(words[i - 1][r], words[i][s]), personalCap)
+                    if c > 0 { out[r * kc + s] = p.personalBi * log(1.0 + Double(c)) }
+                }
+            }
+            return out
+        }
+        /// Chuyển bigram (i−1 → i): bi[r·kc + s] = bigramW·max(floor, PMI), 0 nếu r không có dòng.
+        func bigrams(_ i: Int) -> [Double] {
+            let b = ids[i - 1], c = ids[i]
+            var out = [Double](repeating: 0, count: b.count * c.count)
+            for r in b.indices {
+                let row = lm.bigram(b[r])
+                guard row.size > 0 else { continue }
+                for s in c.indices { out[r * c.count + s] = p.bigramW * max(p.floor, Double(row.pmi(c[s]))) }
+            }
+            return out
+        }
+        let k1 = ids[1].count
+        var prev = [Double](repeating: 0, count: ids[0].count * k1)
+        do {
+            let bi = bigrams(1), pers = pairs(1)
+            for r in ids[0].indices {
+                let e0 = emit(0, r)
+                for s in 0..<k1 {
+                    var tr = bi[r * k1 + s]
+                    if let pers { tr += pers[r * k1 + s] }
+                    prev[r * k1 + s] = e0 + tr + emit(1, s)
+                }
+            }
+        }
+        var back = [[Int]](repeating: [], count: n)
+        var t3 = [Double]()
+        for i in 2..<n {
+            let a = ids[i - 2], b = ids[i - 1], c = ids[i]
+            let ka = a.count, kb = b.count, kc = c.count
+            let b0 = b[0], c0 = c[0]            // ứng viên một dạng = dải id liền nhau
+            let bi = bigrams(i), pers = pairs(i)
+            let em = (0..<kc).map { emit(i, $0) }
+            if t3.count != kb * kc { t3 = [Double](repeating: .nan, count: kb * kc) }
+            var cur = [Double](repeating: -Double.infinity, count: kb * kc)
+            var bk = [Int](repeating: 0, count: kb * kc)
+            // q ngoài cùng, tăng dần, so sánh ngặt ⇒ hoà giữ q nhỏ nhất (như vòng max_q)
+            for q in 0..<ka {
+                var tri = false
+                lm.forEachTrigram(prev2: a[q], prev1: b0, b0 + kb, next: c0, c0 + kc) { rb, sc, v in
+                    t3[(rb - b0) * kc + sc - c0] = p.bigramW * max(p.floor, Double(v)); tri = true
+                }
+                for r in 0..<kb {
+                    let base = prev[q * kb + r]
+                    for s in 0..<kc {
+                        let x = r * kc + s
+                        var tr = tri && !t3[x].isNaN ? t3[x] : bi[x]
+                        if let pers { tr += pers[x] }
+                        let v = base + tr
+                        if v > cur[x] { cur[x] = v; bk[x] = q }
+                    }
+                }
+                if tri { for x in 0..<(kb * kc) { t3[x] = .nan } }
+            }
+            for r in 0..<kb { for s in 0..<kc { cur[r * kc + s] += em[s] } }
+            back[i] = bk
+            prev = cur
+        }
+        let kc = ids[n - 1].count
+        var top = 0
+        for x in 1..<prev.count where prev[x] > prev[top] { top = x }
+        var r = top / kc, s = top % kc
+        var i = n - 1
+        while i >= 1 {
+            chosen[from + i] = words[i][s]
+            if i == 1 { break }
+            let q = back[i][r * ids[i].count + s]
+            s = r; r = q
+            i -= 1
+        }
+        chosen[from] = words[0][r]
     }
 
     /// Kế hoạch thêm dấu cho văn bản trước con trỏ; nil nếu không nên mời (< 2 token Việt,
