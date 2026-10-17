@@ -324,6 +324,18 @@ class SwipeTypingTests {
         assertTrue(p.text, p.text.startsWith("Cố gắng "))
     }
 
+    /** Vuốt "ngay" đầu câu ra "Này" (n-a-y ≈ n-g-a-y); "mai" kế ⇒ "Ngày mai", chip ↩︎ trả "Này". */
+    @Test fun nayRevisedToNgayMaiAtSentenceStart() {
+        val s = session(); val p = MockProxy()
+        s.swipeR(p, "ngay", SwipeSuggest.Case.FIRST)
+        assertEquals("Này", p.text)
+        s.swipeR(p, "mai")
+        assertEquals("Ngày mai", p.text)
+        assertEquals("↩︎ Này", s.suggestionsNow(p)!!.actionLabel)
+        s.acceptSuggestion(SuggestionSet.UNDO_REVISE_TOKEN, p)
+        assertEquals("Này mai", p.text)
+    }
+
     @Test fun noRevisionAfterUserEditOrChoice() {
         // phím dấu Telex sửa từ vuốt ⇒ không còn nguyên ⇒ không sửa lại
         run {

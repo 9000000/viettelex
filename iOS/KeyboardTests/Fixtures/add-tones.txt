@@ -1,4 +1,4 @@
-# add-tones v2 — parity Swift ⇔ Kotlin ⇔ C++ (Windows) cho AddTones.restore (chỉ dữ liệu tĩnh, không cá nhân; v2 = Viterbi bậc 2 dùng trigram vnlm.bin, 18/10/2026).
+# add-tones v3 — parity Swift ⇔ Kotlin ⇔ C++ (Windows) cho AddTones.restore (chỉ dữ liệu tĩnh, không cá nhân; v2 = Viterbi bậc 2 dùng trigram vnlm.bin, v3 = + cặp chọn tay CuratedPairs, 18/10/2026).
 # Mỗi dòng: đầu vào<TAB>kết quả. Sinh bởi android AddTonesTests.sharedFixture (ADDTONES_GEN=1);
 # cả ba bản phải cho ĐÚNG kết quả này.
 toi di hoc hom nay	tôi đi học hôm nay
@@ -49,7 +49,24 @@ ok de toi xem	ok để tôi xem
 lam on gui cho toi file pdf	làm ơn gửi cho tôi file pdf
 tao ghet mon toan	tao ghét môn toán
 ca nha deu khoe	cả nhà đều khỏe
-Minh dang go tieng Viet khong dau.	Mình đang gõ tiếng Việt không đâu.
-Thu go tieng Viet khong dau xem sao.	Thứ gõ tiếng Việt không đâu xem sao.
+Minh dang go tieng Viet khong dau.	Mình đang gõ tiếng Việt không dấu.
+Thu go tieng Viet khong dau xem sao.	Thử gõ tiếng Việt không dấu xem sao.
 Ngay mai minh se den truong hop lop cap 3.	Ngày mai mình sẽ đến trường hợp lớp cấp 3.
 chuc mung sinh nhat phan nhieu nguoi ta viet ve chuyen cuoc doi hang ngay toi khong biet y cua ban la gi cai nay rat la hap dan cuoc	chúc mừng sinh nhật phần nhiều người ta viết về chuyện cuộc đời hằng ngày tôi không biết ý của bạn là gì cái này rất là hấp dẫn cuộc
+tieng Viet co dau	tiếng Việt có dấu
+van ban khong dau nhe	văn bản không đâu nhé
+Thu go dau xem	Thử gõ dấu xem
+go vuot tren ban phim	gõ vuốt trên bàn phím
+bop vu	bóp vú
+bop dai	bóp dái
+lam gi co dau	làm gì có đâu
+co dau	cô dâu
+co dau chu re	cô dâu chú rể
+leu bao	lều báo
+xiu ngang luon	xỉu ngang luôn
+chuyen khoan cho minh nhe	chuyển khoản cho mình nhé
+so cu khong dung nua	sở cứ không dùng nữa
+xin so dien thoai	xin số điện thoại
+di qua dinh nui	đi qua đỉnh núi
+co hoi viec lam	cơ hội việc làm
+them dau tu	thêm đầu tư

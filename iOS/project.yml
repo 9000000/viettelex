@@ -39,6 +39,10 @@ targets:
       # Luyện vuốt (App/Practice): CÙNG decoder + hình học phím với bàn phím.
       - Keyboard/SwipeDecoder.swift
       - Keyboard/SwipeLexicon.swift
+      # Từ vựng vuốt theo công tắc lọc từ nhạy cảm (chat/viết tắt luôn có).
+      - Keyboard/SwipeVocab.swift
+      - Keyboard/SensitiveWords.swift
+      - Keyboard/SeedData.swift
       - Keyboard/SwipeEnglish.swift
       - Keyboard/VNLexicon2.swift
       - Keyboard/VNSuggest.swift
@@ -186,6 +190,7 @@ targets:
       - Keyboard/Trackpad.swift
       - Keyboard/SwipeDecoder.swift
       - Keyboard/SwipeLexicon.swift
+      - Keyboard/SwipeVocab.swift
       - Keyboard/SwipeGesture.swift
       - Keyboard/KeyCommandGesture.swift
       - Keyboard/SwipeTyping.swift
@@ -202,6 +207,7 @@ targets:
       - App/Backup/BackupStore.swift
       - Keyboard/SwipeEnglish.swift
       - Keyboard/AddTones.swift
+      - Keyboard/CuratedPairs.swift
       - Keyboard/SyllableLM.swift
       - Keyboard/FutoSwipeModel.swift
       - Keyboard/FutoSwipe.swift
@@ -289,6 +295,7 @@ schemes:
             - SyllableLMTests/testHeldoutAccuracyWithEnglish
             - SyllableLMTests/testLookupLatency
             - SwipeReviseTests/testHeldoutRevisionGain
+            - SwipeReviseTests/testRevisionLatencyOnSwipeCommit
             - SuggestBigramTests/testHeldoutNewUser
             - SuggestBigramTests/testHeldoutLearningUserNotHurt
             - SuggestBigramTests/testLatencyAndDirtyMemory

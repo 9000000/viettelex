@@ -1,0 +1,110 @@
+# curated-pairs.txt — cặp âm tiết tiếng Việt CHỌN TAY để chọn dấu đúng (Thêm dấu, bung dấu từ
+# vuốt, xếp gợi ý khi đang gõ dở) ở chỗ vnlm.bin thiếu cặp hoặc cặp quá yếu. NGUỒN DUY NHẤT:
+# Scripts/gen-curated-pairs.py sinh ra iOS/Keyboard/CuratedPairs.swift (iOS + macOS + Linux),
+# android/…/CuratedPairs.kt và windows/engine/src/curated_pairs.inc — sửa ở đây rồi chạy lại
+# script (--check trong kiểm thử).
+#
+# CHỈ ĐỂ PHÂN ĐỊNH DẤU, không phải seed từ kế tiếp: không nạp vào UserLangModel, không đẩy từ lên
+# thanh từ kế tiếp sau dấu cách (sau "có" vẫn không gợi "dấu").
+#
+# Cú pháp (chữ thường, có dấu, NFC):
+#   a b c …      chuỗi: mọi cặp liền nhau (a→b, b→c, …) đều được cộng
+#   [x] a b      chỉ cộng a→b khi âm tiết TRƯỚC a là x (trigram) — cho cặp mơ hồ khi đứng một
+#                mình ("không đâu", "có đâu" vẫn là cách đọc mặc định ngoài ngữ cảnh này)
+#   ~ a b …      chuỗi chỉ dùng cho vuốt / gợi ý đang gõ (CuratedPairs.next), KHÔNG cho Thêm dấu
+# Thêm dấu: chuyển trong bảng ⇒ số hạng cặp = max(cá nhân, AddTones.Params.curatedW). Người dùng
+# thắng: ở vị trí mà họ đã gõ một cặp khác (không trong bảng) ≥ curatedYield lần, bảng tắt.
+# Vuốt / gợi ý đang gõ: từ trong CuratedPairs.next(prev, prev2) được thưởng như từ kế tiếp cá nhân.
+# Mỗi nhóm có một dòng lý do; mỗi cặp đã kiểm vnlm.bin (thiếu mục / yếu hơn cách đọc sai).
+
+# 1. Gõ / dấu — miền chính của bộ gõ; vnlm.bin thiếu (thử gõ, gõ dấu, gõ vuốt…) hoặc
+#    "đâu/đầu" lấn "dấu" (gỡ đầu, đầu cậu, đau nặng).
+thử gõ
+gõ dấu
+gõ vuốt
+gõ sai
+gõ nhầm
+gõ tắt
+dấu câu
+dấu nặng
+# "không dấu" / "có dấu" mơ hồ khi đứng một mình (không đâu, có đâu, cô dâu) ⇒ chỉ sau ngữ cảnh gõ/chữ.
+[việt] không dấu
+[việt] có dấu
+[chữ] không dấu
+[chữ] có dấu
+[viết] không dấu
+[viết] có dấu
+[gõ] không dấu
+[gõ] có dấu
+[bản] không dấu
+[bản] có dấu
+[tin] không dấu
+[tin] có dấu
+
+# 2. Đám cưới vs "có đâu" (vuốt "co dau" ra "có đâu", gõ "cô" rồi vuốt "dau" ra "cô đâu"): vnlm.bin
+#    đã mạnh (PMI cô→dâu +4,5, có→đâu −0,4; đám→cưới +7,4) và Thêm dấu đã ra "cô dâu" khi đứng một
+#    mình ⇒ chỉ cần cho VUỐT/gợi ý (~): trọng số LM của vuốt nhỏ (kẹp ±1) nên tần suất "đâu" lấn.
+#    Thêm vào AddTones thì hoà với "[gì] có đâu" và lật "làm gì có đâu" thành "cô dâu".
+~ cô dâu chú rể
+~ đám cưới
+[gì] có đâu
+
+# 3. Tiếng lóng cơ thể Phil báo 18/10/2026 (vuốt) — vnlm.bin không có cặp nào (bóp vụ, bóp đại,
+#    số cử). "sờ cu"/"mò cu" chỉ cho vuốt: ở Thêm dấu chúng lật "số cũ" (số cũ không dùng nữa).
+bóp vú
+bóp dái
+~ sờ cu
+~ mò cu
+
+# 4. Chat hằng ngày: cặp seed iOS mà máy tính (không có seed) ra sai, cặp vnlm.bin lép vế trước
+#    cách đọc lạ (chuyện khoan, tấn làm, có hơi, được chúa…). Bỏ những cặp mơ hồ thật (cho anh/chờ
+#    anh, từ đó/tự do, đắt đỏ/đặt đồ, chân thật/chán thật, đợi rồi/dỗi rồi) và cặp vnlm.bin đã mạnh
+#    (tin nhắn, đăng nhập, tài khoản, cạn lời, đi chợ… — chỉ sai khi đứng trơ trọi hai âm tiết).
+#    Đã thử rồi bỏ vì lật câu thường: từ từ (tự tử), cố lên (cô lên sân khấu), cơ hội (có hơi mệt),
+#    ghê/điên thật (ghế/điện thật), đợi chút (đôi chút), thêm dấu (thêm đầu tư), quá đỉnh (qua đỉnh).
+chuyển khoản
+tan làm
+tăng ca
+nhà mình
+rồi nha
+được chưa
+ổn mà
+lỗi nha
+rảnh chưa
+về chưa
+chờ xíu
+chốt đơn
+còn hàng
+quá trời
+mã giảm
+
+# 5. Tiếng lóng Gen-Z / mạng xã hội — vnlm.bin (văn viết) không có, hôm nay ra sai (lều bao,
+#    xíu ngang, khét lết, càng đét, phòng bất, thả thỉnh, cầu lương, bốc phớt, xin số…). Bỏ cặp có
+#    cách đọc thường gặp ngang ngửa (ấn hành, xa lộ, chạy phố, gây lũ, nhà báo); "xịn sò" chỉ cho
+#    vuốt (Thêm dấu lật "xin số").
+lều báo
+xỉu ngang
+khét lẹt
+đỉnh của chóp
+đỉnh nóc kịch trần
+căng đét
+ối dồi ôi
+phông bạt
+thả thính
+cẩu lương
+xu cà na
+mãi đỉnh
+ô dề
+cái nịt
+sống ảo
+lầy lội
+thánh lầy
+cà khịa
+bóc phốt
+~ xịn sò
+ảo ma
+
+# 6. Chửi thề chat mà bộ vuốt bung sai từ ĐẦU (vài lồn, ngủ vl — tần suất "vài/ngủ" lấn) — chỉ cho
+#    vuốt (sửa chung cặp với từ vuốt kế): ở Thêm dấu "vai lon" thường là "vài lon (bia)".
+~ vãi lồn
+~ ngu vl

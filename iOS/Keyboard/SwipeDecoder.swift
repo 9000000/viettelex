@@ -232,6 +232,8 @@ final class SwipeDecoder {
     private var tpl: [Float] = []
     private var tplCX: [Float] = [], tplCY: [Float] = [], tplScale: [Float] = []
     private var tplValid: [Bool] = []
+    /// Từ vựng (theo công tắc lọc từ nhạy cảm) mà template đang dựng theo — đổi ⇒ dựng lại.
+    private var tplVocab: SwipeVocab.Vocab?
     private let alpha: [Float]
     private let alphaSum: Float
     // scratch cấp sẵn
@@ -303,13 +305,15 @@ final class SwipeDecoder {
         layout = l
         tpl = []; tplCX = []; tplCY = []; tplScale = []; tplLen = []; tplValid = []
         tplDX = []; tplDY = []
+        tplVocab = nil
     }
 
     /// Dựng template ngay (gọi ở background khi bàn phím hiện để lần vuốt
     /// đầu không trễ). An toàn gọi nhiều lần.
     func prepare() {
-        guard let l = layout, tpl.isEmpty else { return }
-        buildTemplates(l)
+        guard let l = layout else { return }
+        let v = SwipeVocab.current
+        if tpl.isEmpty || tplVocab !== v { buildTemplates(l, v) }
     }
 
     /// Byte RAM template hiện giữ (test ngân sách bộ nhớ).
@@ -318,8 +322,9 @@ final class SwipeDecoder {
                          + tplDY.count) * 4 + tplValid.count
     }
 
-    private func buildTemplates(_ l: SwipeLayout) {
-        let forms = SwipeLexicon.forms
+    private func buildTemplates(_ l: SwipeLayout, _ v: SwipeVocab.Vocab) {
+        tplVocab = v
+        let forms = v.forms
         let n = params.points, fc = forms.count
         tpl = [Float](repeating: 0, count: fc * n * 2)
         tplCX = [Float](repeating: 0, count: fc)
@@ -389,8 +394,9 @@ final class SwipeDecoder {
                 englishContext: ((String) -> Float)? = nil,
                 ts: [Double]? = nil) -> [SwipeCandidate] {
         guard count > 0, topK > 0, let l = layout else { return [] }
-        if tpl.isEmpty { buildTemplates(l) }
-        let forms = SwipeLexicon.forms
+        let vocab = SwipeVocab.current
+        if tpl.isEmpty || tplVocab !== vocab { buildTemplates(l, vocab) }
+        let forms = vocab.forms
         let en: SwipeEnglish.Lexicon? = english == nil ? nil : SwipeEnglish.lexicon
         let fc = forms.count
         let n = params.points, w = l.keyWidth
@@ -601,18 +607,32 @@ final class SwipeDecoder {
 
     /// Bung dạng không dấu thành âm tiết có dấu, điểm = λ·tần suất/255
     /// (+ context(âm tiết)), giảm dần; bằng điểm giữ thứ tự lexicon.
+    /// Theo SwipeVocab.current: lọc bật ⇒ bỏ từ nhạy cảm; thêm từ chat/viết tắt (+ tục khi tắt lọc).
     static func expand(_ folded: String, limit: Int = 8, lambdaFreq: Float = Params().lambdaFreq,
                        context: ((String) -> Float)? = nil) -> [SwipeWord] {
-        guard limit > 0, let f = SwipeLexicon.index(of: folded) else { return [] }
-        let forms = SwipeLexicon.forms
-        let lo = Int(forms.idStart[f]), hi = Int(forms.idStart[f + 1])
+        guard limit > 0 else { return [] }
+        let vocab = SwipeVocab.current
+        let f = SwipeLexicon.index(of: folded)
+        let extra = vocab.words[folded]
+        guard f != nil || extra != nil else { return [] }
         var out: [(SwipeWord, Int)] = []
-        out.reserveCapacity(hi - lo)
-        for id in lo..<hi {
-            let w = VNSuggest.display(id)
-            var s = lambdaFreq * Float(VNLexicon2Data.freq(id)) / 255
-            if let context { s += context(w) }
-            out.append((SwipeWord(word: w, score: s), id))
+        if let f {
+            let forms = SwipeLexicon.forms
+            let lo = Int(forms.idStart[f]), hi = Int(forms.idStart[f + 1])
+            out.reserveCapacity(hi - lo)
+            for id in lo..<hi {
+                let w = VNSuggest.display(id)
+                if vocab.filter && SwipeVocab.isSensitive(w) { continue }
+                if let extra, extra.contains(where: { $0.word == w }) { continue }   // bảng thay tần suất
+                var s = lambdaFreq * Float(VNLexicon2Data.freq(id)) / 255
+                if let context { s += context(w) }
+                out.append((SwipeWord(word: w, score: s), id))
+            }
+        }
+        for (k, e) in (extra ?? []).enumerated() {
+            var s = lambdaFreq * e.score / 255
+            if let context { s += context(e.word) }
+            out.append((SwipeWord(word: e.word, score: s), VNLexicon2Data.count + k))
         }
         out.sort { $0.0.score != $1.0.score ? $0.0.score > $1.0.score : $0.1 < $1.1 }
         return out.prefix(limit).map { $0.0 }
@@ -627,7 +647,7 @@ final class SwipeDecoder {
         let lo: Int, hi: Int
         let keys: [UInt8]
         if idx < fc {
-            let forms = SwipeLexicon.forms
+            let forms = (tplVocab ?? SwipeVocab.current).forms
             keys = forms.keys; lo = Int(forms.keyStart[idx]); hi = Int(forms.keyStart[idx + 1])
         } else {
             guard let en else { return -1 }
@@ -935,8 +955,9 @@ final class SwipeDecoder {
     @discardableResult
     func learnOffset(xs xs0: [Float], ys ys0: [Float], count: Int, folded: String) -> Bool {
         guard let l = layout, count >= 2, params.offsetRate > 0,
-              let f = SwipeLexicon.index(of: folded) else { return false }
-        let km = candidateKeys(f, l, nil, SwipeLexicon.forms.count)
+              case let v = tplVocab ?? SwipeVocab.current,
+              let f = v.index(of: folded) else { return false }
+        let km = candidateKeys(f, l, nil, v.forms.count)
         guard km > 0 else { return false }
         let w = l.keyWidth
         let (xs, ys) = shifted(xs0, ys0, count, w)

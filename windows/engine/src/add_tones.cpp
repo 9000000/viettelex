@@ -667,6 +667,34 @@ bool isAsciiLetter(char32_t c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c
 bool isUpperAscii(char32_t c) { return c >= 'A' && c <= 'Z'; }
 bool isPunct(char32_t c) { return kPunct.find(c) != std::u32string::npos; }
 
+// ---- CuratedPairs (twin of iOS/Keyboard/CuratedPairs.swift; data generated) ----
+#include "curated_pairs.inc"
+
+template <size_t N>
+bool sortedContains(const char* const (&keys)[N], const std::string& k) {
+    const char* const* it = std::lower_bound(keys, keys + N, k.c_str(),
+                                             [](const char* a, const char* b) { return std::strcmp(a, b) < 0; });
+    return it != keys + N && k == *it;
+}
+/// (x, a → b) in the table: pair "a b", or triple "x a b" when x is known.
+bool curatedHas(const std::string* x, const std::string& a, const std::string& b) {
+    if (sortedContains(kCuratedPairs, a + " " + b)) return true;
+    return x && sortedContains(kCuratedTriples, *x + " " + a + " " + b);
+}
+/// Some triple starts with (x, a).
+bool curatedHasTriple(const std::string& x, const std::string& a) {
+    const std::string h = x + " " + a + " ";
+    const char* const* end = kCuratedTriples + sizeof(kCuratedTriples) / sizeof(kCuratedTriples[0]);
+    const char* const* it = std::lower_bound(kCuratedTriples, end, h.c_str(),
+                                             [](const char* l, const char* r) { return std::strcmp(l, r) < 0; });
+    return it != end && std::strncmp(*it, h.c_str(), h.size()) == 0;
+}
+/// Pair term (a → b): no personal model here ⇒ curatedW when `on` and in the table, else 0
+/// (= Swift pairTerm with personal == nil).
+double pairTerm(const Params& p, bool on, const std::string* x, const std::string& a, const std::string& b) {
+    return on && curatedHas(x, a, b) ? p.curatedW : 0.0;
+}
+
 bool opensEnglishRun(const std::string& w) {
     return tables::contains(gen::kEnglishContextWords, w.data(), static_cast<int>(w.size()));
 }
@@ -761,9 +789,19 @@ void classify(std::vector<Tok>& toks, const LanguageData& d) {
 // (s3 + uniAdj) when there is one, else the bigram PMI(r → s) as in the first-order path (no γ3
 // back-off penalty — measured worse on the dev set); 0 when r has no bigram row and no trigram.
 void viterbi3(const std::vector<std::vector<int>>& ids, const std::vector<std::vector<std::u32string>>& words,
-              int from, const LanguageData& d, const Params& p, std::vector<std::u32string>& chosen,
-              std::vector<bool>& hasChoice) {
+              const std::vector<std::vector<std::string>>& w8, int from, const LanguageData& d, const Params& p,
+              std::vector<std::u32string>& chosen, std::vector<bool>& hasChoice) {
     const int n = static_cast<int>(ids.size());
+    const bool on = p.curated;
+    // pair terms between positions i−1 and i (curated, no triple context): pers[r·kc + s]
+    std::vector<double> pers;
+    auto pairs = [&](int i) {
+        const auto& a = w8[static_cast<size_t>(i - 1)];
+        const auto& b = w8[static_cast<size_t>(i)];
+        pers.assign(a.size() * b.size(), 0.0);
+        for (size_t r = 0; r < a.size(); ++r)
+            for (size_t s = 0; s < b.size(); ++s) pers[r * b.size() + s] = pairTerm(p, on, nullptr, a[r], b[s]);
+    };
     auto emit = [&](int id) { return p.freqW * static_cast<double>(d.lexicon.freq(id)) / 255.0; };
     // bigram transition matrix between positions i−1 and i: bi[r·kc + s]
     std::vector<double> bi;
@@ -782,10 +820,14 @@ void viterbi3(const std::vector<std::vector<int>>& ids, const std::vector<std::v
     const std::vector<int>& c0 = ids[0];
     const std::vector<int>& c1 = ids[1];
     bigrams(c0, c1);
+    pairs(1);
     std::vector<double> prev(c0.size() * c1.size());
     for (size_t r = 0; r < c0.size(); ++r) {
         const double e0 = emit(c0[r]);
-        for (size_t s = 0; s < c1.size(); ++s) prev[r * c1.size() + s] = e0 + bi[r * c1.size() + s] + emit(c1[s]);
+        for (size_t s = 0; s < c1.size(); ++s) {
+            const size_t x1 = r * c1.size() + s;
+            prev[x1] = e0 + (bi[x1] + pers[x1]) + emit(c1[s]);
+        }
     }
     std::vector<std::vector<int>> back(static_cast<size_t>(n));
     std::vector<double> cur, tr;
@@ -796,18 +838,26 @@ void viterbi3(const std::vector<std::vector<int>>& ids, const std::vector<std::v
         const std::vector<int>& c = ids[static_cast<size_t>(i)];
         const size_t ka = a.size(), kb = b.size(), kc = c.size();
         bigrams(b, c);
-        // tr[(q·kb + r)·kc + s]: bigram, overridden by explicit trigram entries
+        pairs(i);
+        const auto& wa = w8[static_cast<size_t>(i - 2)];
+        const auto& wb = w8[static_cast<size_t>(i - 1)];
+        const auto& wc = w8[static_cast<size_t>(i)];
+        // tr[(q·kb + r)·kc + s]: bigram, overridden by explicit trigram entries, + pair term
+        // (a curated triple (q, r → s) recomputes the pair term with context q)
         tr.resize(ka * kb * kc);
         for (size_t q = 0; q < ka; ++q)
             for (size_t r = 0; r < kb; ++r) {
                 double* t = &tr[(q * kb + r) * kc];
                 std::copy(bi.begin() + static_cast<std::ptrdiff_t>(r * kc),
                           bi.begin() + static_cast<std::ptrdiff_t>((r + 1) * kc), t);
-                if (!d.lm.context(a[q], b[r], x) || !x.hasTrigram()) continue;
-                for (size_t s = 0; s < kc; ++s) {
-                    float v;
-                    if (x.trigramPmi(c[s], v)) t[s] = p.bigramW * std::max(p.floor, static_cast<double>(v));
+                if (d.lm.context(a[q], b[r], x) && x.hasTrigram()) {
+                    for (size_t s = 0; s < kc; ++s) {
+                        float v;
+                        if (x.trigramPmi(c[s], v)) t[s] = p.bigramW * std::max(p.floor, static_cast<double>(v));
+                    }
                 }
+                const bool tq = on && curatedHasTriple(wa[q], wb[r]);
+                for (size_t s = 0; s < kc; ++s) t[s] += tq ? pairTerm(p, on, &wa[q], wb[r], wc[s]) : pers[r * kc + s];
             }
         cur.assign(kb * kc, 0.0);
         std::vector<int>& bk = back[static_cast<size_t>(i)];
@@ -851,17 +901,19 @@ void viterbi(const std::vector<Tok>& toks, int from, int to, const LanguageData&
     const int n = to - from;
     std::vector<std::vector<int>> ids(static_cast<size_t>(n));
     std::vector<std::vector<std::u32string>> words(static_cast<size_t>(n));
+    std::vector<std::vector<std::string>> w8(static_cast<size_t>(n));  // UTF-8 (CuratedPairs keys)
     for (int i = 0; i < n; ++i) {
         const int f = toks[static_cast<size_t>(from + i)].form;
         for (int id = d.lexicon.formFirstId(f); id < d.lexicon.formEndId(f); ++id) {
             ids[static_cast<size_t>(i)].push_back(id);
             const std::string_view disp = d.lexicon.display(id);
             words[static_cast<size_t>(i)].push_back(text::fromUtf8(disp.data(), disp.size()));
+            w8[static_cast<size_t>(i)].emplace_back(disp);
         }
     }
     const bool haveLm = d.lm.ok();
     if (p.trigram && haveLm && n >= 3) {
-        viterbi3(ids, words, from, d, p, chosen, hasChoice);
+        viterbi3(ids, words, w8, from, d, p, chosen, hasChoice);
         return;
     }
     std::vector<std::vector<double>> score(static_cast<size_t>(n));
@@ -889,6 +941,7 @@ void viterbi(const std::vector<Tok>& toks, int from, int to, const LanguageData&
                     const SyllableLM::Bigram& row = rows[r];
                     if (row.size() > 0) tr = p.bigramW * std::max(p.floor, static_cast<double>(row.pmi(cur[s])));
                 }
+                tr += pairTerm(p, p.curated, nullptr, w8[static_cast<size_t>(i - 1)][r], w8[static_cast<size_t>(i)][s]);
                 const double v = score[static_cast<size_t>(i - 1)][r] + tr;
                 if (v > best) {
                     best = v;

@@ -279,7 +279,7 @@ std::u32string suggestionCase(const std::u32string& w, const std::u32string& typ
 bool isSensitive(const std::u32string& w) {
     static const char* const kSet[] = {
         "đcm", "đm", "dm", "dcm", "vcl", "vkl", "vl", "cl", "clgt", "cmnr", "cứt", "lồn", "cặc", "buồi",
-        "đĩ", "điếm", "đụ", "địt", "tml", "sml", "dâm", "fuck", "shit", "bitch", "wtf",
+        "đĩ", "điếm", "đụ", "địt", "tml", "sml", "dâm", "đkm", "dkm", "buscu", "fuck", "shit", "bitch", "wtf",
     };
     const std::string l = u8(lowerS(w));
     for (const char* x : kSet)

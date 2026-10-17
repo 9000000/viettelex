@@ -16,15 +16,10 @@ final class AddTonesTests: XCTestCase {
         XCTAssertTrue(r(cases[1]).contains(" gõ tiếng Việt không "), r(cases[1]))
         XCTAssertTrue(r(cases[2]).hasPrefix("Mình đang gõ tiếng Việt không "), r(cases[2]))
         XCTAssertTrue(r(cases[0]).hasPrefix("Ngày mai mình sẽ đến trường "), r(cases[0]))
-        // "không dấu" / "Thử gõ" CHƯA đúng: vnlm.bin không có mục (không, dấu) nào — bigram lẫn
-        // trigram — nên "không đâu" thắng; cần dữ liệu, trigram không đủ. Không chặt: khi dữ liệu
-        // có cặp này thì test tự xanh.
-        let opts = XCTExpectedFailure.Options()
-        opts.isStrict = false
-        XCTExpectFailure("vnlm.bin thiếu cặp (không, dấu)", options: opts) {
-            XCTAssertEqual(r(cases[2]), "Mình đang gõ tiếng Việt không dấu.")
-            XCTAssertEqual(r(cases[1]), "Thử gõ tiếng Việt không dấu xem sao.")
-        }
+        // "không dấu" / "Thử gõ": vnlm.bin không có mục (không, dấu) — cặp chọn tay CuratedPairs
+        // ([việt] không dấu, thử gõ) lật đúng (CuratedPairsTests).
+        XCTAssertEqual(r(cases[2]), "Mình đang gõ tiếng Việt không dấu.")
+        XCTAssertEqual(r(cases[1]), "Thử gõ tiếng Việt không dấu xem sao.")
     }
 
     private func fixture(_ name: String) throws -> [String] {

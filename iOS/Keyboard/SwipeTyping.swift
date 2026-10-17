@@ -67,6 +67,10 @@ final class SwipeTyping {
     ///  - tĩnh: trigram âm tiết (vnlm.bin) — xem lmWeight; đã có nextWords thì nhân 0.5.
     ///    Không có vnlm.bin / âm tiết trước lạ ⇒ không có điểm tĩnh.
     static let nextBonus: Float = 1.5
+    /// Cặp chọn tay (CuratedPairs.next sau prev2, prev — Scripts/curated-pairs.txt): thưởng riêng,
+    /// lớn hơn từ kế tiếp cá nhân để phân định dấu cả khi cách đọc kia cũng nằm trong nextWords
+    /// (tiếng Việt không dấu ≠ không đâu). = Android SwipeSuggest.CURATED_BONUS.
+    static let curatedBonus: Float = 3.0
     static let personalWeight: Float = 0.4
     static let personalCap: Float = 1.5
     static let staticDamp: Float = 0.5
@@ -95,13 +99,16 @@ final class SwipeTyping {
         let count: (String) -> Int
         private let lmContext: SyllableLM.Context?
         private let weight: Float
+        /// Từ chọn tay sau (prev2, prev) — CuratedPairs.next.
+        private let curated: Set<String>
         /// λ tần suất khi chọn dạng + bung dấu (hạ khi có trigram).
         let lambdaFreq: Float
 
         init(next: Set<String>, count: @escaping (String) -> Int = { _ in 0 },
-             prev: String? = nil, prev2: String? = nil, lm: SyllableLM? = nil) {
+             prev: String? = nil, prev2: String? = nil, lm: SyllableLM? = nil, curated: Bool = true) {
             self.next = next
             self.count = count
+            self.curated = curated ? prev.map { Set(CuratedPairs.next(after: $0, prev2: prev2)) } ?? [] : []
             let id1 = prev.flatMap { SyllableLM.id(of: $0) }
             if let lm, let id1 {
                 lmContext = lm.context(prev2: prev2.flatMap { SyllableLM.id(of: $0) } ?? -1, prev1: id1)
@@ -120,6 +127,7 @@ final class SwipeTyping {
 
         func word(_ w: String) -> Float {
             SwipeTyping.contextScore(w, next: next, count: count) + staticScore(w)
+                + (curated.contains(w) ? SwipeTyping.curatedBonus : 0)
         }
 
         /// Có trigram thì ứng viên Việt chấm tần suất bằng lmLambdaFreq thay vì λ decoder — hạ

@@ -422,6 +422,7 @@ class KeyboardSession(
         learnEnabled = StripMode.learns(settings.learnWords, field, incognito)
         initialCapsPending = true
         filterSensitive = settings.filterSensitive
+        SwipeVocab.filterSensitive = settings.filterSensitive   // gõ vuốt theo cùng công tắc
         swipeEnglish = settings.swipeEnglish
         autoCapitalize = settings.autoCapitalize
         recentEnglish.clear(); langRecent.clear()
@@ -1183,7 +1184,8 @@ class KeyboardSession(
         if (pool.isNotEmpty()) {
             val ctxKey = (lastWord ?: "") + "\u0001" + (lastWord2 ?: "")
             if (ctxKey != ctxCacheKey) {
-                ctxCache = lastWord?.let { langModel.nextWords(it, lastWord2, 24).toSet() } ?: emptySet()
+                // + cặp chọn tay (CuratedPairs) — chỉ xếp gợi ý đang gõ dở, không thêm từ kế tiếp
+                ctxCache = lastWord?.let { CuratedPairs.withNext(langModel.nextWords(it, lastWord2, 24), it, lastWord2).toSet() } ?: emptySet()
                 ctxCacheKey = ctxKey
             }
             val ctx = ctxCache

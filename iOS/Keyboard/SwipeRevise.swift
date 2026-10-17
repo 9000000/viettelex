@@ -76,6 +76,12 @@ enum SwipeRevise {
         }.map(\.element)
     }
 
+    /// Thưởng cặp chọn tay (CuratedPairs.swipe) cho (c → n), `x` = từ trước c — = thưởng
+    /// SwipeTyping.curatedBonus mà Context.word cộng cho từ kế của từ đang hiện.
+    static func curatedBonus(_ x: String?, _ c: String, _ n: String) -> Float {
+        CuratedPairs.swipe(x, c, n) ? SwipeTyping.curatedBonus : 0
+    }
+
     /// Điểm phải: trigram s(next | prev, c) có trọng số, kẹp. 0 nếu thiếu dữ liệu.
     static func rightScore(_ lm: SyllableLM, prev: Int, cand: Int, next: Int,
                            weight: Float = rightWeight) -> Float {
@@ -114,6 +120,8 @@ enum SwipeRevise {
             for k in next.indices {
                 var v = base[k]
                 if let ctx, let nid = nextIds[k] { v += clampRight(weight * ctx.score(nid)) }
+                // từ đang hiện: thưởng chọn tay (nếu có) đã nằm trong next[k].score
+                if w.word != current { v += curatedBonus(prev, w.word, next[k].word) }
                 if v > nb { nb = v }
             }
             let s = w.score + nb
@@ -137,6 +145,7 @@ enum SwipeRevise {
         for w in scored {
             guard let id = SyllableLM.id(of: w.word) else { continue }
             let s = w.score + rightScore(lm, prev: prevId, cand: id, next: nextId, weight: weight)
+                + curatedBonus(prev, w.word, next)
             if w.word == current { cur = s }
             if s > bestScore { bestScore = s; best = w.word }
         }

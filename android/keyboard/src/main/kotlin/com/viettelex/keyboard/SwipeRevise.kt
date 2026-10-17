@@ -83,6 +83,13 @@ object SwipeRevise {
             }
         }.sortedByDescending { it.score }
 
+    /**
+     * Thưởng cặp chọn tay ([CuratedPairs.swipe]) cho ([c] → [n]), [x] = từ trước c — = thưởng
+     * [SwipeSuggest.CURATED_BONUS] mà Context.word cộng cho từ kế của từ đang hiện.
+     */
+    fun curatedBonus(x: String?, c: String, n: String): Float =
+        if (CuratedPairs.swipe(x, c, n)) SwipeSuggest.CURATED_BONUS else 0f
+
     /** Điểm phải: trigram s([next] | [prev], c) có trọng số, kẹp. 0 nếu thiếu dữ liệu. */
     fun rightScore(lm: SyllableLM, prevId: Int, candId: Int, nextId: Int, weight: Float = RIGHT_WEIGHT): Float {
         val s = lm.context(prevId, candId)?.score(nextId) ?: return 0f
@@ -119,7 +126,9 @@ object SwipeRevise {
             val ctx = lm.context(prevId, id)
             var nb = Float.NEGATIVE_INFINITY
             for (k in next.indices) {
-                val v = base[k] + if (ctx == null || nextIds[k] < 0) 0f else clampRight(weight * ctx.score(nextIds[k]))
+                var v = base[k] + if (ctx == null || nextIds[k] < 0) 0f else clampRight(weight * ctx.score(nextIds[k]))
+                // từ đang hiện: thưởng chọn tay (nếu có) đã nằm trong next[k].score
+                if (w.word != current) v += curatedBonus(prev, w.word, next[k].word)
                 if (v > nb) nb = v
             }
             val s = w.score + nb
@@ -147,7 +156,7 @@ object SwipeRevise {
         for (w in scored) {
             val id = SyllableLM.idOf(w.word)
             if (id < 0) continue
-            val s = w.score + rightScore(lm, prevId, id, nextId, weight)
+            val s = w.score + rightScore(lm, prevId, id, nextId, weight) + curatedBonus(prev, w.word, next)
             if (w.word == current) cur = s
             if (s > bestScore) { bestScore = s; best = w.word }
         }

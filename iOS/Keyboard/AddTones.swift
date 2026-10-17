@@ -16,6 +16,11 @@
 //             chuyển r → s = s3 + uniAdj (SyllableLM.forEachTrigram) thay cho PMI bigram, thiếu thì giữ
 //             bigram (không cộng phạt lùi γ3 — đo trên tập dev: kém hơn). Heldout: âm tiết
 //             0.9550 → 0.9645, câu đúng hết 0.767 → 0.811.
+//   CẶP CHỌN TAY (18/10/2026, CuratedPairs — Scripts/curated-pairs.txt): chuyển (r → s) hoặc
+//             (q, r → s) có trong bảng ⇒ số hạng cặp = max(cá nhân, curatedW) — mọi nền tảng (máy
+//             tính không có mô hình cá nhân cũng nhận). NGƯỜI DÙNG THẮNG: ở vị trí mà người dùng đã
+//             gõ một cặp KHÔNG trong bảng ≥ curatedYield lần (count cặp cá nhân, gồm seed), bảng tắt
+//             cho vị trí đó ⇒ thói quen riêng (vd. hay gõ "có đâu") đè được cặp chọn tay.
 // Chuỗi bị cắt ở dấu câu / token giữ nguyên. GIỮ NGUYÊN: token không phải dạng Việt (tiếng
 // Anh, tên riêng lạ, số, URL, email, chữ lẫn số/ký hiệu, camelCase), token có dấu. Token vừa
 // là dạng Việt vừa là từ Anh (the, can…) giữ nguyên khi kề một từ chắc chắn Anh. Giữ
@@ -36,6 +41,13 @@ enum AddTones {
         var personalBi = 1.0
         /// Viterbi bậc 2 dùng trigram tường minh; false = chỉ bigram (mốc đo heldout).
         var trigram = true
+        /// Cộng cặp chọn tay (CuratedPairs); false = mốc đo.
+        var curated = true
+        /// Số hạng cặp tối thiểu của chuyển có trong CuratedPairs (nat). Chọn 18/10/2026: 6 chưa lật
+        /// được nửa số cặp lóng, 8 ≈ 10; heldout giữ nguyên 0.9645 / câu 0.811.
+        var curatedW = 8.0
+        /// Người dùng gõ một cặp khác (không trong bảng) ≥ chừng này lần ở cùng vị trí ⇒ bảng tắt.
+        var curatedYield = 3
     }
 
     /// Trần count cá nhân.
@@ -47,6 +59,30 @@ enum AddTones {
     struct Personal {
         let count: (String) -> Int
         let pair: (String, String) -> Int
+    }
+
+    /// Số hạng cặp (a → b): cá nhân personalBi·ln(1 + min(count, trần)); `on` và (x, a → b) có
+    /// trong CuratedPairs (`x` = âm tiết trước a, nil = không xét bộ ba) ⇒ max(…, curatedW).
+    private static func pairTerm(_ personal: Personal?, _ p: Params, _ on: Bool, _ x: String?,
+                                 _ a: String, _ b: String) -> Double {
+        var t = 0.0
+        if let personal {
+            let c = min(personal.pair(a, b), personalCap)
+            if c > 0 { t = p.personalBi * log(1.0 + Double(c)) }
+        }
+        if on && CuratedPairs.has(x, a, b) { t = max(t, p.curatedW) }
+        return t
+    }
+
+    /// Bảng chọn tay có áp ở chuyển giữa hai cột ứng viên `a` → `b` không: tắt khi người dùng đã
+    /// gõ một cặp (a[r], b[s]) KHÔNG trong bảng ≥ curatedYield lần.
+    private static func curatedOn(_ personal: Personal?, _ p: Params, _ a: [String], _ b: [String]) -> Bool {
+        guard p.curated else { return false }
+        guard let personal else { return true }
+        for x in a {
+            for y in b where personal.pair(x, y) >= p.curatedYield && !CuratedPairs.anyContext(x, y) { return false }
+        }
+        return true
     }
 
     struct Result {
@@ -229,6 +265,7 @@ enum AddTones {
         var back = ids.map { [Int](repeating: 0, count: $0.count) }
         for i in 0..<n {
             let rows = i > 0 ? lm.map { m in ids[i - 1].map { m.bigram($0) } } : nil
+            let on = i > 0 && curatedOn(personal, p, words[i - 1], words[i])
             for s in ids[i].indices {
                 var emit = p.freqW * Double(VNSuggest.freq(id: ids[i][s])) / 255.0
                 if let personal {
@@ -243,10 +280,7 @@ enum AddTones {
                         let row = rows[r]
                         if row.size > 0 { tr = p.bigramW * max(p.floor, Double(row.pmi(ids[i][s]))) }
                     }
-                    if let personal {
-                        let c = min(personal.pair(words[i - 1][r], words[i][s]), personalCap)
-                        if c > 0 { tr += p.personalBi * log(1.0 + Double(c)) }
-                    }
+                    tr += pairTerm(personal, p, on, nil, words[i - 1][r], words[i][s])
                     let v = score[i - 1][r] + tr
                     if v > best { best = v; arg = r }
                 }
@@ -281,16 +315,12 @@ enum AddTones {
             }
             return e
         }
-        /// Cá nhân của cặp (r ở i−1, s ở i): pers[r·kc + s] (nil = không có dữ liệu cá nhân).
-        func pairs(_ i: Int) -> [Double]? {
-            guard let personal else { return nil }
+        /// Cặp (r ở i−1, s ở i), cá nhân + chọn tay không kèm bộ ba: pers[r·kc + s].
+        func pairs(_ i: Int, _ on: Bool) -> [Double] {
             let kb = ids[i - 1].count, kc = ids[i].count
             var out = [Double](repeating: 0, count: kb * kc)
             for r in 0..<kb {
-                for s in 0..<kc {
-                    let c = min(personal.pair(words[i - 1][r], words[i][s]), personalCap)
-                    if c > 0 { out[r * kc + s] = p.personalBi * log(1.0 + Double(c)) }
-                }
+                for s in 0..<kc { out[r * kc + s] = pairTerm(personal, p, on, nil, words[i - 1][r], words[i][s]) }
             }
             return out
         }
@@ -308,12 +338,12 @@ enum AddTones {
         let k1 = ids[1].count
         var prev = [Double](repeating: 0, count: ids[0].count * k1)
         do {
-            let bi = bigrams(1), pers = pairs(1)
+            let bi = bigrams(1), pers = pairs(1, curatedOn(personal, p, words[0], words[1]))
             for r in ids[0].indices {
                 let e0 = emit(0, r)
                 for s in 0..<k1 {
                     var tr = bi[r * k1 + s]
-                    if let pers { tr += pers[r * k1 + s] }
+                    tr += pers[r * k1 + s]
                     prev[r * k1 + s] = e0 + tr + emit(1, s)
                 }
             }
@@ -324,7 +354,8 @@ enum AddTones {
             let a = ids[i - 2], b = ids[i - 1], c = ids[i]
             let ka = a.count, kb = b.count, kc = c.count
             let b0 = b[0], c0 = c[0]            // ứng viên một dạng = dải id liền nhau
-            let bi = bigrams(i), pers = pairs(i)
+            let on = curatedOn(personal, p, words[i - 1], words[i])
+            let bi = bigrams(i), pers = pairs(i, on)
             let em = (0..<kc).map { emit(i, $0) }
             if t3.count != kb * kc { t3 = [Double](repeating: .nan, count: kb * kc) }
             var cur = [Double](repeating: -Double.infinity, count: kb * kc)
@@ -335,12 +366,15 @@ enum AddTones {
                 lm.forEachTrigram(prev2: a[q], prev1: b0, b0 + kb, next: c0, c0 + kc) { rb, sc, v in
                     t3[(rb - b0) * kc + sc - c0] = p.bigramW * max(p.floor, Double(v)); tri = true
                 }
+                let wq = words[i - 2][q]
                 for r in 0..<kb {
                     let base = prev[q * kb + r]
+                    // bộ ba chọn tay (q, r → s): số hạng cặp tính lại với ngữ cảnh q
+                    let tq = on && CuratedPairs.hasTriple(wq, words[i - 1][r])
                     for s in 0..<kc {
                         let x = r * kc + s
                         var tr = tri && !t3[x].isNaN ? t3[x] : bi[x]
-                        if let pers { tr += pers[x] }
+                        tr += tq ? pairTerm(personal, p, on, wq, words[i - 1][r], words[i][s]) : pers[x]
                         let v = base + tr
                         if v > cur[x] { cur[x] = v; bk[x] = q }
                     }

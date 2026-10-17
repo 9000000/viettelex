@@ -128,12 +128,17 @@ object SwipeSuggest {
                   /** Tham số tiếng Anh cho decoder (giai đoạn 3); null = tắt vuốt tiếng Anh. */
                   val english: SwipeEnglishPrior? = null,
                   /** Âm tiết trước nữa + mô hình trigram (vnlm.bin). */
-                  prev2: String? = null, lm: SyllableLM? = null) {
+                  prev2: String? = null, lm: SyllableLM? = null,
+                  /** Cộng cặp chọn tay ([CuratedPairs]); false = mốc đo. */
+                  useCurated: Boolean = true) {
         private val id1 = if (prev == null) -1 else SyllableLM.idOf(prev)
         private val lmCtx: SyllableLM.Context? =
             if (lm == null || id1 < 0) null
             else lm.context(if (prev2 == null) -1 else SyllableLM.idOf(prev2), id1)
         private val damp = if (next.isEmpty()) 1f else STATIC_DAMP
+        /** Từ chọn tay sau (prev2, prev) — [CuratedPairs.next]. */
+        private val curated: Set<String> =
+            if (prev == null || !useCurated) emptySet() else CuratedPairs.next(prev, prev2).toHashSet()
         private val staticWeight = LM_WEIGHT * damp
         /** λ tần suất khi chọn dạng + bung dấu (hạ còn [LM_LAMBDA_FREQ] khi có trigram). */
         val lambdaFreq: Float = if (lmCtx != null) LM_LAMBDA_FREQ else LAMBDA_FREQ
@@ -168,11 +173,11 @@ object SwipeSuggest {
         val word: (String) -> Float = { w ->
             val c = count(w)
             val p = if (c > 0) minOf(PERSONAL_CAP, PERSONAL_WEIGHT * ln(1.0 + c).toFloat()) else 0f
-            p + (if (w in next) NEXT_BONUS else 0f) + static(w)
+            p + (if (w in next) NEXT_BONUS else 0f) + static(w) + (if (w in curated) CURATED_BONUS else 0f)
         }
 
         val folded: ((String) -> Float)? =
-            if (nextFolded.isEmpty() && lmCtx == null) null
+            if (nextFolded.isEmpty() && lmCtx == null && curated.isEmpty()) null
             else { f -> foldedScore(f, word, lambdaFreq, clamp = lmCtx == null) }
     }
 
@@ -192,6 +197,12 @@ object SwipeSuggest {
     private val LAMBDA_FREQ = SwipeDecoder.Params().lambdaFreq
 
     const val NEXT_BONUS = 1.5f
+    /**
+     * Cặp chọn tay ([CuratedPairs.next] sau prev2, prev — Scripts/curated-pairs.txt): thưởng riêng, lớn
+     * hơn từ kế tiếp cá nhân để phân định dấu cả khi cách đọc kia cũng nằm trong nextWords. = iOS
+     * SwipeTyping.curatedBonus.
+     */
+    const val CURATED_BONUS = 3.0f
     const val PERSONAL_WEIGHT = 0.4f
     const val PERSONAL_CAP = 1.5f
     const val STATIC_DAMP = 0.5f

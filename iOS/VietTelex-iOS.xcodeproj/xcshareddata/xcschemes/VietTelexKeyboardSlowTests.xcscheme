@@ -70,6 +70,9 @@
                   Identifier = "SwipeReviseTests/testHeldoutRevisionGain">
                </Test>
                <Test
+                  Identifier = "SwipeReviseTests/testRevisionLatencyOnSwipeCommit">
+               </Test>
+               <Test
                   Identifier = "SuggestBigramTests/testHeldoutNewUser">
                </Test>
                <Test

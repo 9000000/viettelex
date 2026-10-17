@@ -91,6 +91,8 @@ final class SwipeReviseTests: XCTestCase {
         var committed: [String] = []
         var last: SwipeTyping.Outcome?
         var englishWords: Set<String> = []
+        /// Thời gian chỉ riêng SwipeTyping.finish (đường chốt cú vuốt), giây.
+        var finishTime: Double = 0
 
         init(_ layout: SwipeLayout) { s.setLayout(layout, prepare: false) }
 
@@ -116,8 +118,10 @@ final class SwipeReviseTests: XCTestCase {
                 prev1: SwipeLangContext.classify(prev, swipedEnglish: prev.map { englishWords.contains($0) } ?? false),
                 prev2: SwipeLangContext.classify(prev2, swipedEnglish: prev2.map { englishWords.contains($0) } ?? false))
                 : nil
+            let t0 = CFAbsoluteTimeGetCurrent()
             let out = s.finish(path, case: sc, contextWords: [], prev: prev, prev2: prev2, english: prior,
                                previous: previous, bridge: b, proxy: p)
+            finishTime += CFAbsoluteTimeGetCurrent() - t0
             if let out, out.english { englishWords.insert(out.word) }
             if let c = out?.committed { committed.append(c.word) }
             if let out, !out.scored.isEmpty, b.isSwipeWordOpen {
@@ -173,6 +177,71 @@ final class SwipeReviseTests: XCTestCase {
         XCTAssertFalse(f.b.restoreRevisedWord(old: "có", new: "cố", proxy: f.p), "đuôi đã khác ⇒ không đụng")
         f.b.boundary(" ", proxy: f.p)
         XCTAssertEqual(f.p.text, "có gắng ")
+    }
+
+    /// Phil 18/10/2026: vuốt "ngay" đầu câu ra "Này" (n-a-y ≈ n-g-a-y, này hay gặp hơn); vuốt
+    /// "mai" kế ⇒ "Ngày mai" (trigram "ngày mai" ≫ "này mai"), giữ chữ hoa đầu câu; chip ↩︎ trả
+    /// "Này". Song sinh android SwipeTypingTests.nayRevisedToNgayMaiAtSentenceStart.
+    func testNayRevisedToNgayMaiAtSentenceStart() {
+        let f = Flow(layout)
+        var sim = SwipeSim(seed: 7)
+        f.swipe("ngay", layout, sim: &sim, case: .capitalized)
+        XCTAssertEqual(f.p.text, "Này")
+        let out = f.swipe("mai", layout, sim: &sim)
+        XCTAssertEqual(f.p.text, "Ngày mai")
+        XCTAssertEqual(out?.revised, SwipeTyping.Revision(old: "Này", new: "Ngày"))
+        XCTAssertEqual(out?.committed?.word, "Ngày", "học từ mới, không học từ cũ")
+        XCTAssertTrue(f.b.restoreRevisedWord(old: "Này", new: "Ngày", proxy: f.p))
+        XCTAssertEqual(f.p.text, "Này mai")
+        // "ngay" rồi "xưa"/"nay": cũng là "ngày"; vuốt "nay" thật thì "mai" không kéo sang "ngày"
+        for (next, want) in [("xua", "Ngày xưa"), ("nay", "Ngày nay")] {
+            let g = Flow(layout)
+            g.swipe("ngay", layout, sim: &sim, case: .capitalized)
+            g.swipe(next, layout, sim: &sim)
+            XCTAssertEqual(g.p.text, want)
+        }
+        let h = Flow(layout)
+        h.swipe("nay", layout, sim: &sim, case: .capitalized)
+        h.swipe("mai", layout, sim: &sim)
+        XCTAssertTrue(h.p.text.hasPrefix("Này "), h.p.text)
+    }
+
+    /// Chi phí thêm trên đường chốt cú vuốt (Debug, simulator): SwipeTyping.finish khi có từ vuốt
+    /// trước để chấm lại (nextPool + revise, và rerank khi đổi) so với tắt — cùng các câu đường
+    /// sạch, đo xen kẽ nhiều vòng, lấy min. Không có chi phí ở đường phím chữ.
+    /// iOS Debug 18/10/2026 (simulator, 323 cú vuốt): 7.28 → 7.82 ms/vuốt (+0.54 ms).
+    func testRevisionLatencyOnSwipeCommit() throws {
+        try SlowTests.require()
+        let url = try XCTUnwrap(Bundle(for: SwipeReviseTests.self).url(forResource: "bigram-heldout", withExtension: "txt"))
+        let chains = try String(contentsOf: url, encoding: .utf8).split(separator: "\n")
+            .filter { !$0.hasPrefix("#") && !$0.isEmpty }.prefix(40)
+            .map { $0.split(separator: " ").map(String.init) }
+        func run(_ revise: Bool) -> (ms: Double, n: Int, revised: Int) {
+            var t = 0.0, n = 0, revised = 0
+            for chain in chains {
+                let f = Flow(layout)
+                var sim = SwipeSim(seed: 7)
+                for w in chain {
+                    if f.swipe(w, layout, sim: &sim, revise: revise)?.revised != nil { revised += 1 }
+                    // chỉ tính cú vuốt có từ vuốt trước (cú đầu câu như nhau ở cả hai bên)
+                }
+                t += f.finishTime
+                n += chain.count
+            }
+            return (t * 1000, n, revised)
+        }
+        _ = run(true)                                       // làm nóng (prepare decoder, LM)
+        var best = (off: Double.infinity, on: Double.infinity)
+        var n = 0, revised = 0
+        for _ in 0..<3 {
+            let a = run(false), b = run(true)
+            best.off = min(best.off, a.ms); best.on = min(best.on, b.ms)
+            n = b.n; revised = b.revised
+        }
+        let per = (off: best.off / Double(n), on: best.on / Double(n))
+        print(String(format: "REVISE-LATENCY iOS (Debug, %d cú vuốt, sửa %d): finish %.3f → %.3f ms/vuốt (+%.3f ms)",
+                     n, revised, per.off, per.on, per.on - per.off))
+        XCTAssertLessThan(per.on - per.off, 5, "chấm lại phải rẻ so với giải mã")
     }
 
     func testCaseKeptAndOnlyOnce() {
