@@ -300,7 +300,7 @@ bool LearnTracker::commit(const std::string &word, uint32_t boundary, bool stand
         prev2_.clear();
         return had;
     }
-    held_ = Event{w, prev1_, prev2_, weight};
+    held_ = Event{w, prev1_, prev2_, weight, word};
     pending_ = true;
     if (boundary == ' ') {
         prev2_ = prev1_;
@@ -318,6 +318,7 @@ void LearnTracker::replacePending(const std::string &fixed) {
     if (!learnable(f)) return discard();
     if (prev1_ == held_.word) prev1_ = f;
     held_.word = f;
+    held_.form = fixed;
 }
 
 void LearnTracker::discard() {
@@ -334,7 +335,7 @@ bool LearnTracker::breakContext(Event &out) {
 }
 
 std::string learnRequest(const LearnTracker::Event &e) {
-    return request({"learn", e.word, e.prev1, e.prev2, std::to_string(e.weight)});
+    return request({"learn", e.form.empty() ? e.word : e.form, e.prev1, e.prev2, std::to_string(e.weight)});
 }
 
 }  // namespace hints

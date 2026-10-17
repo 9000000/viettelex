@@ -274,6 +274,13 @@ final class KeyboardViewController: UIInputViewController {
         keyboard.setClipboardButton(visible: clip.historyEnabled && appliedFullAccess)
         filterSensitive = settings.filterSensitive
         SwipeVocab.filterSensitive = settings.filterSensitive   // gõ vuốt theo cùng công tắc
+        // Gõ tắt vuốt được (khoá + từ của nội dung): bảng đổi ⇒ template dựng lại một lần (nền).
+        if settings.swipeTyping {
+            if SwipeVocab.setShortcuts(bridge.effectiveShortcuts) { swipe?.refreshVocab() }
+            bridge.onShortcutsChanged = { [weak self] in   // + Thay thế văn bản iOS
+                if SwipeVocab.setShortcuts($0) { self?.swipe?.refreshVocab() }
+            }
+        }
         showSuggestionsSetting = settings.showSuggestions
         autoCapitalizeSetting = settings.autoCapitalize
         autoSpaceSetting = settings.autoSpaceAfterPunct
@@ -1414,7 +1421,8 @@ final class KeyboardViewController: UIInputViewController {
             return
         }
         let receipt = learnEnabled ? langModel.record(word: word, after: lastWord, prev2: lastWord2,
-                                                      weight: accepted ? 2 : 1) : nil
+                                                      weight: accepted ? 2 : 1,
+                                                      caseEvidence: casingEvidence(word)) : nil
         lastLearned = (word, receipt, lastWord, lastWord2)
         if UserLangModel.learnable(word) {
             lastWord2 = lastWord
@@ -1426,6 +1434,17 @@ final class KeyboardViewController: UIInputViewController {
         } else {
             lastWord = nil; lastWord2 = nil
         }
+    }
+
+    /// Hoa/thường của `word` có được dạy bảng hoa/thường đã học không (UserLangModel CaseTable):
+    /// chỉ GIỮA CÂU (lastWord còn — đầu ô / sau dấu câu / xuống dòng / dời con trỏ đã cắt nó),
+    /// không do chuỗi tên riêng, và — chỉ khi từ CÓ chữ hoa (hiếm) mới đọc trait — ô không tự
+    /// hoa mỗi từ / mọi chữ (.words: ô tên; .allCharacters). 0 chi phí thêm cho từ chữ thường.
+    private func casingEvidence(_ word: String) -> Bool {
+        guard DisplayCase.casingEvidence(word, prev: lastWord) else { return false }
+        guard word.contains(where: { $0.isUppercase }) else { return true }
+        let autocap = vtSafe(nil) { self.textDocumentProxy.autocapitalizationType ?? nil }
+        return autocap != .words && autocap != .allCharacters
     }
 
     /// Gợi ý cho từ đang gõ: emoji (khớp cả "yêu" lẫn "love" — bảng
@@ -1453,9 +1472,16 @@ final class KeyboardViewController: UIInputViewController {
         return SuggestionCase.display(base, shift: suggestionShift, typed: typed)
     }
 
-    /// DisplayCase (tên riêng) — trừ ô địa chỉ / tìm kiếm: chữ thường (song sinh Android).
+    /// DisplayCase (tên riêng) + hoa/thường người dùng đã viết nhất quán (UserLangModel.learnedCase)
+    /// — trừ ô địa chỉ / tìm kiếm: chữ thường (song sinh Android).
     private func displayCase(_ w: String, after prev: String? = nil) -> String {
-        lowercaseSuggestions ? w.lowercased() : DisplayCase.apply(w, after: prev)
+        lowercaseSuggestions ? w.lowercased() : properCase(w, after: prev)
+    }
+
+    /// Dạng tên riêng của ứng viên: học được > DisplayCase; từ đã có chữ hoa (thêm tay) giữ nguyên.
+    private func properCase(_ w: String, after prev: String? = nil) -> String {
+        let lm = langModel
+        return DisplayCase.resolve(w, after: prev, learned: { lm.learnedCase($0) })
     }
 
     /// Shift/Caps đổi (KeyboardView.onShiftChange): vẽ lại bar NGAY như Gboard — gộp
@@ -1486,7 +1512,7 @@ final class KeyboardViewController: UIInputViewController {
         guard base.count < need else { return Array(base.prefix(need)) }
         let top = bridge.englishMode ? SwipeEnglish.top : langModel.topWords(limit: need + 12)
         let candidates = SensitiveWords.filter(top, enabled: filterSensitive)
-            .map { caseForContext(DisplayCase.apply($0), typed: typed) }
+            .map { caseForContext(properCase($0), typed: typed) }
         return SuggestionFill.pad(base, with: candidates, need: need, excluding: typed)
     }
 
@@ -1610,12 +1636,12 @@ final class KeyboardViewController: UIInputViewController {
             let next = SuggestRank.nextFill(prev, prev2: p2, personal: personal,
                                             triCount: { w in p2.map { lm.trigramCount($0, prev, w) } ?? 0 },
                                             filter: { SensitiveWords.filter($0, enabled: fs) })
-            set.nextWords = padWords(next.map { caseForContext(DisplayCase.apply($0, after: prev)) }, need: 3)
+            set.nextWords = padWords(next.map { caseForContext(properCase($0, after: prev)) }, need: 3)
         } else {
             // field trống chưa gõ gì → từ user hay mở đầu nhất
             let top = SensitiveWords.filter(langModel.topWords(limit: 6),
                                             enabled: filterSensitive)
-                .prefix(3).map { caseForContext(DisplayCase.apply($0)) }
+                .prefix(3).map { caseForContext(properCase($0)) }
             set.nextWords = padWords(Array(top), need: 3)
         }
         set.number = refreshNumberChip()
@@ -2468,6 +2494,7 @@ extension KeyboardViewController {
                                prev: prev, prev2: prev2, english: english, englishOnly: englishOnly,
                                previous: previous,
                                nextWords: { lm.nextWords(after: $0, prev2: $1, limit: 24) },
+                               learnedCase: { lm.learnedCase($0) }, properNouns: !lowercaseSuggestions,
                                bridge: bridge, proxy: Proxy(p: textDocumentProxy))
         if let out {
             if let c = out.committed { commitAndLearn(c.word, accepted: c.accepted) }
@@ -2564,8 +2591,10 @@ extension KeyboardViewController {
     /// "từ vuốt ␠ từ gõ ranh giới" (đọc lại trước khi xoá) và học lại hai từ theo thứ tự mới.
     fileprivate func reviseTypedSwipe(_ w: (rev: SwipeRevise.Typed, learned: Learned?), typed: String,
                                       boundary: String, proxy: TextProxyLike) {
+        let lm = langModel
         guard let e = SwipeRevise.reviseTyped(w.rev, typed: typed, boundary: boundary,
-                                              before: proxy.contextBeforeInput),
+                                              before: proxy.contextBeforeInput,
+                                              learnedCase: lowercaseSuggestions ? nil : { lm.learnedCase($0) }),
               SwipeRevise.apply(e, proxy: proxy) else { return }
         let sentenceBreak = boundary != " "
         let newLearned = relearnPair(before: w.learned, first: e.new, typed: typed)

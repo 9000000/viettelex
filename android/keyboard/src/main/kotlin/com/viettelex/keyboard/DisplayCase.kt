@@ -11,6 +11,32 @@ object DisplayCase {
         return proper[w] ?: w
     }
 
+    private fun hasUpper(w: String): Boolean = w.codePoints().anyMatch { Character.isUpperCase(it) || Character.isTitleCase(it) }
+
+    /**
+     * Dạng tên riêng của một ứng viên gợi ý / từ vuốt [w]: đã có chữ hoa ⇒ giữ nguyên; người dùng
+     * đã viết nhất quán một dạng ([UserLangModel.learnedCase] — [learned]) ⇒ dạng đó; còn lại [apply].
+     * Không bao giờ hạ chữ hoa. = iOS DisplayCase.resolve.
+     */
+    fun resolve(w: String, after: String? = null, learned: ((String) -> String?)? = null): String {
+        if (hasUpper(w)) return w
+        learned?.invoke(w)?.let { return it }
+        return apply(w, after)
+    }
+
+    /**
+     * Hoa/thường của [word] (đúng như đã gõ, sau [prev]) có là bằng chứng cho bảng hoa/thường đã
+     * học: chỉ GIỮA CÂU (caller cắt prev ở đầu ô / sau dấu câu / xuống dòng / dời con trỏ) và
+     * không do CHUỖI tên riêng ("Việt Nam" không dạy "nam"). = iOS casingEvidence.
+     */
+    fun casingEvidence(word: String, prev: String?): Boolean {
+        if (prev.isNullOrEmpty()) return false
+        return chains[prev.lowercase()]?.contains(word.lowercase()) != true
+    }
+
+    /** [next] (chữ thường) viết hoa vì CHUỖI sau [prev]? */
+    fun chainCapitalizes(next: String, prev: String): Boolean = chains[prev.lowercase()]?.contains(next) == true
+
     val chains: Map<String, Set<String>> = hashMapOf(
         // địa danh VN
         "hà" to setOf("nội", "nam", "tĩnh", "giang"),

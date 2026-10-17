@@ -254,6 +254,9 @@ final class EngineBridge {
         /// Từ tiếng Anh chèn NGUYÊN VĂN (giai đoạn 3): engine trống, phím dấu Telex không
         /// sửa nó (phím chữ kế = dấu cách treo), ⌫ đầu xoá cả từ, chốt ⇒ học + ngữ cảnh Anh.
         var literal: String? = nil
+        /// Vuốt KHOÁ gõ tắt ("vn"): `literal` là nội dung đã bung, đây là khoá (đúng hoa/thường
+        /// như vuốt) — ⌫ đầu trả lại khoá như hoàn tác gõ tắt khi gõ tay.
+        var shortcutKey: String? = nil
     }
     struct SettledCommit: Equatable {
         let word: String
@@ -274,12 +277,31 @@ final class EngineBridge {
     /// Bảng gõ tắt hiệu lực = settings.shortcuts (+ Thay thế văn bản iOS khi nạp xong).
     private var shortcutTable: ShortcutTable
 
+    /// Bảng gõ tắt hiệu lực (từ vựng vuốt: SwipeVocab.setShortcuts) — rỗng khi tắt Gõ tắt.
+    var effectiveShortcuts: ShortcutTable {
+        settings.shortcutsEnabled ? shortcutTable : ShortcutTable()
+    }
+
+    /// Nội dung sẽ chèn khi VUỐT ra `word` (đã áp Shift: "vn" / "Vn" / "VN") — đúng như gõ
+    /// `word` + dấu cách: chỉ khoá thuần chữ, theo công tắc Gõ tắt + ô cho phép (không ở ô
+    /// passthrough / omnibox / email). nil = không phải khoá.
+    func swipeShortcutExpansion(for word: String) -> String? {
+        guard settings.shortcutsEnabled, shortcutsAllowed, !passthrough, !emailField,
+              !shortcutTable.isEmpty, ShortcutTable.isWordKey(word) else { return nil }
+        return shortcutTable.expansion(for: word)
+    }
+
     /// Gộp Thay thế văn bản của iOS vào bảng gõ tắt (bảng VietTelex thắng khi trùng). Chỉ
     /// khi Gõ tắt + công tắc bật; controller gọi bất đồng bộ sau khi UILexicon trả về.
     func setSystemReplacements(_ system: [String: String]) {
         guard settings.shortcutsEnabled, settings.useSystemTextReplacement else { return }
         shortcutTable = SystemTextReplacement.merged(own: settings.shortcuts.entries, system: system)
+        onShortcutsChanged?(shortcutTable)
     }
+
+    /// Bảng gõ tắt hiệu lực vừa đổi (Thay thế văn bản iOS nạp xong) — controller nối vào từ vựng vuốt
+    /// khi gõ vuốt bật; nil = không ai cần (0 việc).
+    var onShortcutsChanged: ((ShortcutTable) -> Void)?
 
     init(settings: KeyboardSettings = .load()) {
         self.settings = settings
@@ -432,7 +454,7 @@ final class EngineBridge {
     /// `literal` = từ tiếng Anh: chèn nguyên văn, KHÔNG seed engine (xem SwipeOpen.literal).
     @discardableResult
     func insertSwipeWord(_ word: String, accepted: Bool = false, literal: Bool = false,
-                         proxy: TextProxyLike) -> SettledCommit? {
+                         shortcutKey: String? = nil, proxy: TextProxyLike) -> SettledCommit? {
         letterUndo = nil
         expansionUndo = nil
         var committed = settledCommit
@@ -447,7 +469,8 @@ final class EngineBridge {
             proxy.insertText(" ")
         }
         proxy.insertText(word)
-        openSwipeWord(word, accepted: accepted, literal: literal)
+        openSwipeWord(word, accepted: accepted, literal: literal || shortcutKey != nil)
+        if let shortcutKey, swipeOpen != nil { swipeOpen?.shortcutKey = shortcutKey }
         return committed
     }
 
@@ -620,6 +643,19 @@ final class EngineBridge {
         let open = swipeOpen
         swipeOpen = nil
         guard !proxy.isSecure, !passthrough else { proxy.deleteBackward(); return false }
+        if let key = open?.shortcutKey, let lit = open?.literal, open?.fresh == true, engine.isEmpty {
+            // ⌫ đầu ngay sau vuốt khoá gõ tắt: trả lại khoá (như hoàn tác gõ tắt gõ tay), khoá
+            // vẫn mở như từ vuốt nguyên văn (⌫ kế xoá thường). Lệch ⇒ ⌫ thường.
+            if CompositionSync.canDelete(lit.count, expected: lit, context: { proxy.contextBeforeInput }) {
+                for _ in 0..<lit.count { proxy.deleteBackward() }
+                proxy.insertText(key)
+                swipeOpen = SwipeOpen(fresh: false, accepted: true, literal: key)
+                TouchLog.write("shortcut undo (vuốt): -\(lit.count) +\(key.count)")
+            } else {
+                proxy.deleteBackward()
+            }
+            return false
+        }
         if let lit = open?.literal, open?.fresh == true, engine.isEmpty {
             // ⌫ đầu ngay sau vuốt từ tiếng Anh: xoá cả từ. Lệch ⇒ ⌫ thường.
             if CompositionSync.canDelete(lit.count, expected: lit, context: { proxy.contextBeforeInput }) {

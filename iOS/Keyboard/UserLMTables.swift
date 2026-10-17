@@ -278,24 +278,127 @@ struct UserLMTables {
     }
 }
 
+// MARK: - Hoa/thường đã học (10/2026)
+
+/// Dạng viết hoa người dùng NHẤT QUÁN dùng cho một từ ("SenPrints", tên người "Văn"): bảng
+/// n-gram case-fold mọi thứ để đếm, bảng này nhớ riêng hoa/thường — chỉ từ ĐÃ TỪNG viết hoa
+/// giữa câu mới có mục (từ chỉ viết thường không tốn byte nào).
+///
+/// Chỉ nhận bằng chứng GIỮA CÂU — caller lọc trước (`DisplayCase.casingEvidence`): đầu câu /
+/// sau dấu câu / Shift đầu câu / ô tự hoa mỗi từ / chữ hoa do chuỗi tên riêng (việt → Nam) KHÔNG
+/// tính. Ở đây lọc thêm: Caps Lock / cả từ viết hoa ("SENPRINTS") và từ một chữ cái ⇒ bỏ qua.
+///
+/// Mỗi mục: `form` (dạng không-thường chiếm ưu thế — đếm phiếu Boyer–Moore giữa các dạng hoa),
+/// `hits` (phiếu ròng của `form`), `total` (mọi lần quan sát giữa câu, KỂ CẢ viết thường; mục
+/// mới khởi điểm bằng count unigram trước đó — coi các lần đã gõ trước như viết thường, bảo thủ:
+/// "văn" gõ thường 20 lần rồi 3 lần "Văn" KHÔNG thành tên riêng). Dạng ưu tiên = `form` khi
+/// hits ≥ 3 VÀ hits ≥ 80% total. Bộ đếm bão hoà ở 255 (chia đôi cả hai, giữ tỉ lệ, ưu tiên gần
+/// đây). Trần 512 mục (đầy ⇒ không nhận mục mới). Cùng số Android (UserLangModel.kt CaseTable),
+/// Windows (learned_words.cpp).
+struct CaseStat: Equatable {
+    var form: String
+    var hits: Int
+    var total: Int
+}
+
+struct CaseTable: Equatable {
+    static let cap = 512
+    static let maxCount = 255
+    static let minHits = 3
+
+    private(set) var stats: [String: CaseStat] = [:]
+    var isEmpty: Bool { stats.isEmpty }
+    var count: Int { stats.count }
+
+    init() {}
+    init(_ stats: [String: CaseStat]) { self.stats = stats }
+
+    enum Kind { case lower, mixed, ignored }
+
+    /// Dạng chữ: không chữ hoa ⇒ lower; một chữ cái / mọi chữ cái đều hoa (Caps Lock) ⇒ ignored.
+    /// "Hoa" = chữ mà lowercase khác chính nó (cùng định nghĩa Kotlin/C++).
+    static func kind(_ form: String) -> Kind {
+        var letters = 0, upper = 0
+        for ch in form {
+            letters += 1
+            let s = String(ch)
+            if s.lowercased() != s { upper += 1 }
+        }
+        if upper == 0 { return .lower }
+        if letters < 2 || upper == letters { return .ignored }
+        return .mixed
+    }
+
+    /// Một lần quan sát GIỮA CÂU của `form` (NFC, đúng như đã gõ); `key` = chữ thường;
+    /// `priorCount` = count unigram TRƯỚC lần này. true nếu bảng đổi.
+    @discardableResult
+    mutating func observe(_ form: String, key: String, priorCount: Int) -> Bool {
+        switch Self.kind(form) {
+        case .ignored: return false
+        case .lower:
+            guard var s = stats[key] else { return false }
+            s.total += 1
+            stats[key] = Self.saturate(s)
+            return true
+        case .mixed:
+            var s: CaseStat
+            if let e = stats[key] { s = e } else {
+                guard stats.count < Self.cap else { return false }
+                s = CaseStat(form: form, hits: 0, total: min(max(priorCount, 0), Self.maxCount))
+            }
+            s.total += 1
+            if s.form == form { s.hits += 1 } else if s.hits > 0 { s.hits -= 1 } else { s.form = form; s.hits = 1 }
+            stats[key] = Self.saturate(s)
+            return true
+        }
+    }
+
+    private static func saturate(_ s: CaseStat) -> CaseStat {
+        guard s.total > maxCount else { return s }
+        return CaseStat(form: s.form, hits: (s.hits + 1) / 2, total: (s.total + 1) / 2)
+    }
+
+    /// Dạng ưu tiên của `key` (chữ thường), nil = chưa đủ nhất quán.
+    func preferred(_ key: String) -> String? {
+        guard let s = stats[key], s.hits >= Self.minHits, s.hits * 5 >= s.total * 4 else { return nil }
+        return s.form
+    }
+
+    mutating func remove(_ key: String) { stats[key] = nil }
+    mutating func removeAll() { stats.removeAll() }
+    /// Bỏ mục của từ không còn trong bảng (decay/prune/xoá từ).
+    mutating func retain(_ keep: (String) -> Bool) {
+        guard !stats.isEmpty else { return }
+        stats = stats.filter { keep($0.key) }
+    }
+}
+
 // MARK: - Định dạng file VTL2 (chung iOS/Android — android/.../UserLangModel.kt)
 
 /// Little-endian:
 /// ```
-/// "VTL2" | u16 version=1 | u16 flags=0 | i64 lastDecay (ms từ 1970)
+/// "VTL2" | u16 version=1 | u16 flags | i64 lastDecay (ms từ 1970)
 /// u32 nWords | nWords × (u16 len, UTF-8)          — id = thứ tự
 /// nWords × u32 uniCount                            — 0 = không có unigram
 /// u32 nBi  | nBi  × (u32 prev, u32 n, n × (u32 next, u32 count))
 /// u32 nTri | nTri × (u32 p2, u32 p1, u32 n, n × (u32 next, u32 count))
 /// u32 nManual | nManual × (u16 len, UTF-8)        — dạng hiển thị
+/// [flags & 1] u32 nCase | nCase × (u32 word id, u16 len, UTF-8 form, u16 hits, u16 total)
+///                                                  — hoa/thường đã học (CaseTable), id tăng dần
 /// u32 CRC32 (IEEE, như zlib) của mọi byte phía trước
 /// ```
+/// flags bit 0 (10/2026) = có phần hoa/thường; CHỈ ghi khi bảng có mục ⇒ file không có dữ liệu
+/// hoa/thường giữ y từng byte như trước (bản cũ vẫn đọc được, golden không đổi). Bản cũ gặp
+/// file có phần này coi là hỏng (chỉ xảy ra khi hạ cấp).
 /// Đọc: sai magic/version/CRC, id ngoài tầm, count 0, bucket không tăng dần, từ/ngữ cảnh trùng ⇒ nil.
 enum UserLMCodec {
     static let magic: [UInt8] = Array("VTL2".utf8)
     static let version: UInt16 = 1
 
-    static func encode(_ t: UserLMTables, lastDecay: Date, manual: [String]) -> Data {
+    static let flagCase: UInt16 = 1
+
+    static func encode(_ t: UserLMTables, lastDecay: Date, manual: [String],
+                       cases: CaseTable = CaseTable()) -> Data {
         // Tính đúng cỡ trước, ghi thẳng vào một bộ đệm (không append từng byte).
         func slen(_ s: String) -> Int { min(s.utf8.count, Int(UInt16.max)) }
         var size = 16 + 4 + 4 * t.words.count + 4 + 4 + 4 + 4
@@ -303,6 +406,14 @@ enum UserLMCodec {
         for b in t.biB where !b.isEmpty { size += 8 + 8 * b.count }
         for b in t.triB where !b.isEmpty { size += 12 + 8 * b.count }
         for m in manual { size += 2 + slen(m) }
+        // hoa/thường: chỉ mục có từ trong bảng, theo id tăng dần (byte cố định trên mọi nền tảng)
+        var caseRows: [(id: Int32, s: CaseStat)] = []
+        for (k, s) in cases.stats { if let id = t.ids[k], s.total > 0 { caseRows.append((id, s)) } }
+        caseRows.sort { $0.id < $1.id }
+        if !caseRows.isEmpty {
+            size += 4
+            for r in caseRows { size += 4 + 2 + slen(r.s.form) + 4 }
+        }
         var o = [UInt8](repeating: 0, count: size)
         o.withUnsafeMutableBytes { raw in
             var pos = 0
@@ -316,7 +427,7 @@ enum UserLMCodec {
                 pos += n
             }
             for c in magic { raw[pos] = c; pos += 1 }
-            u16(version); u16(0)
+            u16(version); u16(caseRows.isEmpty ? 0 : flagCase)
             let ms = UInt64(bitPattern: Int64((lastDecay.timeIntervalSince1970 * 1000).rounded()))
             u32(UInt32(truncatingIfNeeded: ms)); u32(UInt32(truncatingIfNeeded: ms >> 32))
             u32(UInt32(t.words.count))
@@ -334,12 +445,22 @@ enum UserLMCodec {
             }
             u32(UInt32(manual.count))
             for m in manual { str(m) }
+            if !caseRows.isEmpty {
+                u32(UInt32(caseRows.count))
+                for r in caseRows {
+                    u32(UInt32(r.id)); str(r.s.form)
+                    u16(UInt16(clamping: r.s.hits)); u16(UInt16(clamping: r.s.total))
+                }
+            }
             u32(crc32(UnsafeRawBufferPointer(rebasing: raw[0..<pos])))
         }
         return Data(o)
     }
 
-    struct Decoded { let tables: UserLMTables; let lastDecay: Date; let manual: [String] }
+    struct Decoded {
+        let tables: UserLMTables; let lastDecay: Date; let manual: [String]
+        var cases = CaseTable()
+    }
 
     static func decode(_ data: Data) -> Decoded? {
         let bytes = [UInt8](data)
@@ -364,7 +485,7 @@ enum UserLMCodec {
         }
         let stored = UInt32(bytes[body]) | UInt32(bytes[body + 1]) << 8 | UInt32(bytes[body + 2]) << 16 | UInt32(bytes[body + 3]) << 24
         guard crc32(bytes[0..<body]) == stored else { return nil }
-        guard u16() == version, u16() != nil, let lo = u32(), let hi = u32() else { return nil }
+        guard u16() == version, let flags = u16(), let lo = u32(), let hi = u32() else { return nil }
         let ms = Int64(bitPattern: UInt64(hi) << 32 | UInt64(lo))
         guard let nw32 = u32(), Int(nw32) <= body / 2 else { return nil }
         let nw = Int(nw32)
@@ -405,9 +526,22 @@ enum UserLMCodec {
         guard let nm = u32(), Int(nm) <= body / 2 else { return nil }
         var manual: [String] = []
         for _ in 0..<nm { guard let m = str() else { return nil }; manual.append(m) }
+        var cases: [String: CaseStat] = [:]
+        if flags & flagCase != 0 {
+            guard let nc = u32(), Int(nc) <= body / 10 else { return nil }
+            var last: UInt32?
+            for _ in 0..<nc {
+                guard let id = u32(), Int(id) < nw, let f = str(), !f.isEmpty,
+                      let h = u16(), let tt = u16(), tt > 0, h <= tt else { return nil }
+                if let l = last, id <= l { return nil }
+                last = id
+                cases[words[Int(id)]] = CaseStat(form: f, hits: Int(h), total: Int(tt))
+            }
+        }
         guard pos == body else { return nil }
         let t = UserLMTables(words: words, ids: ids, uniC: uniC, biB: biB, triCtx: triCtx, triB: triB)
-        return Decoded(tables: t, lastDecay: Date(timeIntervalSince1970: Double(ms) / 1000), manual: manual)
+        return Decoded(tables: t, lastDecay: Date(timeIntervalSince1970: Double(ms) / 1000), manual: manual,
+                       cases: CaseTable(cases))
     }
 
     private static let crcTable: [UInt32] = (0..<256).map { i -> UInt32 in

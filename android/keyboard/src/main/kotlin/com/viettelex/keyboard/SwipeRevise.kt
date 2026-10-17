@@ -185,7 +185,8 @@ object SwipeRevise {
      */
     fun reviseTyped(p: Typed, typed: String, boundary: String, before: String?,
                     lm: SyllableLM? = SyllableLM.shared, margin: Float = TYPED_MARGIN,
-                    weight: Float = TYPED_RIGHT_WEIGHT): TypedEdit? {
+                    weight: Float = TYPED_RIGHT_WEIGHT,
+                    learnedCase: ((String) -> String?)? = null, properNouns: Boolean = true): TypedEdit? {
         if (typed.isEmpty() || boundary.isEmpty() || before == null) return null
         if (Character.isLetterOrDigit(boundary.codePointAt(0))) return null
         val tail = p.word + " " + typed + boundary
@@ -193,7 +194,9 @@ object SwipeRevise {
         val head = before.length - tail.length
         if (head > 0 && Character.isLetterOrDigit(before.codePointBefore(head))) return null
         val new = revise(p.scored, p.word.lowercase(), p.prev, typed.lowercase(), lm, margin, weight) ?: return null
-        val cased = SwipeSuggest.applyCase(new, p.case)
+        val cased = SwipeSuggest.applyCase(new, p.case) {
+            if (properNouns) DisplayCase.resolve(it, p.prev, learnedCase) else it
+        }
         return if (cased == p.word) null else TypedEdit(p.word, cased, typed, boundary)
     }
 }

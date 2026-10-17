@@ -99,6 +99,31 @@ enum DisplayCase {
     ]
 }
 
+extension DisplayCase {
+    /// Dạng tên riêng của một ứng viên gợi ý / từ vuốt `w`: đã có chữ hoa ⇒ giữ nguyên; người
+    /// dùng đã viết nhất quán một dạng (UserLangModel.learnedCase — `learned`) ⇒ dạng đó; còn lại
+    /// `apply` (bảng tên riêng + chuỗi sau `prev`). Không bao giờ hạ chữ hoa.
+    static func resolve(_ w: String, after prev: String? = nil, learned: ((String) -> String?)? = nil) -> String {
+        if w.contains(where: { $0.isUppercase }) { return w }
+        if let learned, let l = learned(w) { return l }
+        return apply(w, after: prev)
+    }
+
+    /// Hoa/thường của `word` (đúng như đã gõ, đứng sau `prev`) có là bằng chứng cho bảng hoa/thường
+    /// đã học không: chỉ GIỮA CÂU — caller cắt `prev` (nil) ở đầu ô / sau . ! ? / xuống dòng / dời
+    /// con trỏ, nên chữ hoa đầu câu (tự hoa hay Shift tay) không bao giờ được tính — và không phải
+    /// chữ hoa do CHUỖI tên riêng ("Việt Nam": "Nam" không dạy "nam" thành tên riêng).
+    static func casingEvidence(_ word: String, prev: String?) -> Bool {
+        guard let p = prev, !p.isEmpty else { return false }
+        return chains[p.lowercased()]?.contains(word.lowercased()) != true
+    }
+
+    /// `next` (chữ thường) viết hoa vì CHUỖI sau `prev` (không phải tên riêng đứng một mình)?
+    static func chainCapitalizes(_ next: String, after prev: String) -> Bool {
+        chains[prev.lowercased()]?.contains(next) == true
+    }
+}
+
 /// Hoa/thường của gợi ý theo Shift + chữ đang gõ — như Gboard / bàn phím stock
 /// (feedback 10/2026: bật Shift mà gợi ý vẫn thường). Song sinh Android
 /// `SuggestionCase` (DisplayCase.kt). Chỉ áp lên vài ứng viên đang hiện.

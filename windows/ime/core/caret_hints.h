@@ -224,8 +224,12 @@ bool learnable(const std::u32string& w);
 class LearnTracker {
 public:
     struct Event {
-        std::u32string word, prev1, prev2;  // empty = none
+        std::u32string word, prev1, prev2;  // lowercase; empty = none
         int weight = 1;
+        // The word exactly as committed (learned casing, 10/2026): this is what the Learn payload
+        // carries — the app keys by lowercase anyway (old app builds learn it unchanged) and
+        // judges the casing as mid-sentence evidence when prev1 is present.
+        std::u32string form;
     };
     // `word` committed by `boundary` (' ' keeps the sentence context, anything else cuts it).
     // true = `out` is the previous held event, final now.

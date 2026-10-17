@@ -177,14 +177,15 @@ enum SwipeRevise {
     /// "từ vuốt + ␠ + từ gõ + ranh giới" và trước đó không dính chữ/số — lệch/không đọc được ⇒ nil.
     static func reviseTyped(_ p: Typed, typed: String, boundary: String, before: String?,
                             lm: SyllableLM? = SyllableLM.shared, margin: Float = typedMargin,
-                            weight: Float = typedRightWeight) -> TypedEdit? {
+                            weight: Float = typedRightWeight,
+                            learnedCase: ((String) -> String?)? = nil) -> TypedEdit? {
         guard !typed.isEmpty, let b0 = boundary.first, !b0.isLetter, !b0.isNumber, let before else { return nil }
         let e0 = TypedEdit(old: p.word, new: p.word, typed: typed, boundary: boundary)
         guard before.hasSuffix(e0.tail) else { return nil }
         if let c = before.dropLast(e0.tail.count).last, c.isLetter || c.isNumber { return nil }
         guard let new = revise(p.scored, current: p.word.lowercased(), prev: p.prev, next: typed.lowercased(),
                                lm: lm, margin: margin, weight: weight) else { return nil }
-        let cased = p.sc.apply(new)
+        let cased = p.sc.apply(new, proper: { DisplayCase.resolve($0, after: p.prev, learned: learnedCase) })
         return cased == p.word ? nil : TypedEdit(old: p.word, new: cased, typed: typed, boundary: boundary)
     }
 

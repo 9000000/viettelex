@@ -1999,7 +1999,9 @@ void TextService::noteLearnKey(const KeyInput& k, bool handled) {
 
 void TextService::learnSend(const hints::LearnTracker::Event& e) {
     if (!learnOn_ || !toolWnd_) return;
-    const LearnEvent le{hints::toU16(e.word), hints::toU16(e.prev1), hints::toU16(e.prev2), e.weight};
+    // word as committed (casing kept — learned casing); the app lowercases the key itself
+    const LearnEvent le{hints::toU16(e.form.empty() ? e.word : e.form), hints::toU16(e.prev1), hints::toU16(e.prev2),
+                        e.weight};
     if (!appendLearnEvent(learnQueue_, le)) {
         sendLearnQueue();  // full: send what is queued now (rare: ~20 words without a pause)
         if (!appendLearnEvent(learnQueue_, le)) return;

@@ -147,6 +147,9 @@ public:
     struct Event {
         std::string word, prev1, prev2;  // "" = none
         int weight = 1;
+        // The word exactly as committed (casing kept) — the helper's learned-casing table
+        // (LearnedModel CaseTable) counts mid-sentence capitals from it; `word` stays the key.
+        std::string form;
     };
     // `word` committed by `boundary` (the character typed: ' ' keeps the context, anything else
     // cuts it). true = `out` is the previous held event, final now.
@@ -165,7 +168,8 @@ private:
     bool pending_ = false;
     Event held_;
 };
-// The helper line for an event ("learn\t<word>\t<prev1>\t<prev2>\t<weight>").
+// The helper line for an event ("learn\t<form>\t<prev1>\t<prev2>\t<weight>"): the word as committed
+// (the helper lowercases its keys; an older helper does too, so the line stays compatible).
 std::string learnRequest(const LearnTracker::Event &e);
 
 }  // namespace hints

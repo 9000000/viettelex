@@ -353,7 +353,7 @@ final class PredictionModel {
                 }
             }
             let next = SuggestionFill.pad(lead, with: tri + personal, need: PredictionLogic.rankDepth)
-            return next.map { DisplayCase.apply($0, after: prev) }
+            return next.map { DisplayCase.resolve($0, after: prev, learned: learned.map { l in { l.learnedCase($0) } }) }
         }
         let typed = r.typed
         let pool = r.english ? [] : VNSuggest.matches(typed, poolLimit: 24, excluding: typed.lowercased())
@@ -379,7 +379,8 @@ final class PredictionModel {
                 SuggestRank.rankInline(pool, pmi: pmi, typedLen: typed.count, count: personalCount, ctx: ctx),
                 enabled: filterOn)
             return PredictionLogic.completions(ranked, typed: typed).map {
-                SuggestionCase.display(DisplayCase.apply($0, after: r.prev), shift: .off, typed: typed)
+                SuggestionCase.display(DisplayCase.resolve($0, after: r.prev, learned: learned.map { l in { l.learnedCase($0) } }),
+                                       shift: .off, typed: typed)
             }
         }
         // Tiếng Anh: phím thô (a–z) — "this" có thể đang hiện "thí" sau Telex.

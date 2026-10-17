@@ -194,9 +194,12 @@ void onLearnWork() {
     q.swap(g_learnQueue);
     if (q.empty() || !learningOn()) return;
     learn::Model* m = learnedModel();
-    for (const LearnEvent& e : q)
-        m->record(text::toUtf8(text::fromUtf16(e.word)), text::toUtf8(text::fromUtf16(e.prev1)),
-                  text::toUtf8(text::fromUtf16(e.prev2)), e.weight);
+    for (const LearnEvent& e : q) {
+        const std::u32string w = text::fromUtf16(e.word), p1 = text::fromUtf16(e.prev1);
+        // learned casing: mid-sentence only (the TIP cuts prev1 at sentence / field start)
+        m->record(text::toUtf8(w), text::toUtf8(p1), text::toUtf8(text::fromUtf16(e.prev2)), e.weight,
+                  predict::casingEvidence(w, p1));
+    }
     if (g_mainWnd) SetTimer(g_mainWnd, kTimerLearnSave, kLearnSaveDelayMs, nullptr);
 }
 

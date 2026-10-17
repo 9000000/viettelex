@@ -833,20 +833,38 @@ class KeyboardSession(
                      case: SwipeSuggest.Case = SwipeSuggest.Case.LOWER): SwipeResolved? {
         // Chế độ Tiếng Anh (vuốt phím cách): chỉ ứng viên tiếng Anh
         val cands = if (bridge.englishMode) SwipeSuggest.englishOnly(all) else all
-        val choice = SwipeSuggest.choose(cands, ctx.word, case, ctx.lambdaFreq) ?: return null
+        val choice = SwipeSuggest.choose(cands, ctx.word, case, ctx.lambdaFreq, ctx.proper) ?: return null
         val scored = if (choice.english) emptyList() else SwipeRevise.scored(cands, ctx.word, ctx.lambdaFreq)
         val rec = revisable
-        if (rec == null || choice.english || swipeLiteral || !bridge.isComposing || bridge.composedWord != rec.word)
+        if (rec == null || swipeLiteral || !bridge.isComposing || bridge.composedWord != rec.word)
             return SwipeResolved(choice, scored, case)
+        if (choice.english) return chainCapitalizePrev(SwipeResolved(choice, scored, case), rec.word, ctx, case)
         // sửa chung cặp (từ vuốt trước, cú vuốt này) — ứng viên từ kế rộng hơn scored
         val new = SwipeRevise.revise(rec.scored, rec.word.lowercase(), lastWord,
             SwipeRevise.nextPool(cands, ctx.word, ctx.lambdaFreq))
-            ?: return SwipeResolved(choice, scored, case)
-        val nctx = SwipeSuggest.context(langModel, new, lastWord, ctx.english)
+            ?: return chainCapitalizePrev(SwipeResolved(choice, scored, case), rec.word, ctx, case)
+        val nctx = SwipeSuggest.context(langModel, new, lastWord, ctx.english, properNouns = ctx.properNouns)
         val re = SwipeRevise.rerank(cands, ctx.word, ctx.lambdaFreq, nctx.word, nctx.lambdaFreq)
-        val c = SwipeSuggest.choose(re, nctx.word, case, nctx.lambdaFreq) ?: choice
-        return SwipeResolved(c, if (c.english) emptyList() else SwipeRevise.scored(re, nctx.word, nctx.lambdaFreq),
-            case, SwipeSuggest.applyCase(new, rec.case))
+        val c = SwipeSuggest.choose(re, nctx.word, case, nctx.lambdaFreq, nctx.proper) ?: choice
+        val prevProper: (String) -> String = { if (ctx.properNouns) DisplayCase.resolve(it, lastWord, ctx.learnedCase) else it }
+        return chainCapitalizePrev(SwipeResolved(c, if (c.english) emptyList() else SwipeRevise.scored(re, nctx.word, nctx.lambdaFreq),
+            case, SwipeSuggest.applyCase(new, rec.case, prevProper)), rec.word, ctx, case)
+    }
+
+    /**
+     * Chuỗi tên riêng: từ vuốt này viết hoa vì từ vuốt trước còn mở ("việt" + "nam" → "Nam") ⇒ hoa
+     * luôn từ trước ("Việt Nam", không "việt Nam") — qua đường thay từ trước của [commitSwipe]
+     * (chip "↩︎ từ cũ" như sửa lại). Caps Lock: từ trước đã hoa sẵn. = iOS SwipeTyping.finish.
+     */
+    private fun chainCapitalizePrev(r: SwipeResolved, prevWord: String, ctx: SwipeSuggest.Context,
+                                    case: SwipeSuggest.Case): SwipeResolved {
+        if (!ctx.properNouns || case == SwipeSuggest.Case.ALL) return r
+        val onScreen = r.revisedPrev ?: prevWord
+        if (onScreen.isEmpty()) return r
+        val f = onScreen.codePointAt(0)
+        if (Character.isUpperCase(f) || Character.isTitleCase(f)) return r
+        if (!DisplayCase.chainCapitalizes(r.choice.word.lowercase(), onScreen)) return r
+        return SwipeResolved(r.choice, r.scored, r.case, Cp.capitalizeFirst(onScreen))
     }
 
     fun commitSwipe(r: SwipeResolved, proxy: TextProxy): KeyOutcome =
@@ -867,7 +885,7 @@ class KeyboardSession(
         // bảng từ của engine + từ điển. Tắt vuốt tiếng Anh ⇒ không tính gì.
         val english = if (bridge.englishMode) SwipeLangContext.ONLY_ENGLISH else if (!swipeEnglish) null else SwipeLangContext.prior(
             SwipeLangContext.kinds(composing, pending, lit != null || isRecentEnglish(pending), langRecent, ::isRecentEnglish))
-        return SwipeSuggest.context(langModel, p1, p2, english)
+        return SwipeSuggest.context(langModel, p1, p2, english, properNouns = !traits.lowercaseSuggestions)
     }
 
     private fun isRecentEnglish(w: String?) = w != null && w.lowercase() in recentEnglish
@@ -985,7 +1003,8 @@ class KeyboardSession(
             if (parts.isEmpty()) { lastWord = null; lastWord2 = null }
             return
         }
-        val learned = if (learnEnabled) langModel.record(word, lastWord, lastWord2, if (accepted) 2 else 1) else null
+        val learned = if (learnEnabled)
+            langModel.record(word, lastWord, lastWord2, if (accepted) 2 else 1, casingEvidence(word)) else null
         lastCommit = LastCommit(word, lastWord, lastWord2, learned)
         if (UserLangModel.learnable(word)) {
             lastWord2 = lastWord; lastWord = word
@@ -994,6 +1013,18 @@ class KeyboardSession(
                 if (langRecent.size > SwipeLangContext.WINDOW) langRecent.removeFirst()
             }
         } else { lastWord = null; lastWord2 = null }
+    }
+
+    /**
+     * Hoa/thường của [word] có được dạy bảng hoa/thường đã học không ([CaseTable]): chỉ GIỮA CÂU
+     * (lastWord còn — đầu ô / dấu câu / xuống dòng / dời con trỏ đã cắt nó), không do chuỗi tên
+     * riêng, và từ CÓ chữ hoa thì ô không tự hoa mỗi từ / mọi chữ (CAP_WORDS / CAP_CHARACTERS).
+     * = iOS casingEvidence.
+     */
+    private fun casingEvidence(word: String): Boolean {
+        if (!DisplayCase.casingEvidence(word, lastWord)) return false
+        if (word.codePoints().noneMatch { Character.isUpperCase(it) || Character.isTitleCase(it) }) return true
+        return !traits.capWords && !traits.capCharacters
     }
 
     // MARK: gợi ý
@@ -1021,9 +1052,12 @@ class KeyboardSession(
         return true
     }
 
-    /** Hoa/thường hiển thị của gợi ý: [DisplayCase] (tên riêng), trừ ô địa chỉ / tìm kiếm ⇒ chữ thường. */
+    /**
+     * Hoa/thường hiển thị của gợi ý: hoa/thường người dùng đã viết nhất quán ([UserLangModel.learnedCase])
+     * > [DisplayCase] (tên riêng); từ đã có chữ hoa giữ nguyên; ô địa chỉ / tìm kiếm ⇒ chữ thường.
+     */
     private fun displayCase(w: String, after: String? = null) =
-        if (traits.lowercaseSuggestions) w.lowercase() else DisplayCase.apply(w, after)
+        if (traits.lowercaseSuggestions) w.lowercase() else DisplayCase.resolve(w, after) { langModel.learnedCase(it) }
 
     private fun padWords(base: List<String>, need: Int, typed: String = ""): List<String> {
         if (base.size >= need) return base.take(need)
@@ -1421,7 +1455,8 @@ class KeyboardSession(
      */
     private fun reviseTypedPrev(p: TypedPending, typed: String, boundary: String, proxy: TextProxy,
                                 sentenceBreak: Boolean) {
-        val e = SwipeRevise.reviseTyped(p.rev, typed, boundary, proxy.contextBeforeInput()) ?: return
+        val e = SwipeRevise.reviseTyped(p.rev, typed, boundary, proxy.contextBeforeInput(),
+            learnedCase = { langModel.learnedCase(it) }, properNouns = !traits.lowercaseSuggestions) ?: return
         proxy.deleteCodePoints(Cp.count(e.tail))
         proxy.insertText(e.replacement)
         val newLearned = relearnPair(p.learned, e.new, typed)

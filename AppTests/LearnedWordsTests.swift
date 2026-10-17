@@ -314,16 +314,83 @@ final class LearnedWordsTests: XCTestCase {
         XCTAssertEqual(LearnedModel.load(from: url).model.count("phở"), 1)
     }
 
+    // MARK: hoa/thường đã học (CaseTable — chung iOS/Android/Windows)
+
+    /// Gõ như controller: từng câu riêng, lượt học mang dạng gốc + bằng chứng giữa câu.
+    private func typeCased(_ m: LearnedModel, _ sentence: String, times: Int = 1) {
+        for _ in 0..<times {
+            var tr = LearnTracker()
+            func rec(_ e: LearnTracker.Event) {
+                m.record(word: e.form, after: e.prev1, prev2: e.prev2, weight: e.weight, caseEvidence: e.caseEvidence)
+            }
+            for w in sentence.split(separator: " ") { if let e = tr.commit(String(w), boundary: " ") { rec(e) } }
+            if let e = tr.breakContext() { rec(e) }
+        }
+    }
+
+    func testLearnedCasingThreeMidSentenceUses() {
+        let m = model()
+        typeCased(m, "gửi SenPrints", times: 2)
+        XCTAssertNil(m.learnedCase("senprints"))
+        typeCased(m, "gửi SenPrints")
+        XCTAssertEqual(m.learnedCase("senprints"), "SenPrints")
+        typeCased(m, "gặp anh Văn", times: 3)
+        XCTAssertEqual(m.learnedCase("văn"), "Văn")
+        // gợi ý từ kế tiếp + hoàn thành từ hiện dạng đã học (DisplayCase không có "văn")
+        XCTAssertTrue(next("gặp anh ", m).contains("Văn"), "\(next("gặp anh ", m))")
+        XCTAssertTrue(complete("gặp anh vă", typed: "vă", m).contains("Văn"), "\(complete("gặp anh vă", typed: "vă", m))")
+        XCTAssertFalse(next("gặp anh ", nil).contains("Văn"))
+    }
+
+    func testLearnedCasingIgnoresSentenceStartCapsAndChains() {
+        let m = model()
+        typeCased(m, "Văn ơi", times: 5)                    // đầu câu
+        typeCased(m, "gặp VĂN", times: 5)                   // Caps Lock
+        typeCased(m, "yêu Việt Nam", times: 5)              // chuỗi tên riêng
+        XCTAssertNil(m.learnedCase("văn"))
+        XCTAssertNil(m.learnedCase("nam"))
+        XCTAssertEqual(m.learnedCase("việt"), "Việt", "\"Việt\" giữa câu (sau \"yêu\") là bằng chứng thật")
+        XCTAssertEqual(m.cases.stats["việt"]?.hits, 5)
+        XCTAssertNil(m.cases.stats["nam"])
+        XCTAssertNil(m.cases.stats["văn"])
+        // từ nhập nhằng gõ thường nhiều trước đó: vài lần viết hoa không đủ
+        let n = model()
+        typeCased(n, "bài văn", times: 20)
+        typeCased(n, "anh Văn", times: 3)
+        XCTAssertNil(n.learnedCase("văn"))
+    }
+
+    func testLearnedCasingPersistsAndClears() throws {
+        let m = model()
+        typeCased(m, "gửi SenPrints", times: 3)
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        XCTAssertTrue(LearnedModel.write(m.snapshot().encoded(), to: url))
+        let back = LearnedModel.load(from: url, isKnownWord: { VNSuggest.contains($0) }, now: m.lastDecay).model
+        XCTAssertEqual(back.learnedCase("senprints"), "SenPrints")
+        XCTAssertEqual(back.cases, m.cases)
+        back.clear()
+        XCTAssertNil(back.learnedCase("senprints"))
+        XCTAssertTrue(back.isEmpty)
+        // không có dữ liệu hoa/thường ⇒ byte y như định dạng cũ (flags 0)
+        let plain = model()
+        type(plain, "ăn cơm", times: 2)
+        let bytes = plain.snapshot().encoded()
+        XCTAssertEqual(bytes[6], 0)
+        XCTAssertEqual(bytes, UserLMCodec.encode(plain.t, lastDecay: plain.lastDecay, manual: []))
+    }
+
     // MARK: LearnTracker
 
     func testTrackerContextAndPending() {
         var t = LearnTracker()
         XCTAssertNil(t.commit("Ăn", boundary: " "))
-        XCTAssertEqual(t.pending, .init(word: "ăn", prev1: nil, prev2: nil, weight: 1))
-        XCTAssertEqual(t.commit("cơm", boundary: ","), .init(word: "ăn", prev1: nil, prev2: nil, weight: 1))
+        XCTAssertEqual(t.pending, .init(word: "ăn", prev1: nil, prev2: nil, weight: 1, form: "Ăn"))
+        XCTAssertEqual(t.pending?.caseEvidence, false, "đầu câu: chữ hoa không phải bằng chứng")
+        XCTAssertEqual(t.commit("cơm", boundary: ","), .init(word: "ăn", prev1: nil, prev2: nil, weight: 1, form: "Ăn"))
         XCTAssertNil(t.prev1, "dấu câu cắt ngữ cảnh")
-        XCTAssertEqual(t.commit("rồi", boundary: " "), .init(word: "cơm", prev1: "ăn", prev2: nil, weight: 1))
-        XCTAssertEqual(t.pending, .init(word: "rồi", prev1: nil, prev2: nil, weight: 1))
+        XCTAssertEqual(t.commit("rồi", boundary: " "), .init(word: "cơm", prev1: "ăn", prev2: nil, weight: 1, form: "cơm"))
+        XCTAssertEqual(t.pending, .init(word: "rồi", prev1: nil, prev2: nil, weight: 1, form: "rồi"))
         // ⌫ vào chữ vừa chốt: bỏ.
         t.discard()
         XCTAssertNil(t.pending)
@@ -341,7 +408,7 @@ final class LearnedWordsTests: XCTestCase {
         _ = t.commit("tôi", boundary: " ")
         _ = t.commit("dii", boundary: " ")
         t.replacePending(with: "đi")
-        XCTAssertEqual(t.pending, .init(word: "đi", prev1: "tôi", prev2: nil, weight: 1))
+        XCTAssertEqual(t.pending, .init(word: "đi", prev1: "tôi", prev2: nil, weight: 1, form: "đi"))
         XCTAssertEqual(t.commit("học", boundary: " ")?.word, "đi")
         XCTAssertEqual(t.pending?.prev1, "đi", "ngữ cảnh theo dạng đã sửa")
     }
@@ -440,6 +507,24 @@ final class LearnedWordsGateTests: XCTestCase {
         h.keyCode(36, chars: "\r")
         XCTAssertEqual(learned("ăn"), 1)
         XCTAssertEqual(learned("cơm"), 0, "từ có thể đang bị sửa ⇒ không học")
+    }
+
+    func testLearnsMidSentenceCasingButNotSentenceStart() {
+        let h = ControllerHarness(bundleID: "com.apple.TextEdit")
+        for _ in 0..<3 { h.type("Gawpj anh Vawn "); h.keyCode(36, chars: "\r") }   // mỗi lần một câu
+        LearnedWords.shared.withModelForTesting { m in
+            XCTAssertEqual(m.learnedCase("văn"), "Văn")
+            XCTAssertNil(m.learnedCase("gặp"), "đầu câu")
+            XCTAssertNil(m.cases.stats["gặp"])
+        }
+    }
+
+    func testSecureFieldLearnsNoCasing() {
+        SecureFieldDetector._testSetCached(true)
+        let h = ControllerHarness(bundleID: "com.apple.TextEdit")
+        for _ in 0..<3 { h.type("anh Vawn ") }
+        h.keyCode(36, chars: "\r")
+        LearnedWords.shared.withModelForTesting { m in XCTAssertTrue(m.cases.isEmpty) }
     }
 
     func testAcceptedPredictionLearnsWithWeightTwo() {

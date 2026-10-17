@@ -90,6 +90,14 @@ bool muted(const std::u32string& typed, const std::u32string& declined);
 // ---------------------------------------------------------------- display helpers
 // DisplayCase.apply (proper nouns, name chains "hà" -> "Nội").
 std::u32string displayCase(const std::u32string& w, const std::optional<std::u32string>& after);
+// DisplayCase.resolve: a word that already has an uppercase letter stays; the casing the user
+// consistently writes (learn::Model::learnedCase; `learned` may be null) wins; else displayCase.
+std::u32string resolveCase(const std::u32string& w, const std::optional<std::u32string>& after,
+                           const learn::Model* learned);
+// DisplayCase.casingEvidence: the casing of `word` (as typed, after `prev`) teaches the learned
+// casing only mid-sentence (prev non-empty — the tracker cuts it at sentence / field start) and
+// not when a name chain explains the capital ("Việt Nam" never teaches "nam").
+bool casingEvidence(const std::u32string& word, const std::u32string& prev);
 // SuggestionCase.display(w, shift: .off, typed:).
 std::u32string suggestionCase(const std::u32string& w, const std::u32string& typed);
 bool isSensitive(const std::u32string& w);  // SensitiveWords.set (lowercased)

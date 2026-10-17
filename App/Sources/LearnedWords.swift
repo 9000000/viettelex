@@ -84,7 +84,8 @@ final class LearnedWords {
     func record(_ e: LearnTracker.Event, generation g: Int) {
         queue.async { [self] in
             guard g == generation else { return }
-            modelForRanking().record(word: e.word, after: e.prev1, prev2: e.prev2, weight: e.weight)
+            modelForRanking().record(word: e.form.isEmpty ? e.word : e.form, after: e.prev1, prev2: e.prev2,
+                                     weight: e.weight, caseEvidence: !e.form.isEmpty && e.caseEvidence)
             scheduleSave()
         }
     }

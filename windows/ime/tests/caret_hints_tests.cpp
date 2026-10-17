@@ -428,6 +428,15 @@ TEST(learn_tracker_context_and_pending) {
     CHECK(t.commit(U"x1", U' ', true, 1, e) && e.word == U"đi");
     CHECK(!t.hasPending());
     CHECK(!t.commit(U"học", U' ', false, 1, e) && !t.hasPending());
+    // learned casing: the event keeps the word as committed (the payload sends it), key lowercase
+    LearnTracker k;
+    k.commit(U"ở", U' ', true, 1, e);
+    k.commit(U"SenPrints", U' ', true, 1, e);
+    CHECK(k.pending().word == U"senprints" && k.pending().form == U"SenPrints" && k.pending().prev1 == U"ở");
+    CHECK(k.commit(U"nhé", U'.', true, 1, e) && e.form == U"SenPrints");
+    k.commit(U"Dii", U' ', true, 1, e);
+    k.replacePending(U"Đi");
+    CHECK(k.pending().word == U"đi" && k.pending().form == U"Đi");
     LearnTracker f;
     f.commit(U"tôi", U' ', true, 1, e);
     f.commit(U"dii", U' ', true, 1, e);

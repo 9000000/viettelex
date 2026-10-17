@@ -638,6 +638,8 @@ void testLearnTracker() {
     hints::LearnTracker::Event e;
     CHECK(!t.commit("Ăn", ' ', true, 1, e));
     CHECK(t.hasPending() && t.pending().word == "ăn");
+    CHECK_EQ(t.pending().form, std::string("Ăn"));  // casing kept for the learned-casing table
+    CHECK_EQ(hints::learnRequest(t.pending()), L("Ăn"));
     CHECK(t.commit("cơm", ',', true, 1, e) && e.word == "ăn" && e.prev1.empty());
     CHECK(t.prev1().empty());  // punctuation cuts the context
     CHECK(t.commit("rồi", ' ', true, 1, e) && e.word == "cơm" && e.prev1 == "ăn");
@@ -652,7 +654,7 @@ void testLearnTracker() {
     f.commit("tôi", ' ', true, 1, e);
     f.commit("dii", ' ', true, 1, e);
     f.replacePending("đi");
-    CHECK(f.pending().word == "đi" && f.pending().prev1 == "tôi");
+    CHECK(f.pending().word == "đi" && f.pending().prev1 == "tôi" && f.pending().form == "đi");
     CHECK(f.commit("học", ' ', true, 1, e) && e.word == "đi");
     CHECK_EQ(f.pending().prev1, std::string("đi"));
     // = LearnedModel.learnable

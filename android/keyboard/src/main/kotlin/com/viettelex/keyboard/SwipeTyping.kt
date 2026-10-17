@@ -130,7 +130,19 @@ object SwipeSuggest {
                   /** Âm tiết trước nữa + mô hình trigram (vnlm.bin). */
                   prev2: String? = null, lm: SyllableLM? = null,
                   /** Cộng cặp chọn tay ([CuratedPairs]); false = mốc đo. */
-                  useCurated: Boolean = true) {
+                  useCurated: Boolean = true,
+                  /** Hoa/thường đã học ([UserLangModel.learnedCase]). */
+                  val learnedCase: ((String) -> String?)? = null,
+                  /** false = ô địa chỉ / tìm kiếm (thanh gợi ý chữ thường): không tên riêng, chỉ Shift. */
+                  val properNouns: Boolean = true) {
+        /** Từ liền trước (chuỗi tên riêng [DisplayCase]). */
+        val prevWord: String? = prev
+
+        /** Dạng tên riêng của từ vuốt [w] (chữ thường) sau [prevWord] — trước khi áp Shift. = iOS Context.proper. */
+        val proper: (String) -> String = { w ->
+            if (properNouns) DisplayCase.resolve(w, prevWord, learnedCase) else w
+        }
+
         private val id1 = if (prev == null) -1 else SyllableLM.idOf(prev)
         private val lmCtx: SyllableLM.Context? =
             if (lm == null || id1 < 0) null
@@ -218,10 +230,12 @@ object SwipeSuggest {
 
     fun context(model: UserLangModel?, prev1: String?, prev2: String?,
                 english: SwipeEnglishPrior? = null,
-                lm: SyllableLM? = SyllableLM.shared): Context {
+                lm: SyllableLM? = SyllableLM.shared, properNouns: Boolean = true): Context {
         val next = if (model != null && prev1 != null) model.nextWords(prev1, prev2, 24).map { it.lowercase() }.toSet() else emptySet()
         val count: (String) -> Int = if (model == null) { _ -> 0 } else { w -> model.count(w) }
-        return Context(next, next.mapTo(HashSet()) { fold(it) }, count, prev1, english, prev2, lm)
+        val learned: ((String) -> String?)? = model?.let { m -> { k: String -> m.learnedCase(k) } }
+        return Context(next, next.mapTo(HashSet()) { fold(it) }, count, prev1, english, prev2, lm,
+            learnedCase = learned, properNouns = properNouns)
     }
 
     /** Chế độ Tiếng Anh (vuốt phím cách): chỉ giữ ứng viên tiếng Anh. Giống iOS SwipeTyping.englishOnly. */
@@ -239,7 +253,7 @@ object SwipeSuggest {
      * [lambdaFreq] = [Context.lambdaFreq] (hạ khi có trigram).
      */
     fun choose(cands: List<SwipeCandidate>, wordCtx: ((String) -> Float)?, case: Case = Case.LOWER,
-               lambdaFreq: Float = LAMBDA_FREQ): SwipeChoice? {
+               lambdaFreq: Float = LAMBDA_FREQ, proper: (String) -> String = { it }): SwipeChoice? {
         val wordsFor = { c: SwipeCandidate, limit: Int, ctx: ((String) -> Float)? -> wordsFor(c, limit, ctx, lambdaFreq) }
         var best: List<String> = emptyList()
         var bestIdx = -1
@@ -281,14 +295,28 @@ object SwipeSuggest {
                 alts.add(w)
             }
         }
-        return SwipeChoice(applyCase(word, case), alts.map { applyCase(it, case) },
-            lead == SwipeLang.EN, alts.filter { it in english }.mapTo(HashSet()) { applyCase(it, case) })
+        val cased = { w: String -> applyCase(w, case, proper) }
+        return SwipeChoice(cased(word), alts.map(cased),
+            lead == SwipeLang.EN, alts.filter { it in english }.mapTo(HashSet()) { cased(it) })
     }
 
-    fun applyCase(w: String, case: Case): String = when (case) {
-        Case.LOWER -> w
-        Case.FIRST -> Cp.capitalizeFirst(w)
-        Case.ALL -> w.uppercase()
+    /** Chỉ Shift (không tên riêng) — giữ cho công cụ/test cũ. */
+    fun applyCase(w: String, case: Case): String = applyCase(w, case) { it }
+
+    /**
+     * Dạng chèn của từ vuốt (chữ thường từ decoder): trước hết dạng tên riêng [proper] (hoa/thường
+     * đã học ⊕ [DisplayCase] như thanh gợi ý — "iphone" → "iPhone", "nam" sau "việt" → "Nam"), rồi
+     * Shift: Caps Lock ⇒ HOA HẾT; Shift một-lần / đầu câu ⇒ hoa chữ đầu, NHƯNG từ đã có chữ hoa giữ
+     * nguyên ("iPhone" đầu câu vẫn "iPhone"); không bao giờ hạ chữ hoa. = iOS SwipeCase.apply(proper:).
+     */
+    fun applyCase(w: String, case: Case, proper: (String) -> String): String {
+        val base = proper(w)
+        return when (case) {
+            Case.LOWER -> base
+            Case.FIRST -> if (base.codePoints().anyMatch { Character.isUpperCase(it) || Character.isTitleCase(it) }) base
+                else Cp.capitalizeFirst(base)
+            Case.ALL -> base.uppercase()
+        }
     }
 
     /**

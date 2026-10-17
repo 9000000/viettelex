@@ -20,6 +20,11 @@
 //     cặp người dùng ĐÃ GÕ ≥ `learnedPairMin` (= SuggestRank.learnedTriMin = 2) lần — cùng ngữ
 //     nghĩa "bộ ba gõ ≥ 2 lần được dẫn đầu" của iOS, áp cho cặp (prev → từ) của chính người dùng.
 //
+//   • hoa/thường đã học (10/2026): CaseTable (UserLMTables.swift) — dạng người dùng NHẤT QUÁN viết
+//     GIỮA CÂU ("SenPrints", tên "Văn": ≥ 3 lần và ≥ 80% số lần giữa câu); đầu câu / Caps Lock /
+//     chuỗi tên riêng (việt → Nam) không tính. Gợi ý hiện dạng đó (DisplayCase.resolve). Lưu chung
+//     learned-words.bin (VTL2 flags bit 0 — không có dữ liệu hoa/thường ⇒ byte y như cũ).
+//
 // RIÊNG TƯ: chỉ đếm tần suất (không câu, không thứ tự, không thời điểm per-từ); file nhỏ trên
 // máy (macOS ~/Library/Application Support/<bundle id>/learned-words.bin, Linux
 // $XDG_DATA_HOME/viettelex/learned-words.bin, Windows %LOCALAPPDATA%\VietTelex\learned-words.bin),
@@ -44,6 +49,7 @@ final class LearnedModel {
     static let fileName = "learned-words.bin"
 
     private(set) var t = UserLMTables()
+    private(set) var cases = CaseTable()
     private(set) var lastDecay: Date
     /// Lexicon tĩnh (VNSuggest.contains) — từ trong lexicon được gợi ý ngay.
     let isKnownWord: (String) -> Bool
@@ -56,7 +62,7 @@ final class LearnedModel {
         lastDecay = now
     }
 
-    var isEmpty: Bool { t.uniN == 0 && t.biN == 0 && t.triN == 0 }
+    var isEmpty: Bool { t.uniN == 0 && t.biN == 0 && t.triN == 0 && cases.isEmpty }
     var wordCount: Int { t.uniN }
     var pairCount: Int { t.biN }
     var tripleCount: Int { t.triN }
@@ -77,10 +83,16 @@ final class LearnedModel {
     }
 
     /// Một từ vừa chốt (khoá chữ thường). O(log n) + chèn vào bucket; prune hiếm (khi đầy).
-    func record(word: String, after prev1: String?, prev2: String? = nil, weight: Int = 1) {
+    /// `caseEvidence`: `word` mang đúng hoa/thường đã gõ và là bằng chứng GIỮA CÂU
+    /// (`DisplayCase.casingEvidence`) ⇒ đếm vào bảng hoa/thường (trước khi tăng unigram).
+    func record(word: String, after prev1: String?, prev2: String? = nil, weight: Int = 1,
+                caseEvidence: Bool = false) {
         guard weight > 0, Self.learnable(word) else { return }
         let w = word.lowercased()
         let wid = t.intern(w)
+        if caseEvidence {
+            cases.observe(word.precomposedStringWithCanonicalMapping, key: w, priorCount: t.uni(wid))
+        }
         t.setUni(wid, t.uni(wid) + weight)
         if let p1 = prev1?.lowercased(), Self.learnable(p1) {
             let pid = t.intern(p1)
@@ -95,6 +107,11 @@ final class LearnedModel {
     }
 
     // MARK: tra
+
+    /// Dạng hoa/thường người dùng hay viết (`key` chữ thường); nil = chưa đủ nhất quán.
+    func learnedCase(_ key: String) -> String? {
+        cases.isEmpty ? nil : cases.preferred(key)
+    }
 
     func count(_ w: String) -> Int {
         let c = t.uni(w)
@@ -213,11 +230,16 @@ final class LearnedModel {
     private func scale(uni: Bool, bi: Bool, tri: Bool, by f: Double) {
         t.mapCounts(uni: uni, bi: bi, tri: tri) { Int(Double($0) * f) }
         t.compact()
+        if uni {                                  // từ rơi khỏi unigram ⇒ bỏ hoa/thường của nó
+            let tt = t
+            cases.retain { tt.uni($0) > 0 }
+        }
     }
 
     /// "Xoá từ đã học".
     func clear(now: Date = Date()) {
         t = UserLMTables()
+        cases = CaseTable()
         knownCache.removeAll()
         lastDecay = now
         changes += 1
@@ -228,11 +250,12 @@ final class LearnedModel {
     struct Snapshot {
         let tables: UserLMTables
         let lastDecay: Date
-        func encoded() -> Data { UserLMCodec.encode(tables, lastDecay: lastDecay, manual: []) }
+        var cases = CaseTable()
+        func encoded() -> Data { UserLMCodec.encode(tables, lastDecay: lastDecay, manual: [], cases: cases) }
     }
 
     /// Bản chụp COW (rẻ — tăng refcount mảng); encode + ghi ở thread khác.
-    func snapshot() -> Snapshot { Snapshot(tables: t, lastDecay: lastDecay) }
+    func snapshot() -> Snapshot { Snapshot(tables: t, lastDecay: lastDecay, cases: cases) }
     func markSaved() { changes = 0 }
 
     /// Nạp từ dữ liệu file; nil = hỏng / sai định dạng (gọi nơi dựng mô hình rỗng thay thế).
@@ -240,6 +263,7 @@ final class LearnedModel {
         guard let d = UserLMCodec.decode(data) else { return nil }
         let m = LearnedModel(isKnownWord: isKnownWord, now: d.lastDecay)
         m.t = d.tables
+        m.cases = d.cases
         return m
     }
 
@@ -280,6 +304,11 @@ struct LearnTracker {
         var prev1: String?
         var prev2: String?
         var weight: Int
+        /// Đúng hoa/thường đã gõ (NFC) — bảng hoa/thường đã học; `word` là khoá chữ thường.
+        var form: String = ""
+        /// `form` là bằng chứng hoa/thường GIỮA CÂU (có prev1 — đầu câu/dấu câu đã cắt ngữ cảnh —
+        /// và không do chuỗi tên riêng, DisplayCase.casingEvidence).
+        var caseEvidence: Bool { prev1 != nil && DisplayCase.casingEvidence(form, prev: prev1) }
     }
 
     private(set) var prev1: String?
@@ -292,12 +321,13 @@ struct LearnTracker {
     mutating func commit(_ word: String, boundary: String, standsAlone: Bool = true, weight: Int = 1) -> Event? {
         let out = pending
         pending = nil
-        let w = word.precomposedStringWithCanonicalMapping.lowercased()
+        let nfc = word.precomposedStringWithCanonicalMapping
+        let w = nfc.lowercased()
         guard standsAlone, LearnedModel.learnable(w) else {
             prev1 = nil; prev2 = nil
             return out
         }
-        pending = Event(word: w, prev1: prev1, prev2: prev2, weight: weight)
+        pending = Event(word: w, prev1: prev1, prev2: prev2, weight: weight, form: nfc)
         if boundary == " " {
             prev2 = prev1; prev1 = w
         } else {
@@ -309,9 +339,11 @@ struct LearnTracker {
     /// Gợi ý sửa lỗi gõ vừa được nhận: lượt chờ học dạng ĐÃ SỬA (cùng ngữ cảnh).
     mutating func replacePending(with fixed: String) {
         guard let p = pending else { return }
-        let f = fixed.precomposedStringWithCanonicalMapping.lowercased()
+        let nfc = fixed.precomposedStringWithCanonicalMapping
+        let f = nfc.lowercased()
         guard LearnedModel.learnable(f) else { discard(); return }
         pending?.word = f
+        pending?.form = nfc
         if prev1 == p.word { prev1 = f }
     }
 

@@ -1269,7 +1269,7 @@ bool LearnTracker::commit(const std::u32string& word, char32_t boundary, bool st
         prev2_.clear();
         return had;
     }
-    held_ = Event{w, prev1_, prev2_, weight};
+    held_ = Event{w, prev1_, prev2_, weight, word};
     pending_ = true;
     if (boundary == U' ') {
         prev2_ = prev1_;
@@ -1287,6 +1287,7 @@ void LearnTracker::replacePending(const std::u32string& fixed) {
     if (!learnable(f)) return discard();
     if (prev1_ == held_.word) prev1_ = f;
     held_.word = f;
+    held_.form = fixed;
 }
 
 void LearnTracker::discard() {

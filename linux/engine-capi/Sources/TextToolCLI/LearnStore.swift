@@ -83,8 +83,11 @@ final class LearnStore {
         return m
     }
 
+    /// `word` = đúng hoa/thường đã gõ (frontend gửi dạng gốc từ 10/2026; bản cũ gửi chữ thường ⇒
+    /// không có bằng chứng hoa/thường). Bằng chứng = giữa câu (có prev1) và không do chuỗi tên riêng.
     func record(word: String, prev1: String?, prev2: String?, weight: Int) {
-        current().record(word: word, after: prev1, prev2: prev2, weight: weight)
+        current().record(word: word, after: prev1, prev2: prev2, weight: weight,
+                         caseEvidence: DisplayCase.casingEvidence(word, prev: prev1))
         lastChange = Self.now()
     }
 

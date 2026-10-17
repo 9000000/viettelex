@@ -29,6 +29,8 @@ import Foundation
 
 final class UserLangModel {
     private var t = UserLMTables()
+    /// Hoa/thường đã học (CaseTable, UserLMTables.swift): dạng người dùng nhất quán viết giữa câu.
+    private var cases = CaseTable()
     private var lastDecay = Date()
     /// Từ user tự thêm (màn Từ điển cá nhân): key lowercase → dạng hiển thị ("VietTelex").
     private(set) var manual: [String: String] = [:] { didSet { manualIndex = nil } }
@@ -63,7 +65,7 @@ final class UserLangModel {
     private let ioQueue = DispatchQueue(label: "com.viettelex.userlm.io", qos: .utility)
     private var isLoaded = false
     private var loadGeneration = 0    // eraseAll() giữa chừng → bỏ kết quả load cũ
-    private var pendingRecords: [(word: String, prev1: String?, prev2: String?, weight: Int)] = []
+    private var pendingRecords: [(word: String, prev1: String?, prev2: String?, weight: Int, caseEvidence: Bool)] = []
     private var pendingSeed: (uni: () -> [String: Int], bi: () -> [(String, String, Int)])?
     /// Nguồn seed gần nhất — để reloadAfterExternalEdit() seed lại khi file bị app xoá.
     private var seedSource: (uni: () -> [String: Int], bi: () -> [(String, String, Int)])?
@@ -132,7 +134,7 @@ final class UserLangModel {
 
     private func finishLoad(_ l: LoadedTables?) {
         if let l {
-            t = l.tables; lastDecay = l.lastDecay
+            t = l.tables; lastDecay = l.lastDecay; cases = l.cases
             manual = [:]
             for d in l.manual { manual[d.lowercased()] = d }
             keepManual()
@@ -145,7 +147,9 @@ final class UserLangModel {
         pendingSeed = nil
         let queued = pendingRecords
         pendingRecords = []
-        for r in queued { record(word: r.word, after: r.prev1, prev2: r.prev2, weight: r.weight) }
+        for r in queued {
+            record(word: r.word, after: r.prev1, prev2: r.prev2, weight: r.weight, caseEvidence: r.caseEvidence)
+        }
         decayIfDue()
         onReady?()
     }
@@ -163,17 +167,24 @@ final class UserLangModel {
         let weight: Int
     }
 
+    /// `caseEvidence`: chữ hoa/thường của `word` (đúng như đã gõ) là bằng chứng GIỮA CÂU —
+    /// caller tính bằng `DisplayCase.casingEvidence` (+ ô không tự hoa mỗi từ). false ⇒ không
+    /// đụng bảng hoa/thường.
     @discardableResult
-    func record(word: String, after prev1: String?, prev2: String? = nil, weight: Int = 1) -> Learned? {
+    func record(word: String, after prev1: String?, prev2: String? = nil, weight: Int = 1,
+                caseEvidence: Bool = false) -> Learned? {
         guard isLoaded else {
             if pendingRecords.count < Self.pendingRecordCap {
-                pendingRecords.append((word, prev1, prev2, weight))
+                pendingRecords.append((word, prev1, prev2, weight, caseEvidence))
             }
             return nil
         }
         guard weight > 0, Self.learnable(word) else { return nil }
         let w = word.lowercased()
         let wid = t.intern(w)
+        if caseEvidence {
+            cases.observe(word.precomposedStringWithCanonicalMapping, key: w, priorCount: t.uni(wid))
+        }
         t.setUni(wid, t.uni(wid) + weight)
         bumpTopCache(w)
         var biKey: String?, triKey: String?
@@ -211,6 +222,17 @@ final class UserLangModel {
     }
 
     /// Từ của người dùng: thêm tay, hoặc đã gõ đủ nhiều để được gợi ý — tự sửa không đụng.
+    /// Dạng hoa/thường người dùng hay viết (`key` chữ thường) — nil nếu chưa đủ nhất quán.
+    /// O(1), chỉ gọi cho vài ứng viên đang hiện / từ vuốt.
+    func learnedCase(_ key: String) -> String? {
+        cases.isEmpty ? nil : cases.preferred(key)
+    }
+
+    #if DEBUG
+    var debugCaseCount: Int { cases.count }
+    func debugCaseStat(_ key: String) -> CaseStat? { cases.stats[key] }
+    #endif
+
     func isUserWord(_ w: String) -> Bool {
         let k = w.lowercased()
         return manual[k] != nil || t.uni(k) >= Self.unknownSuggestThreshold
@@ -258,7 +280,7 @@ final class UserLangModel {
         for (i, c) in t.uniC.enumerated() where c > 0 {
             let k = t.words[i]
             guard q.isEmpty || Self.fold(k).contains(q) else { continue }
-            out.append(Entry(word: manual[k] ?? k, count: Int(c), manual: manual[k] != nil))
+            out.append(Entry(word: manual[k] ?? cases.preferred(k) ?? k, count: Int(c), manual: manual[k] != nil))
         }
         return out.sorted { $0.count != $1.count ? $0.count > $1.count : $0.word.lowercased() < $1.word.lowercased() }
     }
@@ -269,6 +291,7 @@ final class UserLangModel {
     func removeWord(_ word: String) -> Bool {
         let w = word.lowercased()
         var changed = manual.removeValue(forKey: w) != nil
+        if cases.stats[w] != nil { cases.remove(w); changed = true }
         if let id = t.ids[w], t.removeWord(id) { changed = true }
         guard changed else { return false }
         t.compact()
@@ -511,6 +534,7 @@ final class UserLangModel {
         var tables: UserLMTables
         var lastDecay: Date
         var manual: [String]
+        var cases = CaseTable()
     }
 
     /// Dạng dict của store — ranh giới với sao lưu (BackupStore) / công cụ. `manual` = dạng hiển thị.
@@ -532,7 +556,7 @@ final class UserLangModel {
         if let data = try? Data(contentsOf: bin), let d = UserLMCodec.decode(data) {
             // Lần chuyển trước ghi xong nhưng chưa kịp xoá bản cũ.
             if bin != url { try? FileManager.default.removeItem(at: url) }
-            return LoadedTables(tables: d.tables, lastDecay: d.lastDecay, manual: d.manual)
+            return LoadedTables(tables: d.tables, lastDecay: d.lastDecay, manual: d.manual, cases: d.cases)
         }
         // Chưa có (hoặc hỏng) bản nhị phân: đọc bản cũ, chuyển MỘT lần. Bản cũ chỉ bị xoá sau khi
         // file mới đã ghi xong VÀ đọc lại khớp từng byte; ghi hỏng ⇒ giữ nguyên bản cũ, lần sau thử lại.
@@ -603,7 +627,7 @@ final class UserLangModel {
         return (try? Data(contentsOf: url)) == data
     }
 
-    private struct Snapshot { let tables: UserLMTables; let lastDecay: Date; let manual: [String] }
+    private struct Snapshot { let tables: UserLMTables; let lastDecay: Date; let manual: [String]; let cases: CaseTable }
 
     /// Snapshot COW trên main (rẻ — chỉ tăng refcount mảng), encode + ghi atomic trên ioQueue.
     func save() {
@@ -638,11 +662,11 @@ final class UserLangModel {
     }
 
     private func snapshot() -> Snapshot {
-        Snapshot(tables: t, lastDecay: lastDecay, manual: Array(manual.values))
+        Snapshot(tables: t, lastDecay: lastDecay, manual: Array(manual.values), cases: cases)
     }
 
     private static func write(_ s: Snapshot, to url: URL) {
-        let data = UserLMCodec.encode(s.tables, lastDecay: s.lastDecay, manual: s.manual)
+        let data = UserLMCodec.encode(s.tables, lastDecay: s.lastDecay, manual: s.manual, cases: s.cases)
         let bin = compactURL(for: url)
         try? data.write(to: bin, options: .atomic)
     }
@@ -670,7 +694,7 @@ final class UserLangModel {
     func reloadAfterExternalEdit() {
         loadGeneration += 1              // load đang bay (nếu có) bị bỏ kết quả
         saveWork?.cancel(); saveWork = nil
-        t = UserLMTables(); manual = [:]
+        t = UserLMTables(); manual = [:]; cases = CaseTable()
         pendingRecords = []; pendingSeed = nil
         topCache = nil
         knownCache.removeAll()
@@ -690,6 +714,7 @@ final class UserLangModel {
         saveWork?.cancel(); saveWork = nil
         manual = [:]
         t = UserLMTables()
+        cases = CaseTable()
         pendingRecords = []; pendingSeed = nil
         topCache = nil
         if let url = fileURL {
@@ -708,6 +733,7 @@ final class UserLangModel {
         t.mapCounts(uni: true, bi: true, tri: true) { Int(Double($0) * f) }
         keepManual()
         t.compact()
+        dropOrphanCases()
         lastDecay = now
         topCache = nil
         save()
@@ -720,6 +746,13 @@ final class UserLangModel {
         t.mapCounts(uni: u, bi: b, tri: r) { $0 / 2 }
         if u { keepManual(); topCache = nil }
         t.compact()
+        if u { dropOrphanCases() }
+    }
+
+    /// Từ rơi khỏi unigram (decay/prune) ⇒ bỏ luôn hoa/thường của nó.
+    private func dropOrphanCases() {
+        let tt = t
+        cases.retain { tt.uni($0) > 0 }
     }
 
     // MARK: seed bigrams — mồi tĩnh khi chưa có dữ liệu cá nhân

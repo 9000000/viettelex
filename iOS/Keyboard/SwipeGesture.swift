@@ -91,11 +91,24 @@ enum SwipePolicy {
 enum SwipeCase: Equatable {
     case lower, capitalized, upper
 
+    /// Chỉ Shift (không tên riêng) — giữ cho công cụ/test cũ.
     func apply(_ w: String) -> String {
+        apply(w, proper: { $0 })
+    }
+
+    /// Dạng chèn của từ vuốt (chữ thường từ decoder): trước hết dạng tên riêng `proper`
+    /// (hoa/thường đã học ⊕ DisplayCase như thanh gợi ý — "iphone" → "iPhone", "nam" sau "việt"
+    /// → "Nam"), rồi Shift: Caps Lock ⇒ HOA HẾT; Shift một-lần / đầu câu ⇒ hoa chữ đầu, NHƯNG từ
+    /// đã có chữ hoa giữ nguyên ("iPhone" đầu câu vẫn "iPhone", như SuggestionCase); không bao
+    /// giờ hạ chữ hoa của dạng tên riêng. = Android SwipeSuggest.applyCase.
+    func apply(_ w: String, proper: (String) -> String) -> String {
+        let base = proper(w)
         switch self {
-        case .lower: return w
-        case .capitalized: return w.prefix(1).uppercased() + w.dropFirst()
-        case .upper: return w.uppercased()
+        case .lower: return base
+        case .capitalized:
+            if base.contains(where: { $0.isUppercase }) { return base }
+            return base.prefix(1).uppercased() + base.dropFirst()
+        case .upper: return base.uppercased()
         }
     }
 }

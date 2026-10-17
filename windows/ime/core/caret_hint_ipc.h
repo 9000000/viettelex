@@ -33,6 +33,8 @@ inline bool isValidHintJob(uint32_t v) { return v >= 1 && v <= 4; }
 
 // ---- Learn job payload: events separated by U+001E, fields by U+001F:
 //   <weight digit> US <word> US <prev1> US <prev2>   (empty field = none)
+// <word> keeps the casing it was committed with (10/2026, learned casing; earlier TIPs sent it
+// lowercase — same format, the app lowercases keys either way).
 constexpr char16_t kLearnRecordSep = 0x1E;
 struct LearnEvent {
     std::u16string word, prev1, prev2;

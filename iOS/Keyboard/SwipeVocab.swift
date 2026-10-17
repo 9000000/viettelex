@@ -55,13 +55,92 @@ enum SwipeVocab {
         }.map { Entry(word: $0, freq: min(max((seed[$0] ?? 0) * 51 / 10, 0), 255), sensitive: true) }
     }
 
-    /// Bảng đầy đủ theo chế độ: chat + thô tục luôn có (+ tục khi tắt lọc, tần suất từ seed).
+    /// Bảng đầy đủ theo chế độ: chat + thô tục luôn có (+ tục khi tắt lọc, tần suất từ seed)
+    /// + từ của bảng Gõ tắt (`shortcutEntries`, rỗng khi tắt Gõ tắt).
     static func entries(filter: Bool) -> [Entry] {
-        filter ? chat + always : chat + always + sensitiveEntries(SeedData.unigrams)
+        let base = filter ? chat + always : chat + always + sensitiveEntries(SeedData.unigrams)
+        let sc = shortcuts
+        return sc.isEmpty ? base : base + sc.filter { !(filter && isSensitive($0.word.lowercased())) }
+    }
+
+    // MARK: Gõ tắt (10/2026)
+
+    /// Khoá gõ tắt thuần chữ ("vn", "sdt", "ko"): vuốt khoá ⇒ chèn nội dung bung (EngineBridge
+    /// .swipeShortcutExpansion) — tần suất vừa phải: thắng dạng hiếm, thua từ thường cùng hình.
+    static let shortcutKeyFreq = 120
+    /// Từ một chữ của nội dung bung (≤ 3 từ, vd "SenPrints") — giữ ĐÚNG hoa/thường; thấp hơn khoá.
+    static let shortcutWordFreq = 100
+    static let shortcutMaxWords = 3
+    static let shortcutMaxLen = 24
+    /// Trần số mục thêm từ bảng gõ tắt (bảng + Thay thế văn bản iOS có thể tới 2000 dòng).
+    static let shortcutCap = 500
+
+    /// Mục từ vựng vuốt sinh từ bảng gõ tắt — THUẦN, song sinh Android SwipeVocab.shortcutEntries
+    /// (fixture chung Fixtures/swipe-shortcuts.tsv). Thứ tự: khoá (sắp theo khoá) rồi từ của nội dung
+    /// (sắp theo từ), cắt ở `shortcutCap`.
+    ///  • Khoá: thuần chữ, ≥ 2 chữ cái, ≤ 24, bỏ dấu ra a–z, khoá viết thường (khoá hoa "VN" chỉ khớp khi
+    ///    gõ đúng hoa — vuốt ra chữ thường nên bỏ). Khoá ký hiệu/số/chữ+số ("->", "k2") không vuốt được.
+    ///  • Từ của nội dung (≤ 3 từ, tách khoảng trắng; dấu câu đầu/cuối bỏ): thuần chữ, ≥ 2, ≤ 24, bỏ dấu
+    ///    ra a–z, và CHƯA có trong vnlexicon (âm tiết) hay từ điển tiếng Anh vuốt ("Việt", "Company"
+    ///    đã vuốt được — hoa/thường do DisplayCase / hoa/thường đã học lo), không trùng khoá.
+    static func shortcutEntries(_ table: ShortcutTable,
+                                isLexiconWord: (String) -> Bool = { lexiconFreq($0) >= 0 },
+                                isEnglishWord: (String) -> Bool = { SwipeEnglish.contains($0) }) -> [Entry] {
+        func swipeable(_ w: String) -> Bool {
+            guard w.count >= 2, w.count <= shortcutMaxLen, w.allSatisfy({ $0.isLetter }) else { return false }
+            return SwipeLexicon.fold(w).utf8.allSatisfy { $0 >= 97 && $0 <= 122 }
+        }
+        var keys: [String] = [], seen = Set<String>()
+        for k in table.entries.keys where ShortcutTable.isWordKey(k) && k == k.lowercased() && swipeable(k) {
+            keys.append(k); seen.insert(k)
+        }
+        keys.sort()
+        var words = Set<String>()
+        for v in table.entries.values {
+            let parts = v.split(whereSeparator: { $0.isWhitespace })
+            guard parts.count <= shortcutMaxWords else { continue }
+            for p in parts {
+                let w = String(p.drop(while: { !$0.isLetter }).reversed().drop(while: { !$0.isLetter }).reversed())
+                    .precomposedStringWithCanonicalMapping
+                let l = w.lowercased()
+                guard swipeable(w), !seen.contains(l), !isLexiconWord(l), !isEnglishWord(l) else { continue }
+                words.insert(w)
+            }
+        }
+        // cùng chữ khác hoa ("SenPrints"/"Senprints") ⇒ giữ một, theo thứ tự byte ổn định
+        var byLower: [String: String] = [:]
+        for w in words.sorted() where byLower[w.lowercased()] == nil { byLower[w.lowercased()] = w }
+        let ws = byLower.values.sorted()
+        let out = keys.map { Entry(word: $0, freq: shortcutKeyFreq) } + ws.map { Entry(word: $0, freq: shortcutWordFreq) }
+        return Array(out.prefix(shortcutCap))
+    }
+
+    nonisolated(unsafe) private static var shortcutStore: [Entry] = []
+    nonisolated(unsafe) private static var shortcutSig: [String] = []
+
+    /// Mục gõ tắt hiện dùng (đặt bằng `setShortcuts`).
+    static var shortcuts: [Entry] {
+        lock.lock(); defer { lock.unlock() }
+        return shortcutStore
+    }
+
+    /// Đặt lúc bàn phím hiện (cùng chỗ đọc công tắc lọc) và khi bảng gõ tắt hiệu lực đổi (Thay thế
+    /// văn bản iOS nạp xong). Bảng không đổi ⇒ không làm gì; đổi ⇒ bỏ cache — decoder thấy Vocab mới
+    /// (so định danh) và dựng lại template MỘT lần. nil/rỗng = tắt Gõ tắt.
+    /// true nếu từ vựng đổi.
+    @discardableResult
+    static func setShortcuts(_ table: ShortcutTable?) -> Bool {
+        let e = table.map { shortcutEntries($0) } ?? []
+        let sig = e.map { "\($0.word)\t\($0.freq)" }
+        lock.lock(); defer { lock.unlock() }
+        guard sig != shortcutSig else { return false }
+        shortcutStore = e; shortcutSig = sig
+        cache.removeAll()
+        return true
     }
 
     /// Tần suất (0–255) của âm tiết `word` trong vnlexicon, -1 nếu không có.
-    private static func lexiconFreq(_ word: String) -> Int {
+    static func lexiconFreq(_ word: String) -> Int {
         guard let i = SwipeLexicon.index(of: SwipeLexicon.fold(word)) else { return -1 }
         let lex = SwipeLexicon.forms
         for id in Int(lex.idStart[i])..<Int(lex.idStart[i + 1]) where VNSuggest.display(id) == word {
@@ -119,6 +198,7 @@ enum SwipeVocab {
             // có sẵn trong vnlexicon: chỉ thay khi bảng cao hơn; không có: từ tục được sàn
             let fr = lf < 0 && e.sensitive ? max(e.freq, sensitiveFloor) : e.freq
             if lf >= fr { continue }
+            if words[f]?.contains(where: { $0.word == e.word }) == true { continue }   // "ko" chat + khoá gõ tắt
             words[f, default: []].append(SwipeWord(word: e.word, score: Float(fr)))
         }
         let added = words.keys.filter { SwipeLexicon.index(of: $0) == nil }.sorted()

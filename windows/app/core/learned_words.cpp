@@ -84,6 +84,69 @@ bool learnable(const std::string& w) {
 
 std::string key(const std::string& w) { return text::toUtf8(text::lower(text::nfc(text::fromUtf8(w)))); }
 
+// MARK: learned casing (UserLMTables.swift CaseTable)
+
+CaseKind caseKind(const std::string& form) {
+    const std::u32string u = text::fromUtf8(form);
+    int letters = 0, upper = 0;
+    size_t i = 0;
+    while (i < u.size()) {  // one Swift Character = a code point + the marks after it
+        size_t j = i + 1;
+        while (j < u.size() && text::isMark(u[j])) ++j;
+        const std::u32string ch = u.substr(i, j - i);
+        ++letters;
+        if (text::lower(ch) != ch) ++upper;
+        i = j;
+    }
+    if (upper == 0) return CaseKind::Lower;
+    if (letters < 2 || upper == letters) return CaseKind::Ignored;
+    return CaseKind::Mixed;
+}
+
+namespace {
+void saturate(CaseStat& s) {
+    if (s.total <= kCaseMaxCount) return;
+    s.hits = (s.hits + 1) / 2;
+    s.total = (s.total + 1) / 2;
+}
+}  // namespace
+
+bool CaseTable::observe(const std::string& form, const std::string& k, int priorCount) {
+    switch (caseKind(form)) {
+        case CaseKind::Ignored: return false;
+        case CaseKind::Lower: {
+            const auto it = stats_.find(k);
+            if (it == stats_.end()) return false;
+            ++it->second.total;
+            saturate(it->second);
+            return true;
+        }
+        case CaseKind::Mixed: break;
+    }
+    auto it = stats_.find(k);
+    if (it == stats_.end()) {
+        if (stats_.size() >= static_cast<size_t>(kCaseCap)) return false;
+        it = stats_.emplace(k, CaseStat{form, 0, std::min(std::max(priorCount, 0), kCaseMaxCount)}).first;
+    }
+    CaseStat& s = it->second;
+    ++s.total;
+    if (s.form == form) ++s.hits;
+    else if (s.hits > 0) --s.hits;
+    else {
+        s.form = form;
+        s.hits = 1;
+    }
+    saturate(s);
+    return true;
+}
+
+std::string CaseTable::preferred(const std::string& k) const {
+    const auto it = stats_.find(k);
+    if (it == stats_.end()) return std::string();
+    const CaseStat& s = it->second;
+    return s.hits >= kCaseMinHits && s.hits * 5 >= s.total * 4 ? s.form : std::string();
+}
+
 Model::Model(KnownFn isKnown, int64_t nowMs) : lastDecayMs_(nowMs), isKnown_(std::move(isKnown)) {}
 
 int32_t Model::idOf(const std::string& w) const {
@@ -151,10 +214,12 @@ void Model::addTri(uint64_t c, int32_t n, int by) {
 
 // MARK: learning
 
-void Model::record(const std::string& wordIn, const std::string& prev1In, const std::string& prev2In, int weight) {
+void Model::record(const std::string& wordIn, const std::string& prev1In, const std::string& prev2In, int weight,
+                   bool caseEvidence) {
     if (weight <= 0 || !learnable(wordIn)) return;
     const std::string w = key(wordIn);
     const int32_t wid = intern(w);
+    if (caseEvidence) cases_.observe(text::toUtf8(text::nfc(text::fromUtf8(wordIn))), w, uni(wid));
     setUni(wid, uni(wid) + weight);
     if (!prev1In.empty() && learnable(prev1In)) {
         const std::string p1 = key(prev1In);
@@ -333,6 +398,17 @@ void Model::scale(bool u, bool b, bool r, double f) {
     if (b) biN_ = mapB(biB_);
     if (r) triN_ = mapB(triB_);
     compact();
+    if (u) dropOrphanCases();
+}
+
+// A word gone from the unigrams (decay / prune) takes its casing with it.
+void Model::dropOrphanCases() {
+    auto& st = cases_.stats();
+    for (auto it = st.begin(); it != st.end();) {
+        const int32_t id = idOf(it->first);
+        if (id < 0 || uni(id) <= 0) it = st.erase(it);
+        else ++it;
+    }
 }
 
 void Model::compact() {
@@ -407,6 +483,7 @@ void Model::clear(int64_t nowMs) {
     triB_.clear();
     uniN_ = biN_ = triN_ = 0;
     uniTotal_ = 0;
+    cases_.clear();
     knownCache_.clear();
     lastDecayMs_ = nowMs;
     ++changes_;
@@ -423,13 +500,16 @@ size_t Model::memoryBytes() const {
     n += triIdx_.size() * (sizeof(uint64_t) + sizeof(int32_t) + 2 * sizeof(void*)) + triIdx_.bucket_count() * sizeof(void*);
     n += triCtx_.capacity() * sizeof(uint64_t) + triB_.capacity() * sizeof(std::vector<uint64_t>);
     for (const auto& b : triB_) n += b.capacity() * sizeof(uint64_t);
+    for (const auto& c : cases_.stats())
+        n += sizeof(CaseStat) + sizeof(std::string) + 2 * sizeof(void*) + (c.second.form.size() > 15 ? c.second.form.capacity() + 1 : 0);
     return n;
 }
 
 // MARK: VTL2 (UserLMCodec)
-//   "VTL2" | u16 version=1 | u16 flags=0 | i64 lastDecay (ms) | u32 nWords | nWords × (u16 len, UTF-8)
+//   "VTL2" | u16 version=1 | u16 flags | i64 lastDecay (ms) | u32 nWords | nWords × (u16 len, UTF-8)
 //   nWords × u32 uni | u32 nBi | nBi × (u32 prev, u32 n, n × (u32 next, u32 count))
 //   u32 nTri | nTri × (u32 p2, u32 p1, u32 n, n × (u32 next, u32 count)) | u32 nManual (0 here)
+//   [flags & 1] u32 nCase | nCase × (u32 word id, u16 len, UTF-8 form, u16 hits, u16 total), ids ascending
 //   u32 CRC32 of everything before.
 
 std::vector<uint8_t> Model::encode() const {
@@ -442,9 +522,20 @@ std::vector<uint8_t> Model::encode() const {
     auto u32 = [&](uint32_t v) {
         for (int k = 0; k < 4; ++k) o.push_back(static_cast<uint8_t>(v >> (8 * k)));
     };
+    // casing rows: only words in the table, by id
+    struct CaseRow {
+        uint32_t id;
+        const CaseStat* s;
+    };
+    std::vector<CaseRow> caseRows;
+    for (const auto& c : cases_.stats()) {
+        const int32_t id = idOf(c.first);
+        if (id >= 0 && c.second.total > 0) caseRows.push_back(CaseRow{static_cast<uint32_t>(id), &c.second});
+    }
+    std::sort(caseRows.begin(), caseRows.end(), [](const CaseRow& a, const CaseRow& b) { return a.id < b.id; });
     o.insert(o.end(), {'V', 'T', 'L', '2'});
     u16(1);
-    u16(0);
+    u16(caseRows.empty() ? 0 : 1);
     const uint64_t ms = static_cast<uint64_t>(lastDecayMs_);
     u32(static_cast<uint32_t>(ms));
     u32(static_cast<uint32_t>(ms >> 32));
@@ -480,6 +571,19 @@ std::vector<uint8_t> Model::encode() const {
         bucket(triB_[s]);
     }
     u32(0);  // manual words: none on the desktop
+    if (!caseRows.empty()) {
+        auto clamp16 = [](int v) { return static_cast<uint16_t>(v < 0 ? 0 : v > 0xFFFF ? 0xFFFF : v); };
+        u32(static_cast<uint32_t>(caseRows.size()));
+        for (const auto& r : caseRows) {
+            u32(r.id);
+            const std::string& f = r.s->form;
+            const size_t n = std::min<size_t>(f.size(), 0xFFFF);
+            u16(static_cast<uint16_t>(n));
+            o.insert(o.end(), f.begin(), f.begin() + static_cast<std::ptrdiff_t>(n));
+            u16(clamp16(r.s->hits));
+            u16(clamp16(r.s->total));
+        }
+    }
     u32(crc32(o.data(), o.size()));
     return o;
 }
@@ -506,7 +610,7 @@ std::unique_ptr<Model> Model::decode(const uint8_t* bytes, size_t size, KnownFn 
                             (static_cast<uint32_t>(bytes[body + 2]) << 16) | (static_cast<uint32_t>(bytes[body + 3]) << 24);
     if (crc32(bytes, body) != stored) return nullptr;
     if (u16() != 1) return nullptr;
-    u16();
+    const uint16_t flags = u16();
     const uint32_t lo = u32(), hi = u32();
     if (!ok) return nullptr;
     auto m = std::make_unique<Model>(std::move(isKnown), static_cast<int64_t>((static_cast<uint64_t>(hi) << 32) | lo));
@@ -568,6 +672,25 @@ std::unique_ptr<Model> Model::decode(const uint8_t* bytes, size_t size, KnownFn 
         const uint16_t n = u16();
         if (!ok || pos + n > body) return nullptr;
         pos += n;
+    }
+    if (flags & 1) {  // learned casing
+        const uint32_t nc = u32();
+        if (!ok || nc > body / 10) return nullptr;
+        bool first = true;
+        uint32_t last = 0;
+        for (uint32_t k = 0; k < nc; ++k) {
+            const uint32_t id = u32();
+            const uint16_t n = u16();
+            if (!ok || id >= nw || pos + n > body) return nullptr;
+            std::string f(reinterpret_cast<const char*>(bytes + pos), n);
+            pos += n;
+            const uint16_t h = u16(), t = u16();
+            if (!ok || f.empty() || t == 0 || h > t) return nullptr;
+            if (!first && id <= last) return nullptr;
+            first = false;
+            last = id;
+            m->cases_.stats()[m->words_[id]] = CaseStat{std::move(f), h, t};
+        }
     }
     if (pos != body) return nullptr;
     for (uint32_t c : m->uniC_)

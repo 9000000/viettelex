@@ -49,6 +49,8 @@ final class SwipeTyping {
         let alternatives: [String]
         var english = false
         var englishAlternatives: Set<String> = []
+        /// Từ thắng chỉ áp Shift (không tên riêng) — tra khoá gõ tắt như gõ tay.
+        var shifted = ""
     }
 
     private let decoder = SwipeDecoder()
@@ -103,11 +105,20 @@ final class SwipeTyping {
         private let curated: Set<String>
         /// λ tần suất khi chọn dạng + bung dấu (hạ khi có trigram).
         let lambdaFreq: Float
+        /// Từ liền trước (chuỗi tên riêng DisplayCase) + hoa/thường đã học (UserLangModel.learnedCase).
+        let prev: String?
+        let learnedCase: ((String) -> String?)?
+        /// false = ô địa chỉ / tìm kiếm (thanh gợi ý chữ thường): không tên riêng, chỉ Shift.
+        let properNouns: Bool
 
         init(next: Set<String>, count: @escaping (String) -> Int = { _ in 0 },
-             prev: String? = nil, prev2: String? = nil, lm: SyllableLM? = nil, curated: Bool = true) {
+             prev: String? = nil, prev2: String? = nil, lm: SyllableLM? = nil, curated: Bool = true,
+             learnedCase: ((String) -> String?)? = nil, properNouns: Bool = true) {
             self.next = next
             self.count = count
+            self.prev = prev
+            self.learnedCase = learnedCase
+            self.properNouns = properNouns
             self.curated = curated ? prev.map { Set(CuratedPairs.next(after: $0, prev2: prev2)) } ?? [] : []
             let id1 = prev.flatMap { SyllableLM.id(of: $0) }
             if let lm, let id1 {
@@ -123,6 +134,11 @@ final class SwipeTyping {
             guard let lmContext, let id = SyllableLM.id(of: w) else { return 0 }
             let damp: Float = next.isEmpty ? 1 : SwipeTyping.staticDamp
             return max(SwipeTyping.lmFloor * damp, min(SwipeTyping.lmCap * damp, weight * lmContext.score(id)))
+        }
+
+        /// Dạng tên riêng của từ vuốt `w` (chữ thường) sau `prev` — trước khi áp Shift.
+        func proper(_ w: String) -> String {
+            properNouns ? DisplayCase.resolve(w, after: prev, learned: learnedCase) : w
         }
 
         func word(_ w: String) -> Float {
@@ -162,6 +178,14 @@ final class SwipeTyping {
                 _ = SyllableLM.shared       // map mô hình trigram (vnlm.bin — thanh gợi ý dùng chung)
             }
         }
+    }
+
+    /// Từ vựng vuốt vừa đổi (bảng gõ tắt): dựng lại template ở nền nếu đã có layout — cú vuốt
+    /// kế khỏi chờ. Không có layout ⇒ dựng lười như thường.
+    func refreshVocab() {
+        guard layout != nil else { return }
+        let d = decoder
+        queue.async { d.prepare() }
     }
 
     /// Bật/tắt decoder FUTO Swipe (main). Bật ⇒ tạo + tải model ở nền (đã bật mà model bị nhả
@@ -208,18 +232,22 @@ final class SwipeTyping {
                  prev: String? = nil,
                  prev2: String? = nil, lm: SyllableLM? = SyllableLM.shared,
                  english: SwipeEnglishPrior? = nil, englishOnly: Bool = false,
+                 learnedCase: ((String) -> String?)? = nil, properNouns: Bool = true,
                  case sc: SwipeCase) -> Choice? {
         resolveFull(path, contextWords: contextWords, count: count, prev: prev,
-                    prev2: prev2, lm: lm, english: english, englishOnly: englishOnly, case: sc)?.choice
+                    prev2: prev2, lm: lm, english: english, englishOnly: englishOnly,
+                    learnedCase: learnedCase, properNouns: properNouns, case: sc)?.choice
     }
 
     private func resolveFull(_ path: SwipePath, contextWords: [String], count: @escaping (String) -> Int,
                              prev: String?, prev2: String?, lm: SyllableLM?,
-                             english: SwipeEnglishPrior?, englishOnly: Bool = false, case sc: SwipeCase)
+                             english: SwipeEnglishPrior?, englishOnly: Bool = false,
+                             learnedCase: ((String) -> String?)? = nil, properNouns: Bool = true,
+                             case sc: SwipeCase)
         -> (choice: Choice, cands: [SwipeCandidate], ctx: Context)? {
         guard layout != nil, path.count >= 2 else { return nil }
         let ctx = Context(next: Set(contextWords.map { $0.lowercased() }), count: count,
-                          prev: prev, prev2: prev2, lm: lm)
+                          prev: prev, prev2: prev2, lm: lm, learnedCase: learnedCase, properNouns: properNouns)
         let d = decoder
         // từ tiếng Anh: chỉ điểm cá nhân/từ kế tiếp (bigram tĩnh là của âm tiết Việt)
         let next = ctx.next
@@ -300,8 +328,10 @@ final class SwipeTyping {
             if alts.count >= 3 { alts.removeLast() }
             alts.append(w)
         }
-        return Choice(word: sc.apply(best), alternatives: alts.map(sc.apply), english: top.lang == .en,
-                      englishAlternatives: Set(alts.filter { english.contains($0) }.map(sc.apply)))
+        let cased: (String) -> String = { sc.apply($0, proper: context.proper) }
+        return Choice(word: cased(best), alternatives: alts.map(cased), english: top.lang == .en,
+                      englishAlternatives: Set(alts.filter { english.contains($0) }.map(cased)),
+                      shifted: sc.apply(best))
     }
 
     /// Nhấc tay: giải mã rồi chèn. nil = không nhận ra gì (không đụng màn hình).
@@ -313,11 +343,13 @@ final class SwipeTyping {
                 count: @escaping (String) -> Int = { _ in 0 }, prev: String? = nil,
                 prev2: String? = nil, english: SwipeEnglishPrior? = nil, englishOnly: Bool = false,
                 previous: Revisable? = nil, nextWords: ((String, String?) -> [String])? = nil,
-                lm: SyllableLM? = SyllableLM.shared,
+                lm: SyllableLM? = SyllableLM.shared, learnedCase: ((String) -> String?)? = nil,
+                properNouns: Bool = true,
                 bridge: EngineBridge, proxy: TextProxyLike) -> Outcome? {
         guard let full = resolveFull(path, contextWords: contextWords, count: count, prev: prev,
                                      prev2: prev2, lm: lm, english: english,
-                                     englishOnly: englishOnly, case: sc) else {
+                                     englishOnly: englishOnly, learnedCase: learnedCase,
+                                     properNouns: properNouns, case: sc) else {
             TouchLog.write("swipe: không có ứng viên (pts=\(path.count))")
             return nil
         }
@@ -331,12 +363,15 @@ final class SwipeTyping {
                                         next: SwipeRevise.nextPool(full.cands, context: full.ctx.word,
                                                                    lambdaFreq: full.ctx.lambdaFreq),
                                         lm: lm) {
-            let newCased = rec.sc.apply(new)
+            let newCased = rec.sc.apply(new, proper: {
+                properNouns ? DisplayCase.resolve($0, after: prev2, learned: learnedCase) : $0
+            })
             if proxy.contextBeforeInput?.hasSuffix(rec.word) == true,
                bridge.replaceSwipeWord(with: newCased, accepted: false, proxy: proxy) {
                 revised = Revision(old: rec.word, new: newCased)
                 let nctx = Context(next: Set((nextWords?(new, prev2) ?? []).map { $0.lowercased() }),
-                                   count: count, prev: new, prev2: prev2, lm: lm)
+                                   count: count, prev: new, prev2: prev2, lm: lm, learnedCase: learnedCase,
+                                   properNouns: properNouns)
                 let re = SwipeRevise.rerank(full.cands, old: full.ctx.word, oldLambda: full.ctx.lambdaFreq,
                                             new: nctx.word, newLambda: nctx.lambdaFreq)
                 if let c = Self.pick(re, context: nctx, case: sc) {
@@ -345,6 +380,31 @@ final class SwipeTyping {
                 }
                 TouchLog.write("swipe: sửa từ trước (\(rec.word.count)→\(newCased.count) ký tự)")
             }
+        }
+        // Chuỗi tên riêng: từ này viết hoa vì từ vuốt trước ("việt" + "nam" → "Nam") ⇒ hoa luôn từ
+        // trước khi nó còn mở, đúng như trên màn hình ("Việt Nam", không "việt Nam"). Caps Lock:
+        // từ trước đã hoa sẵn.
+        if properNouns, let rec = previous, sc != .upper {
+            let onScreen = revised?.new ?? rec.word
+            if let f = onScreen.first, !f.isUppercase,
+               DisplayCase.chainCapitalizes(r.word.lowercased(), after: onScreen),
+               proxy.contextBeforeInput?.hasSuffix(onScreen) == true {
+                let cap = onScreen.prefix(1).uppercased() + onScreen.dropFirst()
+                if bridge.replaceSwipeWord(with: cap, accepted: false, proxy: proxy) {
+                    revised = Revision(old: revised?.old ?? rec.word, new: cap)
+                }
+            }
+        }
+        // Khoá gõ tắt ("vn", từ vựng vuốt SwipeVocab.shortcutEntries): chèn nội dung bung như gõ
+        // khoá + dấu cách (⌫ đầu trả lại khoá). Khoá đứng đầu phương án — chạm để giữ nguyên khoá.
+        if let e = bridge.swipeShortcutExpansion(for: r.shifted), e != r.shifted {
+            let key = r.shifted
+            r = Choice(word: e, alternatives: Array(([key] + r.alternatives.filter { $0 != key && $0 != e }).prefix(3)),
+                       english: true, englishAlternatives: r.englishAlternatives.union([key]), shifted: key)
+            let committed = bridge.insertSwipeWord(e, shortcutKey: key, proxy: proxy)
+            TouchLog.write("swipe: khoá gõ tắt (\(key.count)→\(e.count) ký tự)")
+            return Outcome(committed: committed, word: e, alternatives: r.alternatives, english: false,
+                           englishAlternatives: r.englishAlternatives, scored: [], revised: revised)
         }
         let committed = bridge.insertSwipeWord(r.word, literal: r.english, proxy: proxy)
         if TouchLog.enabled {

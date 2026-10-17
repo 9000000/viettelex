@@ -46,6 +46,8 @@ class UserLangModel(
     private var closed = false
 
     private var t = UserLMTables()
+    /** Hoa/thường đã học ([CaseTable]): dạng người dùng nhất quán viết giữa câu. */
+    private var cases = CaseTable()
     private var lastDecay = clock()
     /** Từ user tự thêm (màn Từ điển cá nhân): key lowercase → dạng hiển thị ("VietTelex"). */
     private var manual = LinkedHashMap<String, String>()
@@ -60,7 +62,8 @@ class UserLangModel(
     private var saveWork: Cancellable? = null
     private var isLoaded = false
     private var loadGeneration = 0
-    internal class PendingRecord(val word: String, val prev1: String?, val prev2: String?, val weight: Int) {
+    internal class PendingRecord(val word: String, val prev1: String?, val prev2: String?, val weight: Int,
+                                 val caseEvidence: Boolean = false) {
         /** Biên nhận khi đã phát lại sau lúc nạp xong (để [retract] vẫn rút được). */
         var replayed: Learned? = null
     }
@@ -232,7 +235,8 @@ class UserLangModel(
     /** Dạng dict của store (ranh giới sao lưu / test). */
     internal data class Plain(val learned: LearnedWords, val lastDecay: Long)
 
-    internal class Loaded(val t: UserLMTables, val lastDecay: Long, val manual: List<String>)
+    internal class Loaded(val t: UserLMTables, val lastDecay: Long, val manual: List<String>,
+                          val cases: CaseTable = CaseTable())
 
     init {
         if (file != null) loadAsync(file) else isLoaded = true
@@ -249,7 +253,7 @@ class UserLangModel(
 
     private fun finishLoad(l: Loaded?) {
         if (l != null) {
-            t = l.t; lastDecay = l.lastDecay
+            t = l.t; lastDecay = l.lastDecay; cases = l.cases
             manual = LinkedHashMap<String, String>().apply { for (d in l.manual) this[d.lowercase()] = d }
             keepManual()
         }
@@ -260,24 +264,32 @@ class UserLangModel(
         pendingSeed = null
         val queued = pendingRecords.toList()
         pendingRecords.clear()
-        for (r in queued) r.replayed = record(r.word, r.prev1, r.prev2, r.weight)
+        for (r in queued) r.replayed = record(r.word, r.prev1, r.prev2, r.weight, r.caseEvidence)
         decayIfDue()
         onReady?.invoke()
     }
 
     // MARK: học
 
-    /** Một từ vừa chốt; weight 1 gõ thường, 2 khi bấm nhận gợi ý. */
-    fun record(word: String, after: String?, prev2: String? = null, weight: Int = 1): Learned? {
+    /**
+     * Một từ vừa chốt; weight 1 gõ thường, 2 khi bấm nhận gợi ý. [caseEvidence]: hoa/thường của
+     * [word] (đúng như đã gõ) là bằng chứng GIỮA CÂU — caller tính bằng [DisplayCase.casingEvidence]
+     * (+ ô không tự hoa mỗi từ). false ⇒ không đụng bảng hoa/thường. = iOS record(caseEvidence:).
+     */
+    fun record(word: String, after: String?, prev2: String? = null, weight: Int = 1,
+               caseEvidence: Boolean = false): Learned? {
         if (!isLoaded) {
             if (pendingRecords.size >= PENDING_RECORD_CAP) return null
-            val pr = PendingRecord(word, after, prev2, weight)
+            val pr = PendingRecord(word, after, prev2, weight, caseEvidence)
             pendingRecords.add(pr)
             return Learned(null, null, null, weight, pr)
         }
         if (weight <= 0 || !learnable(word)) return null
         val w = word.lowercase()
         val wid = t.intern(w)
+        if (caseEvidence) {
+            cases.observe(java.text.Normalizer.normalize(word, java.text.Normalizer.Form.NFC), w, t.uni(wid))
+        }
         t.setUni(wid, t.uni(wid) + weight)
         bumpTop(w)
         var biKey: String? = null
@@ -325,6 +337,12 @@ class UserLangModel(
         scheduleSave()
     }
 
+    /** Dạng hoa/thường người dùng hay viết ([key] chữ thường) — null nếu chưa đủ nhất quán. O(1). */
+    fun learnedCase(key: String): String? = if (cases.isEmpty) null else cases.preferred(key)
+
+    internal val caseCount: Int get() = cases.count
+    internal fun caseStat(key: String): CaseStat? = cases.stats[key]
+
     private fun cachedKnown(w: String): Boolean {
         knownCache[w]?.let { return it }
         if (knownCache.size > 4096) knownCache.clear()
@@ -353,7 +371,7 @@ class UserLangModel(
             if (c <= 0) continue
             val k = t.word(i)
             if (q.isNotEmpty() && !fold(k).contains(q)) continue
-            out.add(Entry(manual[k] ?: k, c, k in manual))
+            out.add(Entry(manual[k] ?: cases.preferred(k) ?: k, c, k in manual))
         }
         return out.sortedWith(compareByDescending<Entry> { it.count }.thenBy { it.word.lowercase() })
     }
@@ -367,6 +385,7 @@ class UserLangModel(
     fun removeWord(word: String): Boolean {
         val w = word.lowercase()
         var changed = manual.remove(w) != null
+        if (cases.stats.containsKey(w)) { cases.remove(w); changed = true }
         val id = t.id(w)
         if (id >= 0 && t.removeWord(id)) changed = true
         if (!changed) return false
@@ -563,14 +582,14 @@ class UserLangModel(
 
     // MARK: persistence
 
-    private class Snapshot(val t: UserLMTables, val lastDecay: Long, val manual: List<String>)
+    private class Snapshot(val t: UserLMTables, val lastDecay: Long, val manual: List<String>, val cases: CaseTable)
 
     /** Bản sao sâu trên main (vài chục µs — chỉ copy mảng nguyên thuỷ), nền encode bản sao. */
-    private fun snapshot() = Snapshot(t.copy(), lastDecay, manual.values.toList())
+    private fun snapshot() = Snapshot(t.copy(), lastDecay, manual.values.toList(), cases.copy())
 
     private fun write(s: Snapshot, f: File, gen: Int) {
         if (gen != loadGenerationSnapshot()) return   // đã bị erase/reload: không ghi đè
-        writeVerified(UserLMCodec.encode(s.t, s.lastDecay, s.manual), f, verify = false)
+        writeVerified(UserLMCodec.encode(s.t, s.lastDecay, s.manual, s.cases), f, verify = false)
     }
 
     @Volatile private var volatileGen = 0
@@ -612,7 +631,7 @@ class UserLangModel(
         isLoaded = false
         loadGeneration++
         saveWork?.cancel(); saveWork = null
-        t = UserLMTables(); manual = LinkedHashMap()
+        t = UserLMTables(); manual = LinkedHashMap(); cases = CaseTable()
         pendingRecords.clear(); pendingSeed = null; seedSource = null
         topCache = null; topKeys = null
         knownCache.clear()
@@ -631,7 +650,7 @@ class UserLangModel(
         loadGeneration++
         volatileGen++
         saveWork?.cancel(); saveWork = null
-        t = UserLMTables(); manual = LinkedHashMap()
+        t = UserLMTables(); manual = LinkedHashMap(); cases = CaseTable()
         pendingRecords.clear(); pendingSeed = null
         topCache = null
         knownCache.clear()
@@ -664,6 +683,7 @@ class UserLangModel(
         t.mapCounts(uni = true, bi = true, tri = true) { (it * f).toInt() }
         keepManual()
         t.compact()
+        dropOrphanCases()
         lastDecay = now
         topCache = null
         save()
@@ -678,6 +698,13 @@ class UserLangModel(
         t.mapCounts(uni = u, bi = b, tri = r) { it / 2 }
         if (u) { keepManual(); topCache = null }
         t.compact()
+        if (u) dropOrphanCases()
+    }
+
+    /** Từ rơi khỏi unigram (decay/prune) ⇒ bỏ luôn hoa/thường của nó. */
+    private fun dropOrphanCases() {
+        val tt = t
+        cases.retain { tt.uni(it) > 0 }
     }
 
     internal val uniSize: Int get() = t.uniN
@@ -1075,6 +1102,8 @@ internal class UserLMTables {
  * u32 nBi  | nBi  × (u32 prev, u32 n, n × (u32 next, u32 count))
  * u32 nTri | nTri × (u32 p2, u32 p1, u32 n, n × (u32 next, u32 count))
  * u32 nManual | nManual × (u16 len, UTF-8)        — dạng hiển thị
+ * [flags & 1] u32 nCase | nCase × (u32 word id, u16 len, UTF-8 form, u16 hits, u16 total)
+ *                                                  — hoa/thường đã học ([CaseTable]), id tăng dần
  * u32 CRC32 (IEEE, java.util.zip.CRC32) của mọi byte phía trước
  * ```
  * Đọc: sai magic/version/CRC, id ngoài tầm, count 0, bucket không tăng dần, từ/ngữ cảnh trùng ⇒ null.
@@ -1083,7 +1112,13 @@ internal object UserLMCodec {
     private val MAGIC = byteArrayOf('V'.code.toByte(), 'T'.code.toByte(), 'L'.code.toByte(), '2'.code.toByte())
     private const val VERSION = 1
 
-    fun encode(t: UserLMTables, lastDecay: Long, manual: List<String>): ByteArray {
+    const val FLAG_CASE = 1
+
+    /**
+     * flags bit 0 (10/2026) = có phần hoa/thường; CHỈ ghi khi bảng có mục ⇒ file không có dữ liệu
+     * hoa/thường giữ y từng byte như trước (bản cũ vẫn đọc được). Byte trùng iOS UserLMCodec.
+     */
+    fun encode(t: UserLMTables, lastDecay: Long, manual: List<String>, cases: CaseTable = CaseTable()): ByteArray {
         val wb = Array(t.nWords) { t.word(it).toByteArray(Charsets.UTF_8) }
         val mb = manual.map { it.toByteArray(Charsets.UTF_8) }
         var size = 16 + 4 + 4 * t.nWords + 4 + 4 + 4 + 4
@@ -1092,9 +1127,21 @@ internal object UserLMCodec {
         for (p in 0 until t.nWords) if (t.biL[p] > 0) { nb++; size += 8 + 8 * t.biL[p] }
         for (s in 0 until t.nTri) if (t.triL[s] > 0) { nt++; size += 12 + 8 * t.triL[s] }
         for (b in mb) size += 2 + minOf(b.size, 0xFFFF)
+        // hoa/thường: chỉ mục có từ trong bảng, theo id tăng dần
+        val caseRows = ArrayList<Triple<Int, ByteArray, CaseStat>>()
+        for ((k, st) in cases.stats) {
+            val id = t.id(k)
+            if (id >= 0 && st.total > 0) caseRows.add(Triple(id, st.form.toByteArray(Charsets.UTF_8), st))
+        }
+        caseRows.sortBy { it.first }
+        if (caseRows.isNotEmpty()) {
+            size += 4
+            for (r in caseRows) size += 4 + 2 + minOf(r.second.size, 0xFFFF) + 4
+        }
         val o = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN)
         fun str(b: ByteArray) { val n = minOf(b.size, 0xFFFF); o.putShort(n.toShort()); o.put(b, 0, n) }
-        o.put(MAGIC); o.putShort(VERSION.toShort()); o.putShort(0); o.putLong(lastDecay)
+        o.put(MAGIC); o.putShort(VERSION.toShort()); o.putShort(if (caseRows.isEmpty()) 0 else FLAG_CASE.toShort())
+        o.putLong(lastDecay)
         o.putInt(t.nWords)
         for (b in wb) str(b)
         for (i in 0 until t.nWords) o.putInt(t.uniC[i])
@@ -1113,6 +1160,13 @@ internal object UserLMCodec {
         }
         o.putInt(mb.size)
         for (b in mb) str(b)
+        if (caseRows.isNotEmpty()) {
+            o.putInt(caseRows.size)
+            for ((id, fb, st) in caseRows) {
+                o.putInt(id); str(fb)
+                o.putShort(st.hits.coerceIn(0, 0xFFFF).toShort()); o.putShort(st.total.coerceIn(0, 0xFFFF).toShort())
+            }
+        }
         val crc = CRC32().apply { update(o.array(), 0, o.position()) }.value
         o.putInt(crc.toInt())
         return o.array()
@@ -1128,7 +1182,7 @@ internal object UserLMCodec {
         bb.limit(body); bb.position(4)
         return try {
             if (bb.short.toInt() and 0xFFFF != VERSION) return null
-            bb.short
+            val flags = bb.short.toInt() and 0xFFFF
             val lastDecay = bb.long
             fun u32(): Int { val v = bb.int; if (v < 0) throw IllegalStateException(); return v }
             fun str(): String {
@@ -1179,11 +1233,27 @@ internal object UserLMCodec {
             if (nm > body / 2) return null
             val manual = ArrayList<String>(nm)
             repeat(nm) { manual.add(str()) }
+            val cases = HashMap<String, CaseStat>()
+            if (flags and FLAG_CASE != 0) {
+                val nc = u32()
+                if (nc > body / 10) return null
+                var last = -1
+                repeat(nc) {
+                    val id = u32()
+                    if (id >= nw || id <= last) return null
+                    last = id
+                    val f = str()
+                    val h = bb.short.toInt() and 0xFFFF
+                    val tt = bb.short.toInt() and 0xFFFF
+                    if (f.isEmpty() || tt == 0 || h > tt) return null
+                    cases[words[id]!!] = CaseStat(f, h, tt)
+                }
+            }
             if (bb.position() != body) return null
             val t = UserLMTables()
             t.loadRaw(words, nw, uni, biB, biL, tc, tb, tl, nt)
             if (t.hasDuplicateWords()) return null
-            UserLangModel.Loaded(t, lastDecay, manual)
+            UserLangModel.Loaded(t, lastDecay, manual, CaseTable(cases))
         } catch (_: Exception) { null }
     }
 }
@@ -1218,3 +1288,81 @@ private val SEED_NEXT: Map<String, List<String>> = hashMapOf(
     "được" to listOf("không", "rồi", "chưa"),
     "nhớ" to listOf("em", "anh", "nhé"),
 )
+
+/**
+ * Hoa/thường đã học (port iOS CaseTable — UserLMTables.swift, cùng số): dạng viết hoa người dùng
+ * NHẤT QUÁN dùng giữa câu cho một từ ("SenPrints", tên người "Văn"). Chỉ từ ĐÃ TỪNG viết hoa giữa
+ * câu mới có mục. Caller lọc đầu câu / chuỗi tên riêng ([DisplayCase.casingEvidence]); ở đây lọc
+ * thêm Caps Lock / cả từ hoa và từ một chữ cái. Mỗi mục: [CaseStat.form] (dạng không-thường chiếm
+ * ưu thế, đếm phiếu Boyer–Moore), hits (phiếu ròng), total (mọi lần quan sát giữa câu kể cả viết
+ * thường; mục mới khởi điểm = count unigram trước đó — bảo thủ). Ưu tiên khi hits ≥ 3 và ≥ 80%
+ * total. Bão hoà 255 (chia đôi làm tròn lên). Trần 512 mục.
+ */
+data class CaseStat(val form: String, val hits: Int, val total: Int)
+
+class CaseTable(initial: Map<String, CaseStat> = emptyMap()) {
+    enum class Kind { LOWER, MIXED, IGNORED }
+
+    companion object {
+        const val CAP = 512
+        const val MAX_COUNT = 255
+        const val MIN_HITS = 3
+
+        /** "Hoa" = chữ mà lowercase khác chính nó (cùng định nghĩa Swift/C++). */
+        fun kind(form: String): Kind {
+            var letters = 0; var upper = 0
+            var i = 0
+            while (i < form.length) {
+                val cp = form.codePointAt(i)
+                val s = String(Character.toChars(cp))
+                letters++
+                if (s.lowercase() != s) upper++
+                i += Character.charCount(cp)
+            }
+            if (upper == 0) return Kind.LOWER
+            if (letters < 2 || upper == letters) return Kind.IGNORED
+            return Kind.MIXED
+        }
+
+        private fun saturate(s: CaseStat): CaseStat =
+            if (s.total <= MAX_COUNT) s else CaseStat(s.form, (s.hits + 1) / 2, (s.total + 1) / 2)
+    }
+
+    private val map = HashMap<String, CaseStat>(initial)
+    val stats: Map<String, CaseStat> get() = map
+    val isEmpty: Boolean get() = map.isEmpty()
+    val count: Int get() = map.size
+
+    fun copy(): CaseTable = CaseTable(map)
+
+    /** Một lần quan sát GIỮA CÂU của [form] (NFC); [key] chữ thường; [priorCount] = count unigram trước. */
+    fun observe(form: String, key: String, priorCount: Int): Boolean {
+        when (kind(form)) {
+            Kind.IGNORED -> return false
+            Kind.LOWER -> {
+                val s = map[key] ?: return false
+                map[key] = saturate(CaseStat(s.form, s.hits, s.total + 1))
+                return true
+            }
+            Kind.MIXED -> {
+                val e = map[key]
+                if (e == null && map.size >= CAP) return false
+                var f = e?.form ?: form
+                var h = e?.hits ?: 0
+                val tt = (e?.total ?: priorCount.coerceIn(0, MAX_COUNT)) + 1
+                if (f == form) h++ else if (h > 0) h-- else { f = form; h = 1 }
+                map[key] = saturate(CaseStat(f, h, tt))
+                return true
+            }
+        }
+    }
+
+    /** Dạng ưu tiên của [key], null = chưa đủ nhất quán. */
+    fun preferred(key: String): String? {
+        val s = map[key] ?: return null
+        return if (s.hits >= MIN_HITS && s.hits * 5 >= s.total * 4) s.form else null
+    }
+
+    fun remove(key: String) { map.remove(key) }
+    fun retain(keep: (String) -> Boolean) { if (map.isNotEmpty()) map.keys.retainAll(keep) }
+}

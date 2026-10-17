@@ -598,3 +598,137 @@ TEST(learned_perf_and_memory) {
     std::printf("LEARN nextWords %.2f us\n",
                 std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t1).count() / 200);
 }
+
+// ---------------------------------------------------------------- learned casing (10/2026)
+// = iOS KeyboardTests/LearnedCaseTests.swift (CaseTable in UserLMTables.swift).
+
+namespace {
+// Records like the app's onLearnWork: evidence = predict::casingEvidence(word, prev1).
+void typeCased(learn::Model& m, const std::string& word, const std::string& prev, int times = 1) {
+    for (int t = 0; t < times; ++t) m.record(word, prev, std::string(), 1, predict::casingEvidence(U(word), U(prev)));
+}
+}  // namespace
+
+TEST(learned_case_thresholds) {
+    auto m = fresh();
+    typeCased(*m, "SenPrints", "ty", 2);
+    CHECK(m->learnedCase("senprints").empty());  // 2: not yet
+    typeCased(*m, "SenPrints", "ở");
+    CHECK_EQ(m->learnedCase("senprints"), std::string("SenPrints"));
+    typeCased(*m, "Văn", "anh", 3);
+    CHECK_EQ(m->learnedCase("văn"), std::string("Văn"));
+    // sentence start (no prev) / Caps Lock / one letter / name chain: never learned
+    auto s = fresh();
+    typeCased(*s, "Văn", "", 6);
+    typeCased(*s, "SENPRINTS", "ở", 5);
+    typeCased(*s, "VĂN", "anh", 5);
+    typeCased(*s, "A", "điểm", 5);
+    typeCased(*s, "Nam", "Việt", 6);
+    CHECK(s->cases().empty());
+    CHECK(!predict::casingEvidence(U("Nam"), U("việt")) && predict::casingEvidence(U("Nam"), U("anh")));
+    CHECK(!predict::casingEvidence(U("Văn"), U("")));
+    // ambiguous word: lowercase history wins; consistency needed (≥ 80%)
+    auto a = fresh();
+    typeCased(*a, "văn", "bài", 20);
+    typeCased(*a, "Văn", "anh", 3);
+    CHECK(a->learnedCase("văn").empty());
+    auto n = fresh();
+    typeCased(*n, "Văn", "anh", 4);
+    typeCased(*n, "văn", "bài");
+    CHECK_EQ(n->learnedCase("văn"), std::string("Văn"));  // 4/5
+    typeCased(*n, "văn", "bài");
+    CHECK(n->learnedCase("văn").empty());  // 4/6
+    // competing capital forms cancel
+    auto c = fresh();
+    typeCased(*c, "SenPrints", "ở", 3);
+    typeCased(*c, "Senprints", "ở", 2);
+    CHECK(c->learnedCase("senprints").empty());
+    // no evidence flag: table untouched
+    auto z = fresh();
+    for (int i = 0; i < 5; ++i) z->record("SenPrints", "ở");
+    CHECK(z->cases().empty());
+    // saturation keeps the ratio
+    learn::CaseTable t;
+    for (int i = 0; i < 600; ++i) t.observe("VietTelex", "viettelex", 0);
+    const learn::CaseStat* st = t.find("viettelex");
+    CHECK(st && st->total <= learn::kCaseMaxCount && st->hits == st->total);
+    CHECK(learn::caseKind("iPhone") == learn::CaseKind::Mixed && learn::caseKind("Đà") == learn::CaseKind::Mixed);
+    CHECK(learn::caseKind("ĐÀ") == learn::CaseKind::Ignored && learn::caseKind("đà") == learn::CaseKind::Lower);
+}
+
+TEST(learned_case_persistence_and_clear) {
+    auto m = fresh();
+    typeCased(*m, "SenPrints", "ở", 3);
+    typeCased(*m, "Văn", "anh", 2);
+    const std::vector<uint8_t> b = m->encode();
+    CHECK_EQ(static_cast<int>(b[6]), 1);  // flags bit 0
+    auto r = learn::Model::decode(b.data(), b.size());
+    CHECK(r != nullptr);
+    if (r) {
+        CHECK_EQ(r->learnedCase("senprints"), std::string("SenPrints"));
+        CHECK(r->learnedCase("văn").empty());
+        const learn::CaseStat* v = r->cases().find("văn");
+        CHECK(v && *v == (learn::CaseStat{"Văn", 2, 2}));
+        CHECK(r->encode() == b);
+        typeCased(*r, "Văn", "anh");
+        CHECK_EQ(r->learnedCase("văn"), std::string("Văn"));
+    }
+    // decay to zero drops the casing; clear drops everything
+    learn::Model d(nullptr, 0);
+    typeCased(d, "Văn", "anh", 3);
+    d.decayIfDue(52ll * 7 * 86400 * 1000);
+    CHECK(d.count("văn") == 0 && d.cases().empty());
+    typeCased(*m, "Văn", "anh");
+    m->clear(0);
+    CHECK(m->cases().empty() && m->learnedCase("senprints").empty());
+    // hits > total / total 0 / flag off with data => rejected (CRC fixed up)
+    auto patched = [](std::vector<uint8_t> v, size_t at, uint8_t val) {
+        v.resize(v.size() - 4);
+        v[at] = val;
+        const uint32_t c = learn::crc32(v.data(), v.size());
+        for (int k = 0; k < 4; ++k) v.push_back(static_cast<uint8_t>(c >> (8 * k)));
+        return v;
+    };
+    const size_t n = b.size() - 4;
+    const auto bad1 = patched(b, n - 4, 9);  // hits of the last row > total
+    CHECK(learn::Model::decode(bad1.data(), bad1.size()) == nullptr);
+    const auto bad2 = patched(patched(b, n - 2, 0), n - 1, 0);  // total 0
+    CHECK(learn::Model::decode(bad2.data(), bad2.size()) == nullptr);
+    const auto bad3 = patched(b, 6, 0);  // flag off, section still there
+    CHECK(learn::Model::decode(bad3.data(), bad3.size()) == nullptr);
+}
+
+TEST(learned_case_cross_platform_fixture) {
+    // Shared with iOS / Android (python-built): senprints (3,3), văn (1,21).
+    const std::vector<uint8_t> bin = readFile(VTX_KB_RESOURCES "/../../KeyboardTests/Fixtures/userlm-vtl2-case.bin");
+    CHECK(bin.size() > 36);
+    auto m = learn::Model::decode(bin.data(), bin.size());
+    CHECK(m != nullptr);
+    if (m) {
+        CHECK_EQ(m->count("văn"), 21);
+        CHECK(m->cases().size() == 2);
+        CHECK_EQ(m->learnedCase("senprints"), std::string("SenPrints"));
+        CHECK(m->learnedCase("văn").empty());
+        CHECK(m->encode() == bin);  // byte for byte = the Swift encoder
+    }
+    // The old fixture has no casing: flags 0 (learned_file_matches_swift keeps it byte-identical).
+    const std::vector<uint8_t> old = readFile(VTX_APP_FIXTURES "/learned-words.bin");
+    CHECK(old.size() > 8 && old[6] == 0 && old[7] == 0);
+}
+
+TEST(learned_case_in_predictions) {
+    CHECK(data().ok);
+    learn::Model m([](const std::string& w) { return model().knownWord(w); }, 1760000000000ll);
+    CHECK(predict::resolveCase(U("văn"), std::nullopt, &m) == U("văn"));
+    typeCased(m, "Văn", "anh", 3);
+    CHECK(predict::resolveCase(U("văn"), std::nullopt, &m) == U("Văn"));
+    CHECK(predict::resolveCase(U("văn"), std::nullopt, nullptr) == U("văn"));
+    CHECK(predict::resolveCase(U("iphone"), std::nullopt, &m) == U("iPhone"));  // DisplayCase
+    CHECK(predict::resolveCase(U("nam"), U("việt"), &m) == U("Nam"));          // chain
+    CHECK(predict::resolveCase(U("VietTelex"), std::nullopt, &m) == U("VietTelex"));
+    // next word after a learned pair, and completion of the word being typed: learned casing
+    const std::string next = cands("anh ", "", "", false, true, &m);
+    CHECK(next.find("Văn") != std::string::npos && next.find("văn") == std::string::npos);
+    const std::string comp = cands("anh vă", "vă", "vaw", false, true, &m);
+    CHECK(comp.find("Văn") != std::string::npos);
+}

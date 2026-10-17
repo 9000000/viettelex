@@ -254,6 +254,31 @@ std::u32string displayCase(const std::u32string& w, const std::optional<std::u32
     return w;
 }
 
+namespace {
+bool chainHas(const std::u32string& prevLower, const std::u32string& nextLower) {
+    const std::string p = u8(prevLower), needle = "|" + u8(nextLower) + "|";
+    for (const Chain& c : kChains)
+        if (p == c.prev) return std::strstr(c.next, needle.c_str()) != nullptr;
+    return false;
+}
+}  // namespace
+
+std::u32string resolveCase(const std::u32string& w, const std::optional<std::u32string>& after,
+                           const learn::Model* learned) {
+    for (char32_t c : w)
+        if (text::lower(c) != std::u32string(1, c)) return w;
+    if (learned) {
+        const std::string l = learned->learnedCase(u8(w));
+        if (!l.empty()) return u32(l);
+    }
+    return displayCase(w, after);
+}
+
+bool casingEvidence(const std::u32string& word, const std::u32string& prev) {
+    if (prev.empty()) return false;
+    return !chainHas(lowerS(prev), lowerS(word));
+}
+
 std::u32string suggestionCase(const std::u32string& w, const std::u32string& typed) {
     int letters = 0, upper = 0;
     bool firstUpper = false;
@@ -465,7 +490,7 @@ std::vector<std::u32string> Model::candidates(const Request& r, const std::u32st
             cands.insert(cands.end(), t.begin(), t.end());
         }
         cands.insert(cands.end(), personal.begin(), personal.end());
-        for (const auto& w : pad(cands, kRankDepth)) out.push_back(displayCase(w, r.prev));
+        for (const auto& w : pad(cands, kRankDepth)) out.push_back(resolveCase(w, r.prev, learned));
         return out;
     }
     const std::u32string& typed = r.typed;
@@ -538,7 +563,7 @@ std::vector<std::u32string> Model::candidates(const Request& r, const std::u32st
         std::vector<std::u32string> ranked;
         for (const auto& s : scored) ranked.push_back(poolWords[s.first]);
         for (const auto& w : completions(filterSensitive(ranked, filterOn), typed))
-            out.push_back(suggestionCase(displayCase(w, r.prev), typed));
+            out.push_back(suggestionCase(resolveCase(w, r.prev, learned), typed));
         return out;
     }
     // English: the raw keys (a–z) — "this" may show as "thí" after Telex.
