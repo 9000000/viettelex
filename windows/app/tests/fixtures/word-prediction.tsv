@@ -4,62 +4,62 @@
 cảm 			0	1		ơn|thấy|giác
 xin 			0	1		lỗi|chào|phép
 hôm 			0	1		nay|qua
-đi 			0	1		làm|học|chơi
+đi 			0	1		làm|đâu|thôi
 tôi đang 			0	1		cố|làm|nói
-anh 			0	1		ơi|nhé|đang
+anh 			0	1		ấy|ơi|ta
 hồ 			0	1		Chí
 hồ chí 			0	1		Minh|còn|không
-của 			0	1		em|anh|mình
+của 			0	1		tôi|mình|bạn
 và 			0	1		
-không 			0	1		thể|sao|được
+không 			0	1		có|phải|thể
 chúng ta 			0	1		sẽ|không|phải
 Tôi Đang 			0	1		cố|làm|nói
-xin chào, bạn 			0	1		ơi|có|đang
-dòng một\nđi 			0	1		làm|học|chơi
+xin chào, bạn 			0	1		có|đã|sẽ
+dòng một\nđi 			0	1		làm|đâu|thôi
 hello 			1	1		
 zzqx 			0	1		
 hai  			0	1		
 xong. 			0	1		
 hà 			0	1		Nội
 việt 			0	1		Nam
-cảm ơn 			0	1		anh|vì|cậu
-rất 			0	1		vui|đẹp|ngon
+cảm ơn 			0	1		vì|anh|bạn
+rất 			0	1		nhiều|vui|đẹp
 đà 			0	1		Nẵng|Lạt
 a.b 			0	1		
-người 			0	1		ta
+người 			0	1		khác|ta|đàn
 bây 			0	1		giờ
 làm 			0	1		gì|việc|sao
 nhà 			0	1		em|anh|mình
-học 			0	1		
-tôi đư	đư	dduw	0	1		đưa|được|đừng
+học 			0	1		sinh|tiếng
+tôi đư	đư	dduw	0	1		đưa|được|đứng
 Đư	Đư	Dduw	0	1		Được|Đừng|Đưa
-xin ch	ch	ch	0	1		chào|cho|cha
-ng	ng	ng	0	1		người|nghĩ|nghe
-anh th	th	th	0	1		thật|thấy|thích
-khô	khô	khoo	0	1		không|khốn|khổng
+xin ch	ch	ch	0	1		chào|cho|chúa
+ng	ng	ng	0	1		người|nghĩ|ngày
+anh th	th	th	0	1		thấy|thật|thích
+khô	khô	khoo	0	1		không|khốn|khối
 my keyb	keyb	keyb	0	1		keyboards|keyboard|keyboardist
 this is beca	beca	beca	1	1		because|became
 thí	thí	this	1	1		thistle
 cảm ơ	ơ	ow	0	1		
 đị	đị	ddij	0	1		định|địa|địch
-đi	đi	ddi	0	1		điều|định|điên
+đi	đi	ddi	0	1		điều|định|điểm
 fu	fu	fu	0	1		full|further|function
 sh	sh	sh	0	1		she|should|shook
 vc	vc	vc	0	1		
 hôm na	na	na	0	1		nay|nào|này
 chúng tô	tô	too	0	1		tôi|tốt|tối
 tr	tr	tr	0	1		trong|trên|trước
-NG	NG	NG	0	1		NGƯỜI|NGHĨ|NGHE
-Ngh	Ngh	Ngh	0	1		Nghĩ|Nghe|Nghỉ
+NG	NG	NG	0	1		NGƯỜI|NGHĨ|NGÀY
+Ngh	Ngh	Ngh	0	1		Nghĩ|Nghe|Nghĩa
 được kh	kh	kh	0	1		không|khi|khác
-ph	ph	ph	0	1		phải|phòng|phía
-qu	qu	qu	0	1		quá|qua|quay
-gi	gi	gi	0	1		giờ|giúp|giống
+ph	ph	ph	0	1		phải|phòng|phát
+qu	qu	qu	0	1		quá|quan|qua
+gi	gi	gi	0	1		giờ|gia|giúp
 hello wor	wor	wor	1	1		work|world|words
-goo	goo	goo	0	1		goòng|goong
+goo	goo	goo	0	1		goong|goòng
 Hel	Hel	Hel	1	1		Help|Held|Hell
 HEL	HEL	HEL	1	1		HELP|HELD|HELL
-ngư	ngư	nguw	0	1		người|ngươi|ngựa
+ngư	ngư	nguw	0	1		người|ngươi|ngược
 việt na	na	na	0	1		Nam|này|nào
 hà nộ	nộ	nooj	0	1		Nội|nộp|nộm
 abc.đư	đư	dduw	0	1		
@@ -68,19 +68,19 @@ chào đư	đươ	dduwow	0	1
 a1	a1	a1	0	1		
 cám ơn nh	nh	nh	0	1		nhé|nhiều|những
 tôi muốn đi ch	ch	ch	0	1		chơi|chứ|chỗ
-bạn có kh	kh	kh	0	1		không|khi|khác
+bạn có kh	kh	kh	0	1		khỏe|không|khả
 Hôm nay trời đ	đ	dd	0	1		
 Hôm nay trời đẹ	đẹ	ddej	0	1		đẹp|đệm|đệp
-em yê	yê	yee	0	1		yêu|yên|yến
+em yê	yê	yee	0	1		yêu|yên|yếu
 xin lỗ	lỗ	lox	0	1		lỗi|lỗng
 thank yo	yo	yo	1	1		you|your|york
 see you tom	tom	tom	1	1		tomorrow|tommy|tomb
 thế giớ	giớ	giows	0	1		giới
-chúc mừng 			0	1		sinh|anh|nhé
+chúc mừng 			0	1		sinh|bạn|nhé
 hẹn gặp 			0	1		lại|cô|anh
 Tên 			0	1		
-xin chào 			0	1		bác|mọi|anh
-hôm nay 			0	1		tôi|chúng|là
+xin chào 			0	1		bác|mọi|các
+hôm nay 			0	1		tôi|là|anh
 thành phố hồ 			0	1		Chí|sơ|bơi
 zzqx tên 			0	1		
 đi học 			0	1		về|rồi|nữa
@@ -92,7 +92,7 @@ xin 			0	1		lỗi|chào|phép
 hôm 			0	1		nay|qua
 chúc 			0	1		mừng|ngủ|em
 tạm 			0	1		biệt
-nguyễn 			0	1		Văn|Thị|Ngọc
+nguyễn 			0	1		Văn|Thị|Minh
 zzqx cảm 			0	1		ơn|thấy|giác
 buổi 			0	1		sáng|tối|chiều
 ngủ 			0	1		ngon|chưa|dậy
@@ -107,9 +107,9 @@ vãi 			0	0		lồn|cả
 ngon 			0	1		
 ngon 			0	0		vl
 đị	đị	ddij	0	0		định|địa|địch
-con 			0	0		trai|gái|người
+con 			0	0		người|gái|trai
 đi ch	ch	ch	0	1		chơi|chứ|cho
-chúc ng	ng	ng	0	1		ngủ|người|nghĩ
+chúc ng	ng	ng	0	1		ngủ|ngon|người
 hôm na	na	na	0	1		nay|nào|này
 tôi gặp pé	pé	pers	0	1		person|personal|perspective
 ưởn	ưởn	wron	0	1		wrong
@@ -118,11 +118,11 @@ bạn tech	tech	tech	0	1		technology|techniques|technical
 anh toi	toi	toi	0	1		
 duoc	duoc	duoc	0	1		
 cam	cam	cam	0	1		
-thẻ	thẻ	ther	0	1		thẻo|thẻn|thểu
+thẻ	thẻ	ther	0	1		thểu|thẻo|thẻn
 thin	thin	thin	0	1		thỉnh|thịnh|thính
 chan	chan	chan	0	1		chẳng|chàng|chăng
 thanh	thanh	thanh	0	1		
-trie	trie	trie	0	1		triệu|triển|triều
+trie	trie	trie	0	1		triển|triệu|triều
 ăn 			0	1	ăn cơm*3	cơm|chưa|gì
 ăn 			0	1	ăn tối*3	cơm|tối|chưa
 ăn 			0	1	ăn tối*4	tối|cơm|chưa
@@ -130,9 +130,9 @@ tên 			0	1	tên tôi*1
 tên 			0	1	tên tôi*2	tôi
 tên 			0	1	tên tôi*3	tôi
 Tên 			0	1	tên tôi là phúc*3	tôi
-tên tôi 			0	1	tên tôi là phúc*3	là|vậy|sẽ
-cảm ơn 			0	1	cảm ơn anh*3	anh|vì|cậu
-cảm ơn 			0	1	cảm ơn anh*1	anh|vì|cậu
+tên tôi 			0	1	tên tôi là phúc*3	là|vậy|trên
+cảm ơn 			0	1	cảm ơn anh*3	anh|vì|bạn
+cảm ơn 			0	1	cảm ơn anh*1	vì|anh|bạn
 cảm 			0	1	cảm động*5	động|ơn|thấy
 gặp 			0	1	gặp xyzk*2	lại|nhau|sau
 gặp 			0	1	gặp xyzk*3	lại|xyzk|nhau
@@ -140,11 +140,11 @@ thằng 			0	1	thằng cặc*4	mặt
 thằng 			0	0	thằng cặc*4	cặc|mặt
 hello 			1	1	hello world*3	world
 hello 			0	1	hello world*3	world
-tôi hi	hi	hi	0	1	tôi hiểu*5	hiểu|hiền|hiếu
-tôi hi	hi	hi	0	1		hiểu|hiền|hiếu
+tôi hi	hi	hi	0	1	tôi hiểu*5	hiểu|hiện|hình
+tôi hi	hi	hi	0	1		hiểu|hiện|hình
 đi ch	ch	ch	0	1	đi chợ*6	chơi|chứ|cho
-xin chào, bạn 			0	1	bạn ơi*3	ơi|có|đang
+xin chào, bạn 			0	1	bạn ơi*3	có|ơi|đã
 heeey 			0	1	heeey you*4	
 cảm 			0	1	ăn cơm*3	ơn|thấy|giác
-mình 			0	1	mình đi*2|mình ăn*3|mình ngủ*2	đi|ăn|đang
-tôi hi	hi	hi	0	1	tôi hiền*5	hiền|hiểu|hiếu
+mình 			0	1	mình đi*2|mình ăn*3|mình ngủ*2	đang|ăn|đi
+tôi hi	hi	hi	0	1	tôi hiền*5	hiểu|hiền|hiện

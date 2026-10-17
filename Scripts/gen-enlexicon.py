@@ -42,7 +42,11 @@ FILES = {"1grams_english.csv": GB, "1grams_english-fiction.csv": GB, "enwiki-202
 
 TARGET = 20000          # tổng số từ
 WIKI_MAX_RANK = 50000   # chỉ bổ sung từ trong top-50k Wikipedia
-N_VI, CMAX_VI = 26438203, 711535   # thang của vnlexicon (vi_50k OpenSubtitles)
+# Thang: số của hermitdave 2018/vi_50k. vnlexicon.bin thật ra dựng từ bản 2016 (gen-vnlexicon.py
+# REF_TOTAL/REF_MAX = 17.011.917 / 479.988) ⇒ từ tiếng Anh cao hơn ~5 byte so với "cùng thang" thật.
+# Ngưỡng Anh/Việt (TypoFix tiếng Anh, vuốt tiếng Anh, prefersEnglish) đã chỉnh trên thang NÀY; đo
+# 18/10/2026 đổi sang số 2016: DEV TypoFix tiếng Anh R 35,4 → 34,5 %, tiếng Việt P 97,3 → 96,8 % ⇒ GIỮ.
+N_VI, CMAX_VI = 26438203, 711535
 
 # Tục/xúc phạm/tình dục thô tiếng Anh — không vuốt ra (người dùng vẫn gõ chạm được).
 BLOCK = set("""

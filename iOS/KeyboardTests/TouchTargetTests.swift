@@ -52,8 +52,8 @@ final class TouchTargetTests: XCTestCase {
     func testParityWithKotlin() throws {
         XCTAssertEqual(prior.trie.nodeCount, 63210)
         let cases: [(String, Character, Float)] = [
-            ("", "t", 0.1621066), ("", "z", 2.3995224e-5), ("th", "a", 0.25000682), ("ng", "u", 0.48642358),
-            ("k", "o", 0.0019261033), ("tie", "e", 0.9978731), ("dd", "u", 0.17668681), ("hel", "l", 0.17500657),
+            ("", "t", 0.16052505), ("", "z", 2.4178255e-5), ("th", "a", 0.25838506), ("ng", "u", 0.49238884),
+            ("k", "o", 0.002160288), ("tie", "e", 0.99860436), ("dd", "u", 0.17761526), ("hel", "l", 0.17500657),
         ]
         for (raw, c, want) in cases {
             let f = try XCTUnwrap(prior.forRaw(raw))

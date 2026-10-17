@@ -78,7 +78,10 @@ class SuggestBigramTests {
         assertTrue(after.fmt(), after.r3 >= 0.93)
         assertTrue(after.fmt(), after.rn >= 0.26)
         assertTrue(after.r1 - before.r1 >= 0.07)
-        assertTrue(after.rn - before.rn >= 0.14)
+        // 18/10/2026 seed từ corpus hội thoại (gen-seed-data.py): trước 0.222 (cũ 0.111), sau 0.323 (cũ 0.271) —
+        // seed mạnh hơn nên phần bigram thêm ít hơn: 0.16 → 0.10
+        assertTrue(after.fmt(), after.rn >= 0.31)
+        assertTrue(after.rn - before.rn >= 0.09)
         if (System.getenv("VT_TUNE") != null) examples()
     }
 

@@ -138,9 +138,10 @@ final class LearnedWordsTests: XCTestCase {
 
     func testCompletionBoostFromLearnedContext() {
         let m = model()
-        XCTAssertEqual(complete("tôi hi", typed: "hi", nil).first, "hiểu")
-        type(m, "tôi hiền", times: 5)
-        XCTAssertEqual(complete("tôi hi", typed: "hi", m).first, "hiền")
+        // seed 18/10/2026 có cặp "tôi hiểu" (seedNext tôi ∋ hiểu, +ngữ cảnh) ⇒ đổi ví dụ sang "anh hi"
+        XCTAssertEqual(complete("anh hi", typed: "hi", nil).first, "hiểu")
+        type(m, "anh hiền", times: 5)
+        XCTAssertEqual(complete("anh hi", typed: "hi", m).first, "hiền")
     }
 
     func testEnglishContextKeepsEnglishLearnedWords() {

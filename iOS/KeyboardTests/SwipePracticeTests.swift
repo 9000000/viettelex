@@ -21,7 +21,7 @@ final class SwipePracticeTests: XCTestCase {
         }
         // parity Kotlin SwipePracticeTests.PARITY_SEED_42
         XCTAssertEqual((0..<12).map { SwipePractice.target(seed: 42, $0).word },
-                       ["hoàn", "head", "phần", "chứng", "first", "hay", "đừng", "vật", "nhau", "từ", "chú", "ít"])
+                       ["lòng", "head", "tử", "dịch", "first", "tốt", "đấy", "đàn", "bỏ", "cách", "câu", "mạnh"])
         XCTAssertEqual(SwipePractice.vietnamese.count, 400)
         XCTAssertEqual(SwipePractice.english.count, 120)
     }

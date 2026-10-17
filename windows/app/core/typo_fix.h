@@ -51,7 +51,7 @@ inline Params defaults() { return Params{}; }
 // (rivals below that); Vietnamese candidates (every edit) are rivals — both lexicons share the
 // 0–255 frequency scale. Words of longMinLen+ letters: a lower frequency floor (longMinFreq).
 struct EnglishParams {
-    int minFreq = 140;
+    int minFreq = 135;  // 140 → 135 on 2026-10-18 (new vnlexicon frequencies; = macOS englishDefaults)
     int margin = 60;
     int insDelMinLen = 5;
     int longMinLen = 7;

@@ -34,6 +34,7 @@ G = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(G)
 BR = G.BR
 SHORT_LEN = 5          # câu < 5 âm tiết: giới hạn số lần thay vì khử trùng tuyệt đối
 SHORT_CAP = 8
+MIN_SYL = 2            # câu ít hơn bỏ (vnlexicon/seed giai đoạn 2: --min-syllables 1 --short-cap 1e9 — xem docs)
 BLOOM_BITS = 32
 SAMPLE_MOD = 40        # ghi 1/40 câu giữ lại ra file mẫu (tập kiểm thử/dev hội thoại)
 
@@ -137,6 +138,11 @@ def norm_token(t):
 
 def has_dia(s): return not s.isascii()
 
+def set_limits(short_cap, min_syl):
+    """Đặt SHORT_CAP / MIN_SYL trước khi tạo Pool (worker kế thừa qua fork)."""
+    global SHORT_CAP, MIN_SYL
+    SHORT_CAP, MIN_SYL = short_cap, min_syl
+
 def process_sentence(s):
     """Câu (chữ thường) → (lý do bỏ | None, danh sách id có BR, số âm tiết Việt)."""
     toks = G.TOKEN.findall(s)
@@ -162,7 +168,7 @@ def process_sentence(s):
             if has_dia(x): ndia += 1
             ids.append(wid[x]); last_br = False; syls.append(x)
             run = run + 1 if x == prev else 1; prev = x; maxrun = max(maxrun, run)
-    if nvi < 2: return "short", None, 0
+    if nvi < MIN_SYL: return "short", None, 0
     if nother * 2 > nw: return "english", None, 0
     if nvi >= 5 and ndia < 0.3 * nvi: return "low-diacritics", None, 0
     if nvi >= 3 and ndia == 0: return "low-diacritics", None, 0
@@ -406,8 +412,13 @@ def main():
     ap.add_argument("--max-syllables", type=float, default=0)
     ap.add_argument("--domain-cap", type=float, default=0.03, help="fineweb: tối đa phần âm tiết của 1 tên miền")
     ap.add_argument("--max-rg-per-shard", type=int, default=10 ** 9)
+    ap.add_argument("--short-cap", type=float, default=SHORT_CAP,
+                    help="câu < 5 âm tiết: tối đa bấy nhiêu lần mỗi nguồn (vnlm.bin: 8)")
+    ap.add_argument("--min-syllables", type=int, default=MIN_SYL,
+                    help="bỏ câu ít âm tiết Việt hơn (vnlm.bin: 2; tần suất vnlexicon/seed: 1)")
     ap.add_argument("--rg-step", type=int, default=1)
     a = ap.parse_args()
+    set_limits(a.short_cap, a.min_syllables)
 
     stats = collections.Counter()
     words, _ = G.load_lexicon(a.lexicon)
