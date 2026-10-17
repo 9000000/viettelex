@@ -77,7 +77,7 @@ class SuggestTrigramTests {
             SuggestRank.inlinePmi(pool, prev, lm, prev2, p), Cp.count(typed), m::count, ctx, p), true)
     }
 
-    private fun eval(chains: List<List<String>>, lm: SyllableLM?, p: SuggestRank.Params = SuggestRank.DEFAULT,
+    internal fun eval(chains: List<List<String>>, lm: SyllableLM?, p: SuggestRank.Params = SuggestRank.DEFAULT,
                      learn: Boolean = false, kss: Boolean = true, compound: Compound? = null): M {
         val m = seeded()
         var n = 0; var t1 = 0; var t3 = 0; var nAcc = 0; var s1 = 0; var s3 = 0; var keys = 0; var saved = 0

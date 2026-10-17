@@ -265,12 +265,142 @@ def cmd_count(a):
                      "tri": {k: tri[k] for k in keep}, "tri_raw": {k: tri_raw[k] for k in keep},
                      "cont1": dict(cont1), "fol1": dict(fol1), "fol2": dict(fol2)}, f, protocol=4)
 
+# ---- đếm bằng numpy (nguồn lớn: hội thoại, 18/10/2026) ----------------------------------
+
+def cmd_ids(a):
+    """Nguồn cũ (dump Wikimedia / Tatoeba) → luồng id .ids (u16, BR = đứt chuỗi) — tách y hệt
+    `count` (id_stream). Câu giữ lại Tatoeba ghi ra --test-out / --dev-out như `count`."""
+    words, _ = load_lexicon(a.lexicon)
+    wid = {w: i for i, w in enumerate(words)}
+    old = _old_style()
+    cache = {}
+    def tid(t):
+        r = cache.get(t)
+        if r is None:
+            r = wid.get(old(t), -1)
+            if len(cache) < 2_000_000: cache[t] = r
+        return r
+    held = tuple(open(f, "w", encoding="utf-8") if f else None for f in (a.test_out, a.dev_out))
+    os.makedirs(a.out_dir, exist_ok=True)
+    for path in a.inputs:
+        name, ids = id_stream(path, tid, held)
+        with open(os.path.join(a.out_dir, name + ".ids"), "wb") as f: ids.tofile(f)
+        print(f"{name}: {len(ids)} id", file=sys.stderr, flush=True)
+    for f in held:
+        if f: f.close()
+
+def np_source_counts(path, np, chunk=40_000_000):
+    """Một luồng .ids → (uni, bi, tri): mỗi cái (khoá tăng dần int64, đếm thô int64). Khoá như
+    `count`: bigram b<<13|c, trigram a<<26|b<<13|c. Đếm theo khúc (gối 2 id) rồi gộp."""
+    ids = np.fromfile(path, dtype="<u2")
+    parts = ([], [], [])
+    def uniq(k):
+        u, c = np.unique(k, return_counts=True)
+        return u, c.astype(np.int64)
+    L = len(ids)
+    for s in range(0, L, chunk):
+        seg = ids[s: min(L, s + chunk + 2)].astype(np.int64)
+        e = min(chunk, len(seg))
+        x = seg[:e]; ok = x != BR
+        parts[0].append(uniq(x[ok]))
+        y = seg[1:e + 1]; n2 = len(y)
+        m2 = ok[:n2] & (y != BR)
+        parts[1].append(uniq((x[:n2][m2] << 13) | y[m2]))
+        z = seg[2:e + 2]; n3 = len(z)
+        m3 = ok[:n3] & (y[:n3] != BR) & (z != BR)
+        parts[2].append(uniq((x[:n3][m3] << 26) | (y[:n3][m3] << 13) | z[m3]))
+    def merge(ps):
+        if len(ps) == 1: return ps[0]
+        k = np.concatenate([p[0] for p in ps]); c = np.concatenate([p[1] for p in ps])
+        u, inv = np.unique(k, return_inverse=True)
+        return u, np.bincount(inv, weights=c, minlength=len(u)).astype(np.int64)
+    return tuple(merge(p) for p in parts)
+
+def cmd_count_np(a):
+    """Như `count` nhưng từ các luồng .ids, đếm bằng numpy (chạy trong container — nguồn hội
+    thoại hàng trăm triệu âm tiết vượt sức Counter của python). Trọng số:
+      --weight tên=w      hệ số như WEIGHTS (mặc định WEIGHTS, 1 nếu không có);
+      --share tên=p       nguồn này chiếm đúng phần p của TỔNG khối lượng có trọng số; các nguồn
+                          còn lại chia phần 1 − Σp theo tỉ lệ hệ số của chúng; tổng khối lượng
+                          giữ bằng của các nguồn không --share (⇒ ngưỡng cắt tỉa giữ nghĩa).
+    Cache chỉ giữ mục CÓ THỂ qua cắt tỉa (đếm có trọng số ≥ --pre2 / --pre3; build kiểm ngưỡng
+    ≥ 2× các mức này) + thống kê KN tính trên TOÀN BỘ (N1+, số bigram khác nhau `nbt`).
+    Không --share và trọng số mặc định ⇒ cùng cache với `count` (build ra file y hệt từng byte)."""
+    import numpy as np
+    words, _ = load_lexicon(a.lexicon)
+    n = len(words)
+    srcs = []
+    for spec in a.inputs:
+        path = spec
+        name = os.path.basename(path).split(".")[0]
+        srcs.append((name, path))
+    wts = {name: WEIGHTS.get(name, 1) for name, _ in srcs}
+    for spec in a.weight or []:
+        k, v = spec.split("="); wts[k] = float(v)
+    shares = {}
+    for spec in a.share or []:
+        k, v = spec.split("="); shares[k] = float(v)
+    counts = {}
+    for name, path in srcs:
+        cache = path + ".npz"
+        if os.path.exists(cache) and os.path.getmtime(cache) >= os.path.getmtime(path):
+            z = np.load(cache)
+            counts[name] = ((z["u1"], z["c1"]), (z["u2"], z["c2"]), (z["u3"], z["c3"]))
+        else:
+            counts[name] = np_source_counts(path, np)
+            (u1, c1), (u2, c2), (u3, c3) = counts[name]
+            np.savez(cache, u1=u1, c1=c1, u2=u2, c2=c2, u3=u3, c3=c3)
+        print(f"{name}: {int(counts[name][0][1].sum())} âm tiết, {len(counts[name][1][0])} bigram, "
+              f"{len(counts[name][2][0])} trigram khác nhau", file=sys.stderr, flush=True)
+    mass = {k: float(counts[k][0][1].sum()) for k in counts}
+    if shares:
+        base = [k for k in counts if k not in shares]
+        M = sum(wts[k] * mass[k] for k in base)            # tổng khối lượng giữ như không có nguồn mới
+        rest = 1.0 - sum(shares.values())
+        for k in base: wts[k] = wts[k] * rest
+        for k, p in shares.items(): wts[k] = p * M / mass[k]
+    for k in counts:
+        print(f"  {k}: ×{wts[k]:.6g} → {wts[k] * mass[k] / 1e6:.2f} tr (khối lượng có trọng số)", file=sys.stderr)
+    def combine(i):
+        ks = np.concatenate([counts[k][i][0] for k in counts])
+        raw = np.concatenate([counts[k][i][1] for k in counts])
+        wc = np.concatenate([counts[k][i][1].astype(np.float64) * wts[k] for k in counts])
+        u, inv = np.unique(ks, return_inverse=True)
+        return u, np.bincount(inv, weights=raw, minlength=len(u)).astype(np.int64), \
+            np.bincount(inv, weights=wc, minlength=len(u))
+    u1, _, w1 = combine(0)
+    u2, r2, w2 = combine(1)
+    u3, r3, w3 = combine(2)
+    del counts
+    M13_ = np.int64(M13)
+    cont1 = np.bincount(u2 & M13_, minlength=n)
+    fol1 = np.bincount(u2 >> 13, minlength=n)
+    ab3, fol2c = np.unique(u3 >> 13, return_counts=True)
+    keep3 = (r3 >= 2) & (w3 >= a.pre3)
+    keep2 = (w2 >= a.pre2)
+    def as_int(v): return int(v) if float(v).is_integer() else float(v)
+    def d(keys, vals, conv): return {int(k): conv(v) for k, v in zip(keys.tolist(), vals.tolist())}
+    wint = all(float(w).is_integer() for w in wts.values())
+    cv = (lambda v: int(round(v))) if wint else float
+    out = {"count": n,
+           "uni": d(u1, w1, cv),
+           "bi": d(u2[keep2], w2[keep2], cv), "bi_raw": d(u2[keep2], r2[keep2], int),
+           "tri": d(u3[keep3], w3[keep3], cv), "tri_raw": d(u3[keep3], r3[keep3], int),
+           "cont1": {int(k): int(v) for k, v in enumerate(cont1.tolist()) if v},
+           "fol1": {int(k): int(v) for k, v in enumerate(fol1.tolist()) if v},
+           "fol2": d(ab3, fol2c, int),
+           "nbt": int(len(u2)), "pre2": a.pre2, "pre3": a.pre3,
+           "weights": {k: float(v) for k, v in wts.items()}, "mass": mass}
+    with open(a.cache, "wb") as f: pickle.dump(out, f, protocol=4)
+    print(f"cache: {len(out['bi'])} bigram, {len(out['tri'])} trigram (ứng viên), nbt {out['nbt']} → {a.cache}",
+          file=sys.stderr)
+
 # ---- mô hình ------------------------------------------------------------------
 
 class KN:
     def __init__(self, c):
         self.__dict__.update(c)
-        self.nbt = float(len(self.bi_raw))
+        self.nbt = float(c.get("nbt", len(self.bi_raw)))
 
     def p1(self, c):
         return (self.cont1.get(c, 0) + 0.5) / (self.nbt + 0.5 * self.count)
@@ -739,6 +869,7 @@ def cmd_build(a):
     words, lex_hash = load_lexicon(a.lexicon)
     with open(a.cache, "rb") as f: c = pickle.load(f)
     assert c["count"] == len(words), "cache dựng từ lexicon khác"
+    assert a.th2 >= 2 * c.get("pre2", 0) and a.th3 >= 2 * c.get("pre3", 0), "ngưỡng < 2× mức lọc trước của cache"
     m = KN(c)
     g2, bi, g3, tri, cbs = build_model(m, a.th2, a.th3)
     adj = uni_adj(m)
@@ -809,13 +940,28 @@ def main():
     p.add_argument("--th3", type=float, default=20)
     p.add_argument("--parity", help="ghi fixture parity (vnlm-parity.txt)")
     p.add_argument("--chains", help="chuỗi kiểm thử cho truy vấn parity (bigram-heldout.txt)")
+    p = sp.add_parser("ids")
+    p.add_argument("--lexicon", required=True)
+    p.add_argument("--out-dir", required=True)
+    p.add_argument("--test-out")
+    p.add_argument("--dev-out")
+    p.add_argument("inputs", nargs="+")
+    p = sp.add_parser("count-np")
+    p.add_argument("--lexicon", required=True)
+    p.add_argument("--cache", required=True)
+    p.add_argument("--weight", action="append", help="tên=hệ số")
+    p.add_argument("--share", action="append", help="tên=phần khối lượng (0–1)")
+    p.add_argument("--pre2", type=float, default=2.0)
+    p.add_argument("--pre3", type=float, default=4.0)
+    p.add_argument("inputs", nargs="+", help="luồng .ids (tên nguồn = tên file trước dấu chấm)")
     p = sp.add_parser("chains")
     p.add_argument("--lexicon", required=True)
     p.add_argument("--input", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--limit", type=int, default=0)
     a = ap.parse_args()
-    {"count": cmd_count, "build": cmd_build, "chains": cmd_chains}[a.cmd](a)
+    {"count": cmd_count, "build": cmd_build, "chains": cmd_chains, "ids": cmd_ids,
+     "count-np": cmd_count_np}[a.cmd](a)
 
 if __name__ == "__main__":
     main()
