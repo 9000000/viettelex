@@ -22,8 +22,25 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
         // tăng tốc phần cứng từ API 28; máy cũ bỏ bóng.
         if (Build.VERSION.SDK_INT >= 28) setShadowLayer(theme.dp(3f), 0f, theme.dp(1.5f), 0x33000000)
     }
-    private val textPaint = theme.text(28f, color = theme.balloonInk)
-    private val textOff = theme.centerOffset(textPaint)
+    private val textPaint = theme.text(28f, color = theme.balloonInk).apply { theme.keyTypeface?.let { typeface = it } }
+    private var textOff = theme.centerOffset(textPaint)
+    /** Tuỳ chỉnh nâng cao: phông nhãn ⇒ kẹp cỡ để dấu chồng (Ễ, Ỗ) không tràn khỏi ô. */
+    private val styled = theme.keyStyle.customizesLabels
+
+    /** Cỡ chữ lớn nhất ≤ [want] để [sample] căn giữa trong khung cao [h] không tràn mực (lúc đổi hình). */
+    private fun fitCentered(p: Paint, want: Float, h: Float): Float {
+        p.textSize = want
+        val b = android.graphics.Rect()
+        var above = 0f; var below = 0f
+        val sample = com.viettelex.keyboard.KeyLabelFitter.STACKED_SAMPLE
+        for (i in sample.indices) {
+            p.getTextBounds(sample, i, i + 1, b)
+            above = maxOf(above, -b.top.toFloat()); below = maxOf(below, b.bottom.toFloat())
+        }
+        val fm = p.fontMetrics
+        return com.viettelex.keyboard.KeyLabelFitter.centeredSize(want, -fm.ascent / want, fm.descent / want,
+            above / want, below / want, h - 2 * theme.dp(com.viettelex.keyboard.KeyLabelFitter.V_PAD_DP))
+    }
 
     private var visible = false
     private var text = ""
@@ -59,7 +76,9 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
     private fun drawPress(c: Canvas) {
         val p = press
         for (i in 0 until p.capacity) if (p.isPressed(i))
-            c.drawRoundRect(p.left(i), p.top(i), p.right(i), p.bottom(i), pressRadius, pressRadius, pressPaint)
+            theme.keyRadius(p.right(i) - p.left(i), p.bottom(i) - p.top(i), pressRadius).let { r ->
+                c.drawRoundRect(p.left(i), p.top(i), p.right(i), p.bottom(i), r, r, pressPaint)
+            }
     }
 
     /**
@@ -78,6 +97,10 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
             path.reset()
             val r = theme.dp(10f)
             path.addRoundRect(0f, 0f, bw, bh, r, r, Path.Direction.CW)
+            if (styled) {
+                textPaint.textSize = fitCentered(textPaint, theme.sp(28f), bh)
+                textOff = theme.centerOffset(textPaint)
+            }
         }
         invalidateBalloon()          // vùng cũ
         ox = x; oy = top; bubbleW = bw; bubbleH = bh
@@ -107,7 +130,7 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
             if (Build.VERSION.SDK_INT >= 28) setShadowLayer(theme.dp(3f), 0f, theme.dp(1.5f), 0x4D000000)
         }
         val hi = theme.fill(theme.action)
-        val text = theme.text(18f, color = theme.balloonInk)
+        val text = theme.text(18f, color = theme.balloonInk).apply { theme.keyTypeface?.let { typeface = it } }
         val ink = theme.balloonInk
         val selInk = theme.actionInk
         val rect = android.graphics.RectF()
@@ -140,7 +163,8 @@ class BalloonView(context: Context, private val theme: ImeTheme) : View(context)
         p.rect.set(l, t, r, b)
         p.choices = choices; p.slotL = slotLefts; p.itemW = itemW; p.sel = sel
         p.icons = icons; p.iconSize = theme.dp(24f)
-        val full = theme.sp(textSp)
+        val inset = theme.dp(4f)
+        val full = if (styled) fitCentered(p.text, theme.sp(textSp), b - t - 2 * inset) else theme.sp(textSp)
         p.text.textSize = full
         val room = itemW - theme.dp(6f)
         p.size = FloatArray(choices.size) { i ->

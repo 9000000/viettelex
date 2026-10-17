@@ -78,6 +78,14 @@ object BackupSettings {
         Spec(Keys.AUTO_SPACE_AFTER_PUNCT, SettingKind.Bool(false)),
         Spec(Keys.KEYBOARD_TRANSPARENCY, SettingKind.IntRange(0, 0..100)),
         Spec(Keys.KEY_LABEL_TRANSPARENCY, SettingKind.IntRange(0, 0..100)),
+        // "Tuỳ chỉnh nâng cao" (Plus, [KeyStyle]) — cùng khoá + giá trị canh với iOS.
+        Spec(Keys.KEY_LABEL_COLOR, SettingKind.IntRange(-1, KeyStyle.COLOR_RANGE)),
+        Spec(Keys.KEY_FILL_COLOR, SettingKind.IntRange(-1, KeyStyle.COLOR_RANGE)),
+        Spec(Keys.KEY_CORNER_RADIUS, SettingKind.IntRange(-1, KeyStyle.CORNER_RANGE)),
+        Spec(Keys.KEY_FONT_SCALE, SettingKind.IntRange(0, KeyStyle.FONT_SCALE_RANGE)),
+        // "rounded" (chỉ iOS) vẫn nhận để khứ hồi; bàn phím Android vẽ như mặc định.
+        Spec(Keys.KEY_LABEL_FONT, SettingKind.Choice(KeyLabelFont.DEFAULT.id, KeyLabelFont.IDS)),
+        Spec(Keys.KEY_LABEL_WEIGHT, SettingKind.Choice(KeyLabelWeight.REGULAR.id, KeyLabelWeight.IDS)),
         Spec(Keys.UI_LANGUAGE, SettingKind.Choice(L10n.DEFAULT, L10n.supported)),
         // Ngôn ngữ đích của Dịch trên máy (gói model KHÔNG đi theo — máy mới tải lại trong app).
         Spec(Keys.TRANSLATE_TARGET, SettingKind.Choice(TranslateLangs.DEFAULT_TARGET, TranslateLangs.TARGETS)),

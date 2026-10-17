@@ -80,6 +80,15 @@ enum BackupSettings {
         Spec(key: "autoSpaceAfterPunct", kind: .bool(false)),
         Spec(key: "keyboardTransparency", kind: .int(0, 0...100)),
         Spec(key: "keyLabelTransparency", kind: .int(0, 0...100)),
+        // "Tuỳ chỉnh nâng cao" (Plus, KeyStyle) — cùng khoá + giá trị canh với Android:
+        // màu 0xRRGGBB (-1 = theo theme), bo góc 0…100 (-1 = mặc định), cỡ chữ 80…150 (0 = mặc định).
+        Spec(key: KeyStyle.labelColorKey, kind: .int(-1, KeyStyle.colorRange)),
+        Spec(key: KeyStyle.fillColorKey, kind: .int(-1, KeyStyle.colorRange)),
+        Spec(key: KeyStyle.cornerKey, kind: .int(-1, KeyStyle.cornerRange)),
+        Spec(key: KeyStyle.fontScaleKey, kind: .int(0, KeyStyle.fontScaleRange)),
+        // Android không có "rounded" ⇒ bàn phím Android dùng mặc định (giá trị vẫn giữ).
+        Spec(key: KeyStyle.fontKey, kind: .string(KeyLabelFont.standard.rawValue, KeyLabelFont.allCases.map(\.rawValue))),
+        Spec(key: KeyStyle.weightKey, kind: .string(KeyLabelWeight.regular.rawValue, KeyLabelWeight.allCases.map(\.rawValue))),
         // "Nền theo hệ thống" từng theme có nền riêng (chỉ iOS dùng) — systemBackdropOled…
         Spec(key: "systemBackdropOled", kind: .bool(false)),
         Spec(key: "systemBackdropContrast", kind: .bool(false)),

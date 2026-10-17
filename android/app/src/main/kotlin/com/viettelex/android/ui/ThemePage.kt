@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.viettelex.keyboard.KeyboardSettings
 import com.viettelex.keyboard.KeyboardTheme
 import com.viettelex.keyboard.KeyboardTransparency
+import com.viettelex.keyboard.KeyStyle
 import com.viettelex.keyboard.Keys
 import com.viettelex.keyboard.ThemeGate
 import com.viettelex.keyboard.ThemePalette
@@ -176,6 +177,10 @@ private fun saveThemeSettings(ctx: Context, s: ThemeSettings) {
         s.crop?.let { putString(Keys.WALLPAPER_CROP, it.serialize()) } ?: remove(Keys.WALLPAPER_CROP)
         putInt(Keys.KEYBOARD_TRANSPARENCY, s.keyboardTransparency)
         putInt(Keys.KEY_LABEL_TRANSPARENCY, s.labelTransparency)
+        for ((k, v) in s.keyStyle.toMap()) when (v) {
+            is Int -> putInt(k, v)
+            is String -> putString(k, v)
+        }
     }.apply()
 }
 
@@ -201,7 +206,7 @@ else ThemePalette(bg = 0xFFEEF0F4.toInt(), keyFill = 0xFFFFFFFF.toInt(), special
     action = 0xFF0B57D0.toInt(), actionInk = 0xFFFFFFFF.toInt(), chip = 0xFFD3E3FD.toInt(), isDark = false)
 
 @Composable
-fun ThemePage(onBack: () -> Unit) {
+fun ThemePage(onBack: () -> Unit, onOpenPlus: () -> Unit = {}) {
     val c = LocalVT.current
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -237,7 +242,7 @@ fun ThemePage(onBack: () -> Unit) {
 
     editor?.let { input ->
         WallpaperEditorDialog(input.image, input.crop, remember(input) { KeyboardFrame.portrait(ctx) },
-            palette = (s.effectiveTheme.palette(dark) ?: previewPalette(KeyboardTheme.SYSTEM, dark)).overWallpaper()
+            palette = s.effectiveKeyStyle.applyColors(s.effectiveTheme.palette(dark) ?: previewPalette(KeyboardTheme.SYSTEM, dark)).overWallpaper()
                 .withTransparency(s.keyboardTransparency, s.labelTransparency, dark),
             initialDim = s.dim, initialBlur = s.blur,
             onCancel = { editor = null },
@@ -257,13 +262,15 @@ fun ThemePage(onBack: () -> Unit) {
     SubPageHeader(FeaturePage.GiaoDien.title, onBack)
 
     val active = s.wallpaperActive(wall != null)
-    val pal = (s.effectiveTheme.palette(dark) ?: previewPalette(KeyboardTheme.SYSTEM, dark)).let { if (active) it.overWallpaper() else it }
+    val pal = s.effectiveKeyStyle.applyColors(s.effectiveTheme.palette(dark) ?: previewPalette(KeyboardTheme.SYSTEM, dark))
+        .let { if (active) it.overWallpaper() else it }
         .withTransparency(s.keyboardTransparency, s.labelTransparency, dark)
     val raise by rememberIntPref(Keys.KEYBOARD_RAISE, Prefs.D.keyboardRaise)
     VTSection(footer = tr("Áp dụng lần mở bàn phím kế tiếp.")) {
         // Nâng bàn phím: khung cao thêm đúng tỉ lệ thu nhỏ của bản xem trước, phím giữ cỡ.
         val raisePreview = raise * PREVIEW_SCALE
         KeyboardPreview(pal, if (active) wall else null, s.dim, large = true, backdrop = KeyboardTransparency.systemBackdrop(dark),
+            keyStyle = s.effectiveKeyStyle,
             modifier = Modifier.fillMaxWidth().height(180.dp + raisePreview.dp), bottomPadDp = raisePreview)
     }
 
@@ -344,7 +351,7 @@ fun ThemePage(onBack: () -> Unit) {
     }
 
     VTSection(header = tr("Độ trong suốt"),
-        footer = tr("Phím: nền, ảnh nền, nền và viền phím — 100% chỉ còn chữ (thấy app phía sau). Ký tự: chữ và biểu tượng trên phím — 100% là phím trơn không chữ.")) {
+        footer = tr("Phím: nền và viền phím (cả nền bàn phím khi không dùng ảnh nền) — 100% chỉ còn chữ (thấy app phía sau), ảnh nền vẫn giữ nguyên. Ký tự: chữ và biểu tượng trên phím — 100% là phím trơn không chữ.")) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text(tr("Độ trong suốt phím: %s%%", s.keyboardTransparency), style = VTType.body, color = c.label)
             Slider(value = s.keyboardTransparency.toFloat(), valueRange = 0f..100f,
@@ -354,6 +361,8 @@ fun ThemePage(onBack: () -> Unit) {
                 onValueChange = { update(s.copy(labelTransparency = Math.round(it / 5) * 5)) })
         }
     }
+
+    AdvancedStyleSection(s.keyStyle, pal, onChange = { update(s.copy(keyStyle = it)) }, onOpenPlus = onOpenPlus)
 
     // Tính Năng → Giao diện gộp luôn chiều cao hàng + logo (không thuộc "Khôi phục giao diện gốc").
     VTSection(header = tr("Bàn phím")) {
@@ -381,7 +390,7 @@ fun ThemePage(onBack: () -> Unit) {
         BoolToggle(Keys.SHOW_SPACE_LOGO, Prefs.D.showSpaceLogo, tr("Hiện logo Vᴛ"), tr("Logo mờ ở góc phải phím cách."))
     }
 
-    VTSection(footer = tr("Về theme Hệ thống, tắt ảnh nền (ảnh vẫn giữ để bật lại), độ tối/mờ và độ trong suốt về mặc định. Chiều cao hàng và logo giữ nguyên.")) {
+    VTSection(footer = tr("Về theme Hệ thống, tắt ảnh nền (ảnh vẫn giữ để bật lại), độ tối/mờ, độ trong suốt và tuỳ chỉnh nâng cao về mặc định. Chiều cao hàng và logo giữ nguyên.")) {
         VTRow(onClick = if (s.isDefault || busy) null else { { confirmReset = true } }) {
             Text(tr("Khôi phục giao diện gốc"), style = VTType.body, color = if (s.isDefault) c.secondary else c.red)
         }
@@ -436,7 +445,8 @@ private fun KeyboardRaiseRow() {
  *  [bottomPadDp]: dải nền trống dưới hàng phím đáy (xem trước "Nâng bàn phím"). */
 @Composable
 internal fun KeyboardPreview(p: ThemePalette, wallpaper: ImageBitmap?, dim: Int, large: Boolean, modifier: Modifier,
-                             backdrop: Int? = null, keysOnly: Boolean = false, bottomPadDp: Float = 0f) {
+                             backdrop: Int? = null, keysOnly: Boolean = false, bottomPadDp: Float = 0f,
+                             keyStyle: KeyStyle = KeyStyle.DEFAULT) {
     Box(modifier) {
         val bottom = p.bgBottom
         if (!keysOnly) Canvas(Modifier.fillMaxSize()) {
@@ -446,8 +456,10 @@ internal fun KeyboardPreview(p: ThemePalette, wallpaper: ImageBitmap?, dim: Int,
             else drawRect(Color(p.bg))
         }
         if (wallpaper != null) {
-            Image(wallpaper, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = p.surfaceAlpha)
-            Canvas(Modifier.fillMaxSize()) { drawRect(Color(p.wallpaperOverlay).copy(alpha = dim / 100f * p.surfaceAlpha)) }
+            // Ảnh nền không theo độ trong suốt phím (ThemePalette.wallpaperLayer).
+            val wl = p.wallpaperLayer(dim)
+            Image(wallpaper, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alpha = wl.imageAlpha)
+            Canvas(Modifier.fillMaxSize()) { drawRect(Color(wl.overlay)) }
         }
         Canvas(Modifier.fillMaxSize()) {
             val pad = if (large) 6.dp.toPx() else 3.dp.toPx()
@@ -456,8 +468,9 @@ internal fun KeyboardPreview(p: ThemePalette, wallpaper: ImageBitmap?, dim: Int,
             val kw = (size.width - pad * 2 - gap * 9) / 10
             val kh = (size.height - bottomPadDp.dp.toPx() - pad * 2 - gap * 3) / 4
             fun key(x: Float, y: Float, w: Float, fill: Int) {
-                drawRoundRect(Color(fill), Offset(x, y), Size(w, kh), CornerRadius(r))
-                p.keyBorder?.let { drawRoundRect(Color(it), Offset(x, y), Size(w, kh), CornerRadius(r), style = Stroke(1.dp.toPx())) }
+                val kr = KeyStyle.cornerRadius(keyStyle.corner, w, kh, r)
+                drawRoundRect(Color(fill), Offset(x, y), Size(w, kh), CornerRadius(kr))
+                p.keyBorder?.let { drawRoundRect(Color(it), Offset(x, y), Size(w, kh), CornerRadius(kr), style = Stroke(1.dp.toPx())) }
                 if (large) drawCircle(Color(p.keyInk).copy(alpha = 0.8f * p.labelAlpha), minOf(w, kh) * 0.09f, Offset(x + w / 2, y + kh / 2))
             }
             val counts = intArrayOf(10, 9, 7)

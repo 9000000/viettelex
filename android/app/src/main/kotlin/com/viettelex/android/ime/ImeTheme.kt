@@ -8,6 +8,9 @@ import android.graphics.Typeface
 import android.util.TypedValue
 import androidx.core.content.ContextCompat
 import com.viettelex.android.R
+import com.viettelex.keyboard.KeyLabelFont
+import com.viettelex.keyboard.KeyLabelWeight
+import com.viettelex.keyboard.KeyStyle
 import com.viettelex.keyboard.ThemePalette
 import com.viettelex.keyboard.ThemeSettings
 import com.viettelex.keyboard.withTransparency
@@ -30,6 +33,9 @@ class ImeTheme(ctx: Context, val settings: ThemeSettings = ThemeSettings(), wall
      * Token theme (module :keyboard, [KeyboardTheme]). Hệ thống = màu Material You
      * trong resources như trước; theme khác/ảnh nền ghi đè.
      */
+    /** "Tuỳ chỉnh nâng cao" thực dùng (sau cổng Plus) — mặc định ⇒ y như cũ. */
+    val keyStyle: KeyStyle = settings.effectiveKeyStyle
+
     private val basePalette: ThemePalette = run {
         val base = settings.effectiveTheme.palette(systemDark) ?: ThemePalette(
             bg = ContextCompat.getColor(ctx, R.color.ime_bg),
@@ -43,7 +49,9 @@ class ImeTheme(ctx: Context, val settings: ThemeSettings = ThemeSettings(), wall
             actionInk = ContextCompat.getColor(ctx, R.color.ime_action_ink),
             chip = ContextCompat.getColor(ctx, R.color.ime_chip),
             isDark = systemDark)
-        if (settings.wallpaperActive(wallpaperFile)) base.overWallpaper() else base
+        // Tuỳ chỉnh nâng cao (Plus): màu chữ / nền phím — trước ảnh nền và độ trong suốt.
+        val styled = keyStyle.applyColors(base)
+        if (settings.wallpaperActive(wallpaperFile)) styled.overWallpaper() else styled
     }
     /** Sau hai thanh độ trong suốt (phím / ký tự) — áp một lần ở đây, không mỗi phím. */
     val palette: ThemePalette = basePalette.withTransparency(settings.keyboardTransparency,
@@ -72,7 +80,7 @@ class ImeTheme(ctx: Context, val settings: ThemeSettings = ThemeSettings(), wall
     val keyBorder = palette.keyBorder
     /** Nhận diện theme để IME biết khi nào phải dựng lại input view. */
     val signature = "${settings.effectiveTheme.id}|$systemDark|${palette.wallpaper}|${settings.dim}|${settings.version}" +
-        "|${settings.keyboardTransparency}|${settings.labelTransparency}"
+        "|${settings.keyboardTransparency}|${settings.labelTransparency}|$keyStyle"
 
     /** Màu khi đè phím: phủ ink 12% kiểu state layer Material. */
     fun pressed(color: Int): Int = blend(color, ink, 0.12f)
@@ -103,6 +111,30 @@ class ImeTheme(ctx: Context, val settings: ThemeSettings = ThemeSettings(), wall
                 else -> Typeface.create("sans-serif", Typeface.NORMAL)
             }
         }
+
+    /**
+     * Typeface nhãn phím (+ ô phóng to / popup) theo Tuỳ chỉnh nâng cao. null = mặc định (paint
+     * giữ typeface cũ — không đổi gì). Độ đậm 100…900 cần API 28; máy cũ: Đậm/Rất đậm ⇒ BOLD,
+     * Mỏng/Vừa ⇒ họ "-light"/"-medium" của sans-serif.
+     */
+    val keyTypeface: Typeface? = run {
+        val st = keyStyle
+        if (st.font == KeyLabelFont.DEFAULT || st.font == KeyLabelFont.ROUNDED) {
+            if (st.weight == KeyLabelWeight.REGULAR) return@run null
+        }
+        val family = st.font.androidFamily ?: "sans-serif"
+        val base = Typeface.create(family, Typeface.NORMAL)
+        if (android.os.Build.VERSION.SDK_INT >= 28) Typeface.create(base, st.weight.weight, false)
+        else when (st.weight) {
+            KeyLabelWeight.BOLD, KeyLabelWeight.HEAVY -> Typeface.create(family, Typeface.BOLD)
+            KeyLabelWeight.LIGHT -> if (st.font.androidFamily == null) Typeface.create("sans-serif-light", Typeface.NORMAL) else base
+            KeyLabelWeight.MEDIUM -> if (st.font.androidFamily == null) Typeface.create("sans-serif-medium", Typeface.NORMAL) else base
+            KeyLabelWeight.REGULAR -> base
+        }
+    }
+
+    /** Bo góc phím [w]×[h] px (Tuỳ chỉnh nâng cao); mặc định ⇒ [fallback]. */
+    fun keyRadius(w: Float, h: Float, fallback: Float): Float = KeyStyle.cornerRadius(keyStyle.corner, w, h, fallback)
 
     /** Baseline để chữ canh giữa dọc tại cy (hộp dòng, như UILabel). */
     fun baseline(p: Paint, cy: Float): Float {

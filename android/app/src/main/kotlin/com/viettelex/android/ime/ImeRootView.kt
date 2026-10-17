@@ -38,11 +38,13 @@ class ImeRootView(
         if (theme.palette.wallpaper) java.io.File(context.filesDir, com.viettelex.keyboard.Keys.WALLPAPER_FILE) else null
     private var wallpaper: android.graphics.Bitmap? = null
     private val wallMatrix = android.graphics.Matrix()
-    // Độ trong suốt phím: alpha paint của bitmap + lớp phủ (không layer offscreen).
+    // Ảnh nền luôn đục, lớp phủ theo độ tối — độ trong suốt phím chỉ đụng phím
+    // (ThemePalette.wallpaperLayer; trước đây 100% làm mất ảnh nền).
+    private val wallLayer = theme.palette.wallpaperLayer(theme.settings.dim)
     private val wallPaint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG).apply {
-        alpha = (theme.palette.surfaceAlpha * 255).toInt()
+        alpha = (wallLayer.imageAlpha * 255).toInt()
     }
-    private val dimColor = theme.withAlpha(theme.palette.wallpaperOverlay, theme.settings.dim / 100f * theme.palette.surfaceAlpha)
+    private val dimColor = wallLayer.overlay
 
     /** Nền theme (màu / gradient kính) — nền view khi dính đáy, vẽ tay trong khung khi thả nổi. */
     private val bgDrawable: android.graphics.drawable.Drawable = theme.palette.bgBottom.let { bottom ->

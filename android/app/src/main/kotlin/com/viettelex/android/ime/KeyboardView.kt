@@ -14,6 +14,7 @@ import com.viettelex.android.R
 import com.viettelex.keyboard.CommaPopup
 import com.viettelex.keyboard.SpaceSideKey
 import com.viettelex.keyboard.KeyLabelSize
+import com.viettelex.keyboard.KeyLabelFitter
 import com.viettelex.keyboard.DomainPopup
 import com.viettelex.keyboard.EmojiKeyAction
 import com.viettelex.keyboard.EmojiKeyMenu
@@ -285,10 +286,22 @@ class KeyboardView(
     private var sideOff = theme.centerOffset(sidePaint)
     private val hintPaint = theme.text(HINT_SP, medium = true)
     private var hintOff = theme.centerOffset(hintPaint)
+    /** Tuỳ chỉnh nâng cao (Plus): phông/độ đậm nhãn phím — đặt MỘT lần ở đây (null = như cũ). */
+    private val styledLabels = theme.keyStyle.customizesLabels
+    init {
+        theme.keyTypeface?.let { tf ->
+            for (p in arrayOf(letterPaint, controlPaint, digitPaint, sidePaint, hintPaint)) p.typeface = tf
+            letterOff = theme.centerOffset(letterPaint); controlOff = theme.centerOffset(controlPaint)
+            digitOff = theme.centerOffset(digitPaint); sideOff = theme.centerOffset(sidePaint)
+            hintOff = theme.centerOffset(hintPaint)
+        }
+    }
     /** Hệ số icon trên phím (⇧ ⌫ 😊 🌐 ↵ …) theo "Cỡ chữ trên phím". */
     private var iconScale = 1f
     private val largeHintDrop = theme.dp(2f)
     private var labelSize = KeyLabelSize.DEFAULT
+    /** Thanh "Cỡ chữ trên phím" (Plus) đã áp cho paint (một lần mỗi view). */
+    private var labelStyleApplied = false
     /** Cỡ chữ cái đã kẹp theo bề ngang phím chữ hẹp nhất (px) — chỉ tính lại khi đổi. */
     private var fittedKeyW = -1f
     private val hintLift = theme.dp(6f)
@@ -581,7 +594,9 @@ class KeyboardView(
         this.numberRow = numberRow
         this.spaceSideKey = spaceSideKey
         this.emojiInStrip = emojiInStrip
-        if (labelSize != this.labelSize) { this.labelSize = labelSize; applyLabelSize() }
+        if (labelSize != this.labelSize || (theme.keyStyle.fontScale != null && !labelStyleApplied)) {
+            this.labelSize = labelSize; labelStyleApplied = true; applyLabelSize()
+        }
         this.numberRowFull = numberRowFull
         this.numberSigned = numberSigned
         this.numberDecimal = numberDecimal
@@ -845,7 +860,9 @@ class KeyboardView(
         }
         if (trackpad) face = theme.keyFill
         facePaint.color = face
-        val r = if (k.kind == KeyKind.RETURN) minOf(k.width, k.height) / 2 else radius
+        // Bo góc tuỳ chỉnh (Plus) áp mọi phím kể cả enter; mặc định enter là viên thuốc như cũ.
+        val r = if (k.kind == KeyKind.RETURN && theme.keyStyle.corner == null) minOf(k.width, k.height) / 2
+            else theme.keyRadius(k.width, k.height, radius)
         c.drawRoundRect(k.left, k.top, k.right, k.bottom, r, r, facePaint)
         borderPaint?.let { bp ->
             val h = bp.strokeWidth / 2
@@ -859,7 +876,7 @@ class KeyboardView(
             KeyKind.LETTER -> {
                 val alt = if (alts.isNotEmpty()) alts[k.label[0]] else null
                 // Chữ Lớn + ký tự phụ góc trên ⇒ hạ chữ chính một chút để không chạm ký tự phụ.
-                val ly = if (alt != null && labelSize != KeyLabelSize.MEDIUM) cy + largeHintDrop else cy
+                val ly = if (alt != null && (labelSize != KeyLabelSize.MEDIUM || theme.keyStyle.letterScale > 1f)) cy + largeHintDrop else cy
                 drawLabel(c, if (shift == Shift.OFF) k.label else k.upper, cx, ly, letterPaint, letterOff, contentAlpha)
                 // Ký tự phụ nhỏ, mờ ở góc trên-phải như Gboard.
                 alt?.let {
@@ -1059,16 +1076,20 @@ class KeyboardView(
 
     /** "Cỡ chữ trên phím": đặt lại cỡ mọi paint nhãn phím (lúc cấu hình — 0 chi phí mỗi phím). */
     private fun applyLabelSize() {
-        val s = labelSize
-        controlPaint.textSize = theme.sp(CONTROL_SP * s.controlScale)
-        digitPaint.textSize = theme.sp(DIGIT_SP * s.controlScale)
-        sidePaint.textSize = theme.sp(SIDE_SP * s.controlScale)
-        hintPaint.textSize = theme.sp(HINT_SP * s.hintScale)
+        // Plus đặt thanh "Cỡ chữ trên phím" ⇒ thắng Vừa/Lớn ([KeyStyle.fontScale]).
+        val st = theme.keyStyle
+        val slider = st.fontScale != null
+        val controlScale = if (slider) st.controlScale else labelSize.controlScale
+        val hintScale = if (slider) st.hintScale else labelSize.hintScale
+        controlPaint.textSize = theme.sp(CONTROL_SP * controlScale)
+        digitPaint.textSize = theme.sp(DIGIT_SP * controlScale)
+        sidePaint.textSize = theme.sp(SIDE_SP * controlScale)
+        hintPaint.textSize = theme.sp(HINT_SP * hintScale)
         controlOff = theme.centerOffset(controlPaint)
         digitOff = theme.centerOffset(digitPaint)
         sideOff = theme.centerOffset(sidePaint)
         hintOff = theme.centerOffset(hintPaint)
-        iconScale = s.controlScale
+        iconScale = controlScale
         fittedKeyW = -1f
         fitLetterLabels()
         invalidate()
@@ -1080,16 +1101,45 @@ class KeyboardView(
      */
     private fun fitLetterLabels() {
         var kw = Float.MAX_VALUE
-        for (k in keys) if ((k.kind == KeyKind.LETTER || k.kind == KeyKind.CHAR) && k.width < kw) kw = k.width
-        if (kw == Float.MAX_VALUE) kw = 0f
-        if (kw == fittedKeyW) return
-        fittedKeyW = kw
-        val want = theme.sp(LETTER_SP * labelSize.letterScale)
+        var kh = Float.MAX_VALUE
+        for (k in keys) if (k.kind == KeyKind.LETTER || k.kind == KeyKind.CHAR) {
+            if (k.width < kw) kw = k.width
+            if (k.height < kh) kh = k.height
+        }
+        if (kw == Float.MAX_VALUE) { kw = 0f; kh = 0f }
+        if (kw == fittedKeyW && kh == fittedKeyH) return
+        fittedKeyW = kw; fittedKeyH = kh
+        val st = theme.keyStyle
+        val want = theme.sp(LETTER_SP * if (st.fontScale != null) st.letterScale else labelSize.letterScale)
         letterPaint.textSize = want
-        if (kw > 0f && labelSize != KeyLabelSize.MEDIUM) {
+        if (kw > 0f && styledLabels) {
+            // Tuỳ chỉnh nâng cao: kẹp theo chữ rộng nhất + mực dấu mũ/móc và phần dưới dòng (lúc
+            // dựng layout — KeyLabelFitter, test JVM).
+            letterPaint.textSize = fitStyled(letterPaint, want, KeyLabelFitter.KEY_SAMPLE, kw, kh)
+        } else if (kw > 0f && labelSize != KeyLabelSize.MEDIUM) {
             letterPaint.textSize = KeyLabelFit.fit(want, theme.sp(LETTER_SP), letterPaint.measureText("W"), kw, theme.dp(KeyLabelFit.PAD_DP))
         }
         letterOff = theme.centerOffset(letterPaint)
+    }
+    private var fittedKeyH = -1f
+
+    /** Đo [sample] bằng [p] ở cỡ [want] rồi kẹp vừa phím [kw]×[kh] (chữ căn giữa hộp dòng). */
+    private fun fitStyled(p: Paint, want: Float, sample: String, kw: Float, kh: Float): Float {
+        p.textSize = want
+        var w = 0f
+        var above = 0f; var below = 0f
+        val b = android.graphics.Rect()
+        for (i in sample.indices) {
+            val g = sample.substring(i, i + 1)
+            w = maxOf(w, p.measureText(g))
+            p.getTextBounds(g, 0, 1, b)
+            above = maxOf(above, -b.top.toFloat()); below = maxOf(below, b.bottom.toFloat())
+        }
+        val fm = p.fontMetrics
+        val f = KeyLabelFitter
+        val byWidth = f.size(want, w / want, above / want, below / want, kw, kh, theme.dp(f.SIDE_PAD_DP), theme.dp(f.V_PAD_DP))
+        return minOf(byWidth, f.centeredSize(want, -fm.ascent / want, fm.descent / want, above / want, below / want,
+            kh - 2 * theme.dp(f.V_PAD_DP)))
     }
 
     // MARK: touch

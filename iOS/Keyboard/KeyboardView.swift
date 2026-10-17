@@ -51,14 +51,43 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     }()
     static var hasCompactFont: Bool { compactDescriptor != nil }
     static func keyFont(_ size: CGFloat) -> UIFont {
-        compactDescriptor.map { UIFont(descriptor: $0, size: size) } ?? .systemFont(ofSize: size)
+        let lf = labelFonts
+        // Tuỳ chỉnh nâng cao (Plus): phông/độ đậm/cỡ — UIFont cache theo cỡ (KeyLabelFonts).
+        if lf.active { return lf.font(size: size * lf.scale) }
+        return compactDescriptor.map { UIFont(descriptor: $0, size: size) } ?? .systemFont(ofSize: size)
+    }
+    /// "Tuỳ chỉnh nâng cao" đang áp (sau cổng Plus) — đặt lại mỗi lần hiện (applyAppearance),
+    /// TRƯỚC khi dựng phím. Mặc định = như cũ (không đo, không kẹp, bo 8).
+    nonisolated(unsafe) static var labelFonts = KeyLabelFonts(style: .default, compact: compactDescriptor)
+    /// Bo góc phím tuỳ chỉnh (% nửa cạnh ngắn, KeyStyle.corner); nil = keyRadius.
+    nonisolated(unsafe) static var cornerPercent: Int?
+    private var keyStyle = KeyStyle()
+    private func applyKeyStyle(_ style: KeyStyle) {
+        keyStyle = style
+        if Self.labelFonts.font != style.font || Self.labelFonts.weight != style.weight
+            || Self.labelFonts.scale != style.labelScale || Self.labelFonts.active != style.customizesLabels {
+            Self.labelFonts = KeyLabelFonts(style: style, compact: Self.compactDescriptor)
+        }
+        Self.cornerPercent = style.corner
+        if balloonMade { balloon.invalidateStyle() }   // ô phóng to lấy phông mới lần hiện kế
+    }
+    /// Phông ô phóng to / popup ký tự phụ: cùng phông + độ đậm với phím (KHÔNG nhân cỡ), kẹp để
+    /// dấu chồng (Ễ, Ỗ) không bị UILabel cắt. Mặc định ⇒ y như cũ.
+    static func popupFont(_ size: CGFloat, height: CGFloat) -> UIFont {
+        let lf = labelFonts
+        guard lf.active else { return .systemFont(ofSize: size) }
+        let fitted = KeyLabelFit.centeredSize(want: size, em: lf.em(KeyLabelEm.stackedSample), height: height)
+        return lf.font(size: fitted.rounded(.down))
     }
     /// Nhãn chữ phím iPhone: cỡ theo hoa/thường + canh baseline stock. iPad: cỡ/baseline
     /// theo hướng máy do KeyButton.padRole lo (KeyGeometry.Typography.Pad).
     private func applyKeycapFont(_ b: KeyButton, title: String) {
         guard !Self.isPad else { return }
         let size = KeyGeometry.Typography.size(for: title, compact: Self.hasCompactFont)
-        if b.titleLabel?.font.pointSize != size { b.titleLabel?.font = Self.keyFont(size) }
+        if b.requestedFontSize != size || !Self.labelFonts.active && b.titleLabel?.font.pointSize != size {
+            b.titleLabel?.font = Self.keyFont(size)
+            b.requestedFontSize = size
+        }
         b.baselineAligned = true
     }
     /// Nhãn chữ phím chức năng iPhone (123/ABC/#+=): SF Compact cỡ stock, cùng baseline.
@@ -1641,11 +1670,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             v.layer.cornerCurve = .circular   // khớp khung hệ thống (đo pixel, KeyLayout)
         }
         wallpaperView.isHidden = !wallpaperActive
-        // Độ trong suốt phím: alpha của một UIImageView lá (không sublayer) → không offscreen.
-        wallpaperView.alpha = CGFloat(palette.surfaceAlpha)
+        // Ảnh nền luôn đục — độ trong suốt phím chỉ đụng phím (KeyboardPalette.wallpaperLayer).
+        let wl = palette.wallpaperLayer(dim: themeSettings.dim)
+        wallpaperView.alpha = CGFloat(wl.imageAlpha)
         wallpaperDim.isHidden = !wallpaperActive
-        wallpaperDim.backgroundColor = palette.wallpaperOverlay
-            .alpha(Double(themeSettings.dim) / 100 * palette.surfaceAlpha).ui
+        wallpaperDim.backgroundColor = wl.overlay.ui
         if !wallpaperActive {
             wallpaperView.image = nil          // nhả bitmap ngay khi tắt ảnh nền
             wallpaperLoadedFor = .zero
@@ -1670,6 +1699,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     var debugBackdrop: (frames: [CGRect], radius: CGFloat) {
         ([themeBackdrop.frame, wallpaperView.frame, wallpaperDim.frame], themeBackdrop.layer.cornerRadius)
     }
+    /// Test: alpha ảnh nền + màu lớp phủ (độ trong suốt phím không được làm mất ảnh nền).
+    var debugWallpaperLayer: (alpha: CGFloat, overlay: UIColor?) { (wallpaperView.alpha, wallpaperDim.backgroundColor) }
     #endif
 
     /// Giải ảnh nền ở đúng cỡ view, ngoài main thread (ImageIO thumbnail).
@@ -1692,6 +1723,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     func applyAppearance(_ appearance: UIKeyboardAppearance, style: UIUserInterfaceStyle) {
         systemDark = AppearancePolicy.isDark(appearance: appearance, style: style)
         themeSettings = ThemeSettings.load(UserDefaultsProvider.shared)
+        applyKeyStyle(themeSettings.effectiveKeyStyle)
         resolvePalette()
         // Chiều cao hàng phím ±10pt (Settings → Giao diện) — đọc mỗi lần hiện. Bản cũ (có công
         // tắc "Kích thước như bàn phím iPhone") chưa được app chuyển đổi ⇒ tính trong bộ nhớ,
@@ -1847,6 +1879,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if railButtons.isEmpty {
             for (i, symbol) in ["arrow.left.arrow.right", "arrow.up.left.and.arrow.down.right"].enumerated() {
                 let b = baseButton(title: "", special: true)
+                b.styledKey = false        // nút tròn của rail, không phải phím
                 b.setImage(UIImage(systemName: symbol,
                     withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)), for: .normal)
                 b.accessibilityLabel = i == 0 ? L("Đổi bên bàn phím một tay") : L("Thoát chế độ một tay")
@@ -1901,6 +1934,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         return GeomSig(gap: s.gap, keyGap: s.keyGap, sideMargin: s.sideMargin)
     }
     private var builtGeom: GeomSig?
+    private var builtKeyStyle = KeyStyle()
 
     // Cache view theo plane: bấm 123/#+=/ABC chỉ tráo arrangedSubviews thay vì
     // xé/dựng lại ~40 button + constraints mỗi lần. Emoji KHÔNG cache (recents
@@ -1952,6 +1986,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             || builtSplit != split
             || builtKeypad != keypadStyle
             || builtGeom != geomSig
+            || builtKeyStyle != keyStyle
         let widthChanged = builtWidth != bounds.width
         let sigChanged = styleChanged || widthChanged
         if builtPlane == plane, !sigChanged { return }
@@ -1986,6 +2021,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         if builtPlane == .emoji || builtPlane == .emojiSearch, plane != builtPlane { EmojiData.dropCaches() }
         builtPlane = plane; builtReturn = returnTitle
         builtDark = dark; builtPalette = palette; builtWidth = bounds.width
+        builtKeyStyle = keyStyle
         builtGlobe = needsGlobe; builtKind = inputKind
         builtNumberRow = numberRowEnabled
         builtNumberRowFull = numberRowFullHeight
@@ -3338,6 +3374,15 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                 dy = KeyGeometry.Typography.titleOffsetY(keyHeight: bounds.height,
                                                          ascender: f.ascender, descender: f.descender)
             }
+            let lf = KeyboardView.labelFonts
+            if styledKey, lf.active {
+                // Chữ to / phông khác: giữ baseline stock nếu mực còn trong phím, không thì dời.
+                let h = bounds.height
+                let natural = h / 2 + (f.ascender + f.descender) / 2   // baseline khi căn giữa hộp dòng
+                let fitted = KeyLabelFit.baseline(preferred: natural + dy, size: f.pointSize,
+                                                  em: lf.em(KeyLabelEm.keySample), keyHeight: h)
+                return r.offsetBy(dx: 0, dy: (bounds.midY - r.midY) + fitted - natural)
+            }
             return r.offsetBy(dx: 0, dy: (bounds.midY - r.midY) + dy)
         }
 
@@ -3381,7 +3426,31 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
 
         override func layoutSubviews() {
             applyPadTypographyIfNeeded()
+            applyKeyStyleIfNeeded()
             super.layoutSubviews()
+        }
+        /// Phím (baseButton) — nhận bo góc / kẹp chữ của Tuỳ chỉnh nâng cao. Slot gợi ý, nút rail: false.
+        var styledKey = false
+        /// Cỡ applyKeycapFont đã xin (chưa nhân hệ số / chưa kẹp).
+        var requestedFontSize: CGFloat = 0
+        /// Tuỳ chỉnh nâng cao lúc LAYOUT (không mỗi lần gõ): bo góc theo cỡ phím; chữ to /
+        /// phông rộng ⇒ thu nhỏ vừa phím (chữ rộng nhất + dấu mũ/móc, phần dưới dòng).
+        private func applyKeyStyleIfNeeded() {
+            guard styledKey, bounds.width > 0, bounds.height > 0 else { return }
+            if let pct = KeyboardView.cornerPercent {
+                let r = KeyStyle.cornerRadius(percent: pct, size: bounds.size, fallback: KeyboardView.keyRadius)
+                if layer.cornerRadius != r { layer.cornerRadius = r }
+            }
+            let lf = KeyboardView.labelFonts
+            guard lf.active, let f = titleLabel?.font, let t = currentTitle, !t.isEmpty else { return }
+            let em = lf.em(KeyLabelEm.keySample)
+            var fitted = KeyLabelFit.size(want: f.pointSize, em: em, keyWidth: bounds.width, keyHeight: bounds.height)
+            if t.count > 1 {   // nhãn nhiều ký tự (123, return…): đo thật bề ngang
+                let w = (t as NSString).size(withAttributes: [.font: f]).width
+                let room = bounds.width - 2 * KeyLabelFit.sidePad
+                if w > room, w > 0 { fitted = min(fitted, f.pointSize * room / w) }
+            }
+            if fitted < f.pointSize - 0.25 { titleLabel?.font = lf.font(size: fitted.rounded(.down)) }
         }
         /// Icon SF Symbol cỡ stock iPad (kể cả ảnh đặt lại sau: shift/caps đổi trạng thái).
         private func applyPadSymbolSize(_ m: KeyGeometry.Typography.Pad.Metrics) {
@@ -3530,6 +3599,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         b.titleLabel?.font = .systemFont(ofSize: special ? 16 : 23)
         if !special { applyKeycapFont(b, title: title) }
         b.layer.cornerRadius = Self.keyRadius
+        b.styledKey = true
         if let border = palette.keyBorder {
             b.layer.borderWidth = 1
             b.layer.borderColor = border.ui.cgColor
@@ -3671,6 +3741,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             addSubview(label)
         }
         required init?(coder: NSCoder) { fatalError() }
+        /// Phông nhãn đổi (Tuỳ chỉnh nâng cao) ⇒ lần hiện kế dựng lại path + phông.
+        func invalidateStyle() { pathKey = "" }
 
         /// keyRect trong toạ độ superview. Path cache theo hình dạng — gõ cùng
         /// một hàng phím thì không dựng lại path (không alloc trên hot path).
@@ -3715,7 +3787,8 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                 label.frame = CGRect(x: 0, y: 0, width: bubbleW, height: bubbleH)
                 // Bubble thấp (ít headroom): co chữ cho vừa — không để glyph bị cắt nửa.
                 let size = min(34, (bubbleH * 0.9).rounded())
-                if label.font.pointSize != size { label.font = .systemFont(ofSize: size) }
+                let f = KeyboardView.popupFont(size, height: bubbleH)
+                if label.font != f { label.font = f }
             }
             shape.fillColor = fill.cgColor
             label.textColor = ink
@@ -4901,7 +4974,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
                 slots.append(r)
                 lb.isHidden = false
                 lb.text = choices[i]
-                lb.font = .systemFont(ofSize: fontSize)
+                lb.font = KeyboardView.popupFont(fontSize, height: r.height)
                 lb.frame = r
             }
             isHidden = false
@@ -5751,6 +5824,10 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
     var debugRequestedHeight: CGFloat { heightConstraint?.constant ?? 0 }
     var debugRowsTop: CGFloat { rowsTopConstraint?.constant ?? 0 }
     func debugEnterEmojiSearch() { plane = .emojiSearch; rebuild() }
+    /// Test hook: phông + bán kính bo của phím chữ `s` (sau layout).
+    func debugLetterStyle(_ s: String) -> (font: UIFont?, radius: CGFloat, size: CGSize)? {
+        letterKeys.first { $0.base == s }.map { ($0.button.titleLabel?.font, $0.button.layer.cornerRadius, $0.button.bounds.size) }
+    }
     /// Test hook: frame phím chữ (toạ độ self).
     func debugLetterFrame(_ s: String) -> CGRect? {
         letterKeys.first { $0.base == s }.map { convert($0.button.bounds, from: $0.button) }

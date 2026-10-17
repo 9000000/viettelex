@@ -1,0 +1,195 @@
+package com.viettelex.android.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.viettelex.keyboard.KeyLabelFont
+import com.viettelex.keyboard.KeyLabelWeight
+import com.viettelex.keyboard.KeyStyle
+import com.viettelex.keyboard.ThemeGate
+import com.viettelex.keyboard.ThemePalette
+import com.viettelex.keyboard.tr
+
+/** Bo mặc định (7dp trên phím ~44dp) ≈ 30% nửa cạnh ngắn — vị trí thanh trượt khi chưa chỉnh. */
+private const val DEFAULT_CORNER_PERCENT = 30
+
+/**
+ * "Tuỳ chỉnh nâng cao" (Plus) ở trang Giao diện — thu gọn mặc định. Chưa có Plus: chạm mở màn
+ * VietTelex Plus ([onOpenPlus]); giá trị đã lưu chỉ áp khi có Plus ([com.viettelex.keyboard.ThemeSettings.effectiveKeyStyle]).
+ * [palette] = palette đang xem trước (màu "theo theme" hiện ở ô màu).
+ */
+@Composable
+internal fun AdvancedStyleSection(style: KeyStyle, palette: ThemePalette, onChange: (KeyStyle) -> Unit, onOpenPlus: () -> Unit) {
+    val c = LocalVT.current
+    val allowed = ThemeGate.allowsAdvanced
+    var open by rememberSaveable { mutableStateOf(false) }
+    VTSection(footer = tr("Màu chữ và màu nền phím, độ bo góc, cỡ chữ, phông và độ đậm. Mỗi màu dùng chung cho giao diện sáng lẫn tối; “Theo theme” trả về màu của theme.")) {
+        VTRow(onClick = { if (allowed) open = !open else onOpenPlus() }) {
+            Text(tr("Tuỳ chỉnh nâng cao"), style = VTType.body, color = c.label)
+            Text("Plus", style = VTType.footnote, color = Color.White,
+                modifier = Modifier.padding(start = 8.dp).background(Color(0xFFF5A623), RoundedCornerShape(50))
+                    .padding(horizontal = 6.dp, vertical = 1.dp))
+            Box(Modifier.weight(1f))
+            Text(if (!allowed) "›" else if (open) "▾" else "▸", style = VTType.body, color = c.secondary)
+        }
+        if (!allowed || !open) return@VTSection
+        RowDivider()
+        ColorRow(tr("Màu chữ trên phím"), style.labelColor, palette.keyInk) { onChange(style.copy(labelColor = it)) }
+        RowDivider()
+        ColorRow(tr("Màu nền phím"), style.fillColor, palette.keyFill) { onChange(style.copy(fillColor = it)) }
+        RowDivider()
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(style.corner?.let { tr("Độ bo góc phím: %s%%", it) } ?: tr("Độ bo góc phím: mặc định"),
+                    style = VTType.body, color = c.label, modifier = Modifier.weight(1f))
+                if (style.corner != null) TextButton(onClick = { onChange(style.copy(corner = null)) }) { Text(tr("Mặc định")) }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(14.dp).border(1.5.dp, c.secondary))
+                Slider(value = (style.corner ?: DEFAULT_CORNER_PERCENT).toFloat(), valueRange = 0f..100f, steps = 19,
+                    onValueChange = { onChange(style.copy(corner = Math.round(it / 5) * 5)) },
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
+                Box(Modifier.size(14.dp).border(1.5.dp, c.secondary, CircleShape))
+            }
+        }
+        RowDivider()
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("Cỡ chữ trên phím: %s%%", style.fontScale ?: 100), style = VTType.body, color = c.label,
+                    modifier = Modifier.weight(1f))
+                if (style.fontScale != null) TextButton(onClick = { onChange(style.copy(fontScale = null)) }) { Text(tr("Mặc định")) }
+            }
+            Slider(value = (style.fontScale ?: 100).toFloat(),
+                valueRange = KeyStyle.FONT_SCALE_MIN.toFloat()..KeyStyle.FONT_SCALE_MAX.toFloat(),
+                steps = (KeyStyle.FONT_SCALE_MAX - KeyStyle.FONT_SCALE_MIN) / 5 - 1,
+                onValueChange = { onChange(style.copy(fontScale = KeyStyle.parseFontScale(Math.round(it / 5) * 5))) })
+            Text(tr("Phím hẹp tự thu nhỏ chữ cho vừa, dấu không bị cắt. Khi đã đặt, thanh này thay cho “Cỡ chữ trên phím” Vừa/Lớn ở trang Phím."),
+                style = VTType.footnote, color = c.secondary)
+        }
+        RowDivider()
+        OptionChips(tr("Phông chữ"), KeyLabelFont.entries.filter { it.onAndroid }, if (style.font.onAndroid) style.font else KeyLabelFont.DEFAULT,
+            { it.title }, { f -> when (f) {
+                KeyLabelFont.SERIF -> FontFamily.Serif
+                KeyLabelFont.MONO -> FontFamily.Monospace
+                KeyLabelFont.CONDENSED -> FontFamily(android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.NORMAL))
+                else -> FontFamily.Default
+            } }) { onChange(style.copy(font = it)) }
+        RowDivider()
+        OptionChips(tr("Độ đậm"), KeyLabelWeight.entries, style.weight, { it.title }, { null },
+            weight = { FontWeight(it.weight) }) { onChange(style.copy(weight = it)) }
+        RowDivider()
+        VTRow(onClick = if (style.isDefault) null else { { onChange(KeyStyle.DEFAULT) } }) {
+            Text(tr("Đặt lại tuỳ chỉnh nâng cao"), style = VTType.body, color = if (style.isDefault) c.secondary else c.red)
+        }
+    }
+}
+
+@Composable
+private fun <T> OptionChips(title: String, options: List<T>, selected: T, label: (T) -> String,
+                            family: (T) -> FontFamily?, weight: (T) -> FontWeight? = { null }, onPick: (T) -> Unit) {
+    val c = LocalVT.current
+    VTRow { Text(title, style = VTType.body, color = c.label) }
+    // Hai hàng khi nhiều lựa chọn (5 ô độ đậm vừa một hàng điện thoại hẹp nếu chữ nhỏ).
+    options.chunked(if (options.size > 4) 3 else options.size).forEach { row ->
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (o in row) {
+                val on = o == selected
+                Box(Modifier.weight(1f)
+                    .background(if (on) c.accent else c.secondary.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                    .clickable { onPick(o) }
+                    .padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                    Text(label(o), style = VTType.subheadline, maxLines = 1, fontFamily = family(o), fontWeight = weight(o),
+                        color = if (on) Color.White else c.label)
+                }
+            }
+            repeat((if (options.size > 4) 3 else options.size) - row.size) { Box(Modifier.weight(1f)) }
+        }
+    }
+}
+
+/** Dòng màu: ô màu hiện tại (theo theme khi chưa chọn) — chạm mở bảng chọn; "Theo theme" về mặc định. */
+@Composable
+private fun ColorRow(title: String, value: Int?, themeColor: Int, onPick: (Int?) -> Unit) {
+    val c = LocalVT.current
+    var picking by remember { mutableStateOf(false) }
+    val shown = value?.let { 0xFF000000.toInt() or it } ?: (themeColor or 0xFF000000.toInt())
+    VTRow(onClick = { picking = true }) {
+        Text(title, style = VTType.body, color = c.label, modifier = Modifier.weight(1f))
+        if (value != null) TextButton(onClick = { onPick(null) }) { Text(tr("Theo theme")) }
+        Box(Modifier.size(28.dp).background(Color(shown), CircleShape).border(1.dp, c.separator, CircleShape))
+    }
+    if (picking) ColorPickerDialog(title, shown, onDismiss = { picking = false }) { picking = false; onPick(it and 0xFFFFFF) }
+}
+
+/** Bảng chọn màu nhẹ (không thư viện ngoài): dải màu gợi ý + 3 thanh Sắc độ / Độ bão hoà / Độ sáng (HSV). */
+@Composable
+private fun ColorPickerDialog(title: String, initial: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+    val c = LocalVT.current
+    val hsv0 = remember { FloatArray(3).also { android.graphics.Color.colorToHSV(initial, it) } }
+    var h by remember { mutableStateOf(hsv0[0]) }
+    var s by remember { mutableStateOf(hsv0[1]) }
+    var v by remember { mutableStateOf(hsv0[2]) }
+    fun color(hh: Float = h, ss: Float = s, vv: Float = v) = android.graphics.Color.HSVToColor(floatArrayOf(hh, ss, vv))
+    val presets = listOf(0x000000, 0xFFFFFF, 0x1C1C1E, 0x8E8E93, 0xFF3B30, 0xFF9500, 0xFFCC00, 0x34C759,
+        0x00C7BE, 0x007AFF, 0x5856D6, 0xAF52DE, 0xFF2D55, 0xA2845E, 0xFBE3E1, 0xD9F2E7)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.fillMaxWidth().height(40.dp).background(Color(color()), RoundedCornerShape(10.dp))
+                    .border(1.dp, c.separator, RoundedCornerShape(10.dp)))
+                presets.chunked(8).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (p in row) {
+                            Box(Modifier.weight(1f).height(26.dp).background(Color(0xFF000000.toInt() or p), CircleShape)
+                                .border(1.dp, c.separator, CircleShape)
+                                .clickable {
+                                    val a = FloatArray(3); android.graphics.Color.colorToHSV(0xFF000000.toInt() or p, a)
+                                    h = a[0]; s = a[1]; v = a[2]
+                                })
+                        }
+                    }
+                }
+                Text(tr("Sắc độ"), style = VTType.footnote, color = c.secondary)
+                Box(Modifier.fillMaxWidth().height(8.dp).background(
+                    Brush.horizontalGradient((0..6).map { Color(color(hh = it * 60f, ss = 1f, vv = 1f)) }), RoundedCornerShape(4.dp)))
+                Slider(value = h, valueRange = 0f..360f, onValueChange = { h = it })
+                Text(tr("Độ bão hoà"), style = VTType.footnote, color = c.secondary)
+                Slider(value = s, valueRange = 0f..1f, onValueChange = { s = it })
+                Text(tr("Độ sáng"), style = VTType.footnote, color = c.secondary)
+                Slider(value = v, valueRange = 0f..1f, onValueChange = { v = it })
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(color()) }) { Text(tr("Chọn")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Huỷ")) } },
+    )
+}

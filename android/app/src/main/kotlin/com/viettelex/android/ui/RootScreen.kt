@@ -58,7 +58,14 @@ fun RootScreen(
     var showPlus by rememberSaveable { mutableStateOf(false) }
     /** Màn Plus vừa chạm một quyền lợi ⇒ tab Tính Năng mở trang đó. */
     var featureRequest by remember { mutableStateOf<FeaturePage?>(null) }
-    BackHandler(showPlus) { showPlus = false }
+    /** Mở màn Plus từ một trang Tính Năng (Giao diện → Tuỳ chỉnh nâng cao) ⇒ ◁ quay về đúng trang đó. */
+    var plusReturn by remember { mutableStateOf<FeaturePage?>(null) }
+    fun closePlus() {
+        showPlus = false
+        plusReturn?.let { featureRequest = it; tab = AppTab.TinhNang }
+        plusReturn = null
+    }
+    BackHandler(showPlus) { closePlus() }
     var templatesEnabled by rememberBoolPref(Keys.TEMPLATES_ENABLED, Prefs.D.templatesEnabled)
     val tabs = if (templatesEnabled) AppTab.entries else AppTab.entries.filter { it != AppTab.MauCau }
 
@@ -102,11 +109,13 @@ fun RootScreen(
         ) {
             Text(title, style = VTType.largeTitle, color = c.label,
                 modifier = Modifier.padding(start = 20.dp, top = 8.dp, bottom = 10.dp))
-            if (showPlus) PlusScreen(plus, onBack = { showPlus = false },
-                onOpenFeature = { p -> featureRequest = p; showPlus = false; tab = AppTab.TinhNang })
+            if (showPlus) PlusScreen(plus, onBack = { closePlus() },
+                onOpenFeature = { p -> plusReturn = null; featureRequest = p; showPlus = false; tab = AppTab.TinhNang })
             else when (tab) {
                 AppTab.KieuGo -> KieuGoTab(ime, onOpenImeSettings, onPickIme)
-                AppTab.TinhNang -> TinhNangTab(featureRequest) { featureRequest = null }
+                AppTab.TinhNang -> TinhNangTab(featureRequest, { featureRequest = null }) {
+                    plusReturn = FeaturePage.GiaoDien; showPlus = true
+                }
                 AppTab.MauCau -> MauCauTab()
                 AppTab.GioiThieu -> GioiThieuTab(plus) { showPlus = true }
             }
@@ -127,7 +136,7 @@ fun RootScreen(
 
         if (!keyboardShown) {
             Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp)) {
-                FloatingTabBar(tab, tabs, barCollapsed) { tab = it; showPlus = false }
+                FloatingTabBar(tab, tabs, barCollapsed) { tab = it; showPlus = false; plusReturn = null }
             }
         }
     }

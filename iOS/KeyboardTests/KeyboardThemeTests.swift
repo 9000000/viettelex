@@ -2,6 +2,7 @@ import XCTest
 import UIKit
 import ImageIO
 import UniformTypeIdentifiers
+import CoreText
 
 /// Nền bàn phím trong suốt (lộ vật liệu bàn phím hệ thống, cùng màu dải 🌐/🎤) hay tự vẽ.
 final class KeyboardBackdropTests: XCTestCase {
@@ -546,5 +547,280 @@ final class KeyboardThemeTests: XCTestCase {
             }
         }
         return kr == KERN_SUCCESS ? Int64(info.phys_footprint) : 0
+    }
+}
+
+/// Ảnh nền + "Tuỳ chỉnh nâng cao" (Plus): độ trong suốt phím không làm mất ảnh nền, bo góc,
+/// kẹp cỡ chữ, phông/độ đậm không cắt dấu chồng, lưu/đọc, cổng Plus, sao lưu.
+final class KeyStyleTests: XCTestCase {
+    private var savedDefaults: UserDefaults!
+    private var savedPaywall = false
+    private var suite = ""
+
+    override func setUp() {
+        super.setUp()
+        savedDefaults = PlusGate.defaults
+        savedPaywall = PlusGate.paywallEnabled
+        PlusGate.paywallEnabled = false
+        suite = "keystyle-\(UUID().uuidString)"
+        PlusGate.defaults = UserDefaults(suiteName: suite)!
+    }
+
+    override func tearDown() {
+        PlusGate.defaults.removePersistentDomain(forName: suite)
+        PlusGate.defaults = savedDefaults
+        PlusGate.paywallEnabled = savedPaywall
+        KeyboardView.labelFonts = KeyLabelFonts(style: .default, compact: nil)
+        KeyboardView.cornerPercent = nil
+        super.tearDown()
+    }
+
+    private func lockPlus() {
+        PlusGate.paywallEnabled = true
+        PlusGate.setPurchased(false)
+        PlusGate.debugOverride = false
+    }
+
+    private static let custom = KeyStyle(labelColor: 0xFF2D55, fillColor: 0x102030, corner: 100,
+                                         fontScale: 150, font: .mono, weight: .heavy)
+
+    // MARK: bug — độ trong suốt phím 100% làm mất ảnh nền
+
+    func testKeyTransparency100KeepsWallpaper() {
+        for t in KeyboardTheme.allCases {
+            for dark in [false, true] {
+                for dim in [0, 30, 80] {
+                    let s = ThemeSettings(theme: t, wallpaper: true, dim: dim, keyboardTransparency: 100)
+                    let p = s.palette(systemDark: dark, wallpaperActive: true)
+                    let wl = p.wallpaperLayer(dim: dim)
+                    XCTAssertEqual(wl.imageAlpha, 1, "\(t) \(dark): ảnh nền phải còn nguyên")
+                    XCTAssertEqual(wl.overlay.a, Double(dim) / 100, accuracy: 1e-9, "lớp phủ theo độ tối, không theo độ trong suốt")
+                    XCTAssertEqual(p.keyFill.a, 0)          // phím thì trong suốt hẳn
+                    XCTAssertEqual(p.keyInk.a, 1)
+                }
+            }
+        }
+    }
+
+    /// Bàn phím thật: alpha UIImageView ảnh nền + lớp phủ không theo độ trong suốt phím.
+    @MainActor func testKeyboardViewWallpaperIgnoresKeyTransparency() {
+        let d = UserDefaultsProvider.shared
+        let keys = [KeyboardTransparency.keyboardKey, ThemeSettings.dimKey]
+        let saved = keys.map { d?.object(forKey: $0) }
+        defer { for (k, v) in zip(keys, saved) { d?.set(v, forKey: k) } }
+        d?.set(100, forKey: KeyboardTransparency.keyboardKey)
+        d?.set(40, forKey: ThemeSettings.dimKey)
+        let kb = KeyboardView(needsGlobe: false, inputController: nil) { _ in }
+        kb.frame = CGRect(x: 0, y: 0, width: 390, height: 300)
+        kb.applyAppearance(.light, style: .light)
+        XCTAssertEqual(kb.debugWallpaperLayer.alpha, 1)
+        var a: CGFloat = 0
+        kb.debugWallpaperLayer.overlay?.getRed(nil, green: nil, blue: nil, alpha: &a)
+        XCTAssertEqual(a, 0.4, accuracy: 0.01)
+    }
+
+    // MARK: bo góc
+
+    func testCornerRadiusMapping() {
+        let sq = CGSize(width: 30, height: 42), wide = CGSize(width: 200, height: 42)
+        XCTAssertEqual(KeyStyle.cornerRadius(percent: nil, size: sq, fallback: 8), 8)     // mặc định
+        XCTAssertEqual(KeyStyle.cornerRadius(percent: 0, size: sq, fallback: 8), 0)       // chữ nhật
+        XCTAssertEqual(KeyStyle.cornerRadius(percent: 100, size: sq, fallback: 8), 15)    // tròn trọn cạnh ngắn
+        XCTAssertEqual(KeyStyle.cornerRadius(percent: 100, size: wide, fallback: 8), 21)  // viên thuốc
+        XCTAssertEqual(KeyStyle.cornerRadius(percent: 50, size: wide, fallback: 8), 10.5)
+        XCTAssertEqual(KeyStyle.cornerRadius(percent: 400, size: sq, fallback: 8), 15)    // kẹp
+    }
+
+    // MARK: phông / cỡ chữ
+
+    private static func styles() -> [KeyStyle] {
+        KeyLabelFont.allCases.flatMap { f in
+            KeyLabelWeight.allCases.map { KeyStyle(fontScale: 150, font: f, weight: $0) }
+        }
+    }
+
+    func testFontSizeCapOnNarrowKeys() {
+        let keyW: CGFloat = 26, keyH: CGFloat = 40   // phím chữ hẹp (một tay / máy nhỏ)
+        for st in Self.styles() {
+            let lf = KeyLabelFonts(style: st, compact: nil)
+            let want = KeyGeometry.Typography.lowercaseSize * lf.scale
+            let em = lf.em(KeyLabelEm.keySample)
+            let size = KeyLabelFit.size(want: want, em: em, keyWidth: keyW, keyHeight: keyH)
+            XCTAssertLessThan(size, want, "\(st.font) \(st.weight): 150% phải bị kẹp trên phím hẹp")
+            let f = lf.font(size: size)
+            for g in ["W", "M", "Ư", "Đ"] {
+                let w = (g as NSString).size(withAttributes: [.font: f]).width
+                XCTAssertLessThanOrEqual(w, keyW - 2 * KeyLabelFit.sidePad + 0.5, "\(st.font) \(st.weight) \(g)")
+            }
+            let m = KeyLabelEm.measure(f, sample: KeyLabelEm.keySample)
+            XCTAssertLessThanOrEqual(m.inkHeight * size, keyH, "\(st.font) \(st.weight)")
+            let base = KeyLabelFit.baseline(preferred: 28 * keyH / 43, size: size, em: em, keyHeight: keyH)
+            XCTAssertGreaterThanOrEqual(base - em.ascent * size, 0)            // mực không vượt đỉnh phím
+            XCTAssertLessThanOrEqual(base + em.descent * size, keyH)           // không vượt đáy
+        }
+        // Phím rộng, cỡ vừa ⇒ không đụng tới.
+        let lf = KeyLabelFonts(style: KeyStyle(font: .serif), compact: nil)
+        XCTAssertEqual(KeyLabelFit.size(want: 24.5, em: lf.em(KeyLabelEm.keySample), keyWidth: 60, keyHeight: 60), 24.5)
+    }
+
+    /// Dấu chồng (Ễ, Ỗ…) và phần dưới dòng (ỵ) trong ô phóng to / popup không bị UILabel cắt,
+    /// ở MỌI phông + độ đậm.
+    func testStackedDiacriticsFitCenteredLabels() {
+        for st in Self.styles() {
+            let lf = KeyLabelFonts(style: st, compact: nil)
+            for h in [CGFloat(30), 38, 46] {
+                let size = KeyLabelFit.centeredSize(want: 34, em: lf.em(KeyLabelEm.stackedSample), height: h)
+                let f = lf.font(size: size.rounded(.down))
+                let s = f.pointSize
+                let lineH = f.ascender - f.descender
+                for g in ["Ễ", "Ỗ", "Ẫ", "Ữ", "ỵ", "Ỹ"] {
+                    let ink = CTLineGetBoundsWithOptions(
+                        CTLineCreateWithAttributedString(NSAttributedString(string: g, attributes: [.font: f])),
+                        .useGlyphPathBounds)
+                    let baseline = h / 2 - lineH / 2 + f.ascender      // UILabel căn giữa hộp dòng
+                    XCTAssertGreaterThanOrEqual(baseline - ink.maxY, -0.5, "\(st.font) \(st.weight) \(g) h\(h) s\(s)")
+                    XCTAssertLessThanOrEqual(baseline - ink.minY, h + 0.5, "\(st.font) \(st.weight) \(g) h\(h) s\(s)")
+                }
+            }
+        }
+    }
+
+    /// Bàn phím thật: chữ 150% phông đơn cách rất đậm trên máy hẹp — phím chữ vừa phím, bo tròn.
+    @MainActor func testKeyboardViewAppliesStyleAtLayout() {
+        let d = UserDefaultsProvider.shared
+        let keys = [KeyStyle.labelColorKey, KeyStyle.fillColorKey, KeyStyle.cornerKey, KeyStyle.fontScaleKey,
+                    KeyStyle.fontKey, KeyStyle.weightKey]
+        let saved = keys.map { d?.object(forKey: $0) }
+        defer { for (k, v) in zip(keys, saved) { d?.set(v, forKey: k) } }
+        Self.custom.save(d)
+        let kb = KeyboardView(needsGlobe: false, inputController: nil) { _ in }
+        let host = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 500))
+        host.addSubview(kb)
+        kb.frame = CGRect(x: 0, y: 0, width: 320, height: 300)
+        kb.applyAppearance(.light, style: .light)
+        kb.configureInputKind(.normal)
+        kb.setNeedsLayout(); kb.layoutIfNeeded()
+        let st = try? XCTUnwrap(kb.debugLetterStyle("w"))
+        guard let st, let f = st.font, st.size.width > 0 else { return XCTFail("không thấy phím w") }
+        XCTAssertEqual(st.radius, min(st.size.width, st.size.height) / 2, accuracy: 0.01)   // 100% = tròn
+        let w = ("W" as NSString).size(withAttributes: [.font: f]).width
+        XCTAssertLessThanOrEqual(w, st.size.width - 2 * KeyLabelFit.sidePad + 0.5)
+        XCTAssertTrue(f.fontDescriptor.symbolicTraits.contains(.traitMonoSpace) || f.fontName.lowercased().contains("mono"),
+                      f.fontName)
+        // Ô phóng to: dấu chồng nằm trọn trong khung chữ.
+        if let b = kb.debugBalloon(letter: "e", text: "Ễ") {
+            let lf = KeyboardView.labelFonts
+            let em = lf.em(KeyLabelEm.stackedSample)
+            XCTAssertLessThanOrEqual(b.fontSize, KeyLabelFit.centeredSize(want: 34, em: em, height: b.label.height) + 0.5)
+        }
+    }
+
+    // MARK: lưu / đọc / mặc định
+
+    func testSettingsParsingAndDefaults() {
+        let suite = "keystyle-rt-\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        defer { d.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(KeyStyle.load(d), KeyStyle())                 // trống ⇒ mặc định
+        XCTAssertTrue(KeyStyle().isDefault)
+        XCTAssertFalse(KeyStyle().customizesLabels)
+        Self.custom.save(d)
+        XCTAssertEqual(KeyStyle.load(d), Self.custom)
+        KeyStyle().save(d)                                            // giá trị canh ⇒ mặc định
+        XCTAssertEqual(d.integer(forKey: KeyStyle.labelColorKey), -1)
+        XCTAssertEqual(d.integer(forKey: KeyStyle.fontScaleKey), 0)
+        XCTAssertEqual(KeyStyle.load(d), KeyStyle())
+        // Rác / ngoài phạm vi.
+        d.set(0x1000000, forKey: KeyStyle.labelColorKey)
+        d.set(-7, forKey: KeyStyle.fillColorKey)
+        d.set(300, forKey: KeyStyle.cornerKey)
+        d.set(30, forKey: KeyStyle.fontScaleKey)
+        d.set("comic-sans", forKey: KeyStyle.fontKey)
+        d.set("ultra", forKey: KeyStyle.weightKey)
+        let g = KeyStyle.load(d)
+        XCTAssertNil(g.labelColor); XCTAssertNil(g.fillColor)
+        XCTAssertEqual(g.corner, 100); XCTAssertEqual(g.fontScale, 80)
+        XCTAssertEqual(g.font, .standard); XCTAssertEqual(g.weight, .regular)
+        d.set(999, forKey: KeyStyle.fontScaleKey)
+        XCTAssertEqual(KeyStyle.load(d).fontScale, 150)
+        // Thuộc ThemeSettings: lưu cùng, "Khôi phục giao diện gốc" xoá.
+        var s = ThemeSettings(theme: .mint)
+        s.keyStyle = Self.custom
+        s.save(d)
+        XCTAssertEqual(ThemeSettings.load(d).keyStyle, Self.custom)
+        XCTAssertFalse(s.isDefault)
+        XCTAssertEqual(s.resetToDefaults().keyStyle, KeyStyle())
+    }
+
+    // MARK: cổng Plus
+
+    func testPlusGatingStoredButInactiveRendersDefaults() {
+        var s = ThemeSettings(theme: .oled)
+        s.keyStyle = Self.custom
+        var plain = s; plain.keyStyle = KeyStyle()
+        lockPlus()
+        XCTAssertFalse(ThemeGate.allowsAdvanced)
+        XCTAssertEqual(s.effectiveKeyStyle, KeyStyle())
+        XCTAssertEqual(s.palette(systemDark: true, wallpaperActive: false),
+                       plain.palette(systemDark: true, wallpaperActive: false))
+        XCTAssertEqual(s.keyStyle, Self.custom)                        // giá trị lưu giữ nguyên
+        PlusGate.setPurchased(true)
+        XCTAssertTrue(ThemeGate.allowsAdvanced)
+        XCTAssertEqual(s.effectiveKeyStyle, Self.custom)
+        let p = s.palette(systemDark: true, wallpaperActive: false)
+        XCTAssertEqual(p.keyFill, RGBA(hex: 0x102030))
+        XCTAssertEqual(p.keyInk, RGBA(hex: 0xFF2D55))
+    }
+
+    // MARK: màu
+
+    func testCustomColors() {
+        // Chỉ đổi nền: chữ theme tự đổi đen/trắng cho đọc được.
+        for t in KeyboardTheme.allCases {
+            for dark in [false, true] {
+                for fill: UInt32 in [0x000000, 0xFFFFFF, 0xFFD60A, 0x203040] {
+                    var s = ThemeSettings(theme: t)
+                    s.keyStyle = KeyStyle(fillColor: fill)
+                    let p = s.palette(systemDark: dark, wallpaperActive: false)
+                    XCTAssertGreaterThanOrEqual(RGBA.contrast(p.keyInk, p.keyFill), KeyboardTransparency.minLabelContrast,
+                                                "\(t) \(dark) \(String(fill, radix: 16))")
+                    XCTAssertGreaterThanOrEqual(RGBA.contrast(p.ink, p.balloon), KeyboardTransparency.minLabelContrast)
+                }
+            }
+        }
+        // Chữ người dùng chọn: độ trong suốt phím 100% không lật sang đen/trắng.
+        var s = ThemeSettings(theme: .peach, keyboardTransparency: 100)
+        s.keyStyle = KeyStyle(labelColor: 0x3366FF)
+        XCTAssertEqual(s.palette(systemDark: true, wallpaperActive: false).keyInk, RGBA(hex: 0x3366FF))
+        // Không tuỳ chỉnh ⇒ palette y như cũ.
+        let base = KeyboardTheme.mint.palette(systemDark: false)
+        XCTAssertEqual(KeyStyle().applyColors(to: base), base)
+    }
+
+    // MARK: sao lưu
+
+    func testBackupIncludesKeyStyle() {
+        let specs = BackupSettings.byKey
+        XCTAssertEqual(specs[KeyStyle.labelColorKey]?.kind, .int(-1, -1...0xFFFFFF))
+        XCTAssertEqual(specs[KeyStyle.fillColorKey]?.kind, .int(-1, -1...0xFFFFFF))
+        XCTAssertEqual(specs[KeyStyle.cornerKey]?.kind, .int(-1, -1...100))
+        XCTAssertEqual(specs[KeyStyle.fontScaleKey]?.kind, .int(0, 0...150))
+        XCTAssertEqual(specs[KeyStyle.fontKey]?.kind, .string("default", ["default", "rounded", "serif", "mono", "condensed"]))
+        XCTAssertEqual(specs[KeyStyle.weightKey]?.kind, .string("regular", ["light", "regular", "medium", "bold", "heavy"]))
+
+        let a = "keystyle-bk-a-\(UUID().uuidString)", b = "keystyle-bk-b-\(UUID().uuidString)"
+        let da = UserDefaults(suiteName: a)!, db = UserDefaults(suiteName: b)!
+        defer { da.removePersistentDomain(forName: a); db.removePersistentDomain(forName: b) }
+        Self.custom.save(da)
+        let exported = BackupStore(defaults: da, containerURL: nil).settings()
+        XCTAssertEqual(exported[KeyStyle.fillColorKey], .int(0x102030))
+        XCTAssertEqual(exported[KeyStyle.fontKey], .string("mono"))
+        BackupStore(defaults: db, containerURL: nil).setSettings(exported)
+        XCTAssertEqual(KeyStyle.load(db), Self.custom)
+        // Máy chưa từng chỉnh: xuất giá trị canh = mặc định.
+        let fresh = BackupStore(defaults: UserDefaults(suiteName: "keystyle-empty-\(UUID().uuidString)")!,
+                                containerURL: nil).settings()
+        XCTAssertEqual(fresh[KeyStyle.labelColorKey], .int(-1))
+        XCTAssertEqual(fresh[KeyStyle.fontScaleKey], .int(0))
     }
 }

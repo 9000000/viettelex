@@ -130,6 +130,7 @@ struct FeatureSearchEntry: Identifiable {
             .init(viTitle: LK("Theme & ảnh nền"), keywords: "theme màu chủ đề wallpaper hình nền", page: .giaoDien),
             .init(viTitle: LK("Độ trong suốt phím"), keywords: "trong suốt transparent", page: .giaoDien),
             .init(viTitle: LK("Độ trong suốt ký tự"), keywords: "trong suốt transparent chữ", page: .giaoDien),
+            .init(viTitle: LK("Tuỳ chỉnh nâng cao"), keywords: "màu chữ màu phím color bo góc tròn vuông corner radius cỡ chữ size phông font độ đậm weight bold", page: .giaoDien),
             .init(viTitle: LK("Khôi phục giao diện gốc"), keywords: "reset mặc định", page: .giaoDien),
             .init(viTitle: LK("Chiều cao hàng phím"), keywords: "height cao thấp stock gốc apple cỡ phím size như bàn phím iphone", page: .giaoDien),
             .init(viTitle: LK("Nâng bàn phím"), keywords: "raise nâng cao đẩy lên khoảng trống dưới padding bottom", page: .giaoDien),

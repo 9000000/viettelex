@@ -65,13 +65,26 @@ data class ThemePalette(
     val keyLabel: Int? = null,
     /** Alpha chữ/icon trên phím (độ trong suốt ký tự) — IME nhân vào alpha lúc vẽ. */
     val labelAlpha: Float = 1f,
-    /** Hệ số alpha của ảnh nền + lớp phủ (1 = như cũ). */
+    /**
+     * Hệ số alpha bề mặt PHÍM theo độ trong suốt phím (1 = như cũ). KHÔNG áp cho ảnh nền —
+     * ảnh nền có độ tối/mờ riêng ([wallpaperLayer]).
+     */
     val surfaceAlpha: Float = 1f,
+    /** Chữ trên phím do người dùng chọn ([KeyStyle]) — độ trong suốt không đổi sang đen/trắng. */
+    val keyLabelPinned: Boolean = false,
 ) {
     val keyInk: Int get() = keyLabel ?: ink
 
     /** Lớp phủ ảnh nền: đen cho theme tối, trắng cho theme sáng. */
     val wallpaperOverlay: Int get() = if (isDark) ThemeColor.BLACK else ThemeColor.WHITE
+
+    /**
+     * Cách vẽ ảnh nền (mô hình vẽ thuần — IME + bản xem trước dùng chung): ảnh luôn ĐỤC, lớp phủ
+     * theo "Độ tối lớp phủ". Độ trong suốt phím KHÔNG làm mất ảnh nền (bug 100% trước đây: ảnh +
+     * lớp phủ nhân surfaceAlpha ⇒ 0 ⇒ ảnh biến mất).
+     */
+    fun wallpaperLayer(dim: Int): WallpaperLayer =
+        WallpaperLayer(1f, ThemeColor.withAlpha(wallpaperOverlay, dim.coerceIn(0, 80) / 100f))
 
     /**
      * Có ảnh nền: phím hơi trong để ảnh lộ ra. Độ trong chọn sao cho chữ ≥ 4.5:1 (AA)
@@ -92,10 +105,14 @@ data class ThemePalette(
     companion object { const val WALLPAPER_KEY_ALPHA = 0.8f }
 }
 
+/** Ảnh nền: alpha bitmap + màu lớp phủ (ARGB). */
+data class WallpaperLayer(val imageAlpha: Float, val overlay: Int)
+
 /**
  * Độ trong suốt (Cài đặt → Giao diện), hai thanh độc lập 0…100% — y hệt iOS
  * (KeyboardTransparency trong iOS/Keyboard/KeyboardTheme.swift):
- * - phím: nền/ảnh nền + nền phím + viền; 100% = phím vô hình, chỉ còn chữ.
+ * - phím: nền phím + viền (+ nền theme khi KHÔNG có ảnh nền); 100% = phím vô hình, chỉ còn chữ.
+ *   Ảnh nền luôn giữ nguyên (đã có độ tối/mờ riêng).
  * - ký tự: chữ/icon/nhãn phụ trên phím; 100% = phím trơn không chữ.
  * Áp bằng alpha của MÀU lúc dựng theme — không alpha nhóm, 0 chi phí mỗi phím.
  */
@@ -133,10 +150,11 @@ fun ThemePalette.withTransparency(keyboard: Int, labels: Int, systemDark: Boolea
         fun f(x: Int) = c.withAlpha(x, s)
         p = p.copy(bg = f(bg), bgBottom = bgBottom?.let(::f), keyFill = f(keyFill), specialFill = f(specialFill),
             action = f(action), chip = f(chip), keyBorder = keyBorder?.let(::f), surfaceAlpha = s)
-        // Nền thật sau chữ ≈ lớp nền mới trên cửa sổ app (ảnh nền: tông lớp phủ).
+        // Nền thật sau chữ ≈ lớp nền mới trên cửa sổ app. Ảnh nền vẫn hiện nguyên ⇒ ước lượng
+        // bằng tông lớp phủ (tối cho theme tối, sáng cho theme sáng).
         val sys = t.systemBackdrop(systemDark)
-        val behind = c.over(if (wallpaper) c.withAlpha(wallpaperOverlay, s) else p.bg, sys)
-        val label = t.readable(ink, c.over(p.keyFill, behind))
+        val behind = c.over(if (wallpaper) wallpaperOverlay else p.bg, sys)
+        val label = if (keyLabelPinned) ink else t.readable(ink, c.over(p.keyFill, behind))
         p = p.copy(keyLabel = label, actionInk = t.readable(actionInk, c.over(p.action, behind)),
             isDark = if (label != ink) c.luminance(label) > 0.5 else isDark)
     }
@@ -212,6 +230,8 @@ enum class KeyboardTheme(val id: String, val viTitle: String, val isPlus: Boolea
 object ThemeGate {
     fun allows(t: KeyboardTheme) = !t.isPlus || PlusGate.isUnlocked(PlusFeature.PREMIUM_THEMES)
     val allowsWallpaper: Boolean get() = PlusGate.isUnlocked(PlusFeature.PREMIUM_THEMES)
+    /** "Tuỳ chỉnh nâng cao" đi cùng quyền theme cao cấp (Plus). */
+    val allowsAdvanced: Boolean get() = PlusGate.isUnlocked(PlusFeature.PREMIUM_THEMES)
 }
 
 /** Cài đặt giao diện — app ghi, IME đọc mỗi lần dựng input view. */
@@ -232,6 +252,8 @@ data class ThemeSettings(
      * "Khôi phục giao diện gốc" giữ nguyên.
      */
     val crop: WallpaperCrop? = null,
+    /** "Tuỳ chỉnh nâng cao" (Plus) — lưu nguyên kể cả khi hết quyền; áp qua [effectiveKeyStyle]. */
+    val keyStyle: KeyStyle = KeyStyle.DEFAULT,
 ) {
     /**
      * "Khôi phục giao diện gốc": mọi chỉnh ở màn Giao diện về mặc định. Ảnh nền chỉ bỏ
@@ -242,11 +264,13 @@ data class ThemeSettings(
 
     val effectiveTheme: KeyboardTheme get() = if (ThemeGate.allows(theme)) theme else KeyboardTheme.SYSTEM
     fun wallpaperActive(fileExists: Boolean) = wallpaper && fileExists && ThemeGate.allowsWallpaper
+    /** Tuỳ chỉnh nâng cao thực dùng: hết quyền Plus ⇒ mặc định (giá trị lưu giữ nguyên). */
+    val effectiveKeyStyle: KeyStyle get() = if (ThemeGate.allowsAdvanced) keyStyle else KeyStyle.DEFAULT
 
     fun toMap(): Map<String, Any> = mapOf(Keys.KEYBOARD_THEME to theme.id, Keys.WALLPAPER_ENABLED to wallpaper,
         Keys.WALLPAPER_DIM to dim, Keys.WALLPAPER_BLUR to blur, Keys.WALLPAPER_VERSION to version,
         Keys.KEYBOARD_TRANSPARENCY to keyboardTransparency, Keys.KEY_LABEL_TRANSPARENCY to labelTransparency) +
-        (crop?.let { mapOf(Keys.WALLPAPER_CROP to it.serialize()) } ?: emptyMap())
+        (crop?.let { mapOf(Keys.WALLPAPER_CROP to it.serialize()) } ?: emptyMap()) + keyStyle.toMap()
 
     companion object {
         fun load(get: (String) -> Any?) = ThemeSettings(
@@ -258,6 +282,7 @@ data class ThemeSettings(
             keyboardTransparency = KeyboardTransparency.clamp((get(Keys.KEYBOARD_TRANSPARENCY) as? Number)?.toInt() ?: 0),
             labelTransparency = KeyboardTransparency.clamp((get(Keys.KEY_LABEL_TRANSPARENCY) as? Number)?.toInt() ?: 0),
             crop = WallpaperCrop.parse(get(Keys.WALLPAPER_CROP) as? String),
+            keyStyle = KeyStyle.load(get),
         )
     }
 }

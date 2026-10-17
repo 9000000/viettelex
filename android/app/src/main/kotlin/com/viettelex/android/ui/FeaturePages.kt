@@ -129,6 +129,7 @@ internal data class FeatureSearchEntry(val viTitle: String, val keywords: String
             FeatureSearchEntry("Theme & ảnh nền", "theme màu chủ đề wallpaper hình nền color", FeaturePage.GiaoDien), // l10n-key
             FeatureSearchEntry("Độ trong suốt phím", "trong suốt transparent", FeaturePage.GiaoDien), // l10n-key
             FeatureSearchEntry("Độ trong suốt ký tự", "trong suốt transparent chữ", FeaturePage.GiaoDien), // l10n-key
+            FeatureSearchEntry("Tuỳ chỉnh nâng cao", "màu chữ màu phím color bo góc tròn vuông corner radius cỡ chữ size phông font độ đậm weight bold", FeaturePage.GiaoDien), // l10n-key
             FeatureSearchEntry("Khôi phục giao diện gốc", "reset mặc định default", FeaturePage.GiaoDien), // l10n-key
             FeatureSearchEntry("Chiều cao hàng phím", "height cao thấp", FeaturePage.GiaoDien), // l10n-key
             FeatureSearchEntry("Hiện logo Vᴛ", "logo phím cách space", FeaturePage.GiaoDien), // l10n-key
@@ -252,7 +253,7 @@ internal fun GuideLinkSection(p: FeaturePage) {
 // ---------------------------------------------------------------- trang chính
 
 @Composable
-fun TinhNangTab(openRequest: FeaturePage? = null, onOpened: () -> Unit = {}) {
+fun TinhNangTab(openRequest: FeaturePage? = null, onOpened: () -> Unit = {}, onOpenPlus: () -> Unit = {}) {
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     // Màn Plus chạm một quyền lợi ⇒ mở thẳng trang chứa cài đặt của nó.
     androidx.compose.runtime.LaunchedEffect(openRequest) { if (openRequest != null) { open = openRequest.name; onOpened() } }
@@ -265,7 +266,7 @@ fun TinhNangTab(openRequest: FeaturePage? = null, onOpened: () -> Unit = {}) {
             FeaturePage.GoVuot -> GoVuotPage(back)
             FeaturePage.GoTat -> GoTatPage(back)
             FeaturePage.Phim -> PhimPage(back)
-            FeaturePage.GiaoDien -> ThemePage(back)
+            FeaturePage.GiaoDien -> ThemePage(back, onOpenPlus)
             FeaturePage.RiengTu -> { SubPageHeader(page.title, back); PrivacySection(); GuideLinkSection(page) }
             FeaturePage.SaoLuu -> { SubPageHeader(page.title, back); SaoLuuSection(); GuideLinkSection(page) }
         }
@@ -579,7 +580,7 @@ private fun EmojiPlacementRow() = ChoiceRow(Keys.EMOJI_KEY_PLACEMENT, Prefs.D.em
 /** "Cỡ chữ trên phím": Vừa (mặc định) / Lớn — [KeyLabelSize]. */
 @Composable
 private fun KeyLabelSizeRow() = ChoiceRow(Keys.KEY_LABEL_SIZE, Prefs.D.keyLabelSize.id, tr("Cỡ chữ trên phím"),
-    tr("Lớn: chữ, ký hiệu và biểu tượng trên phím to hơn khoảng 20%."),
+    tr("Lớn: chữ, ký hiệu và biểu tượng trên phím to hơn khoảng 20%. Có Plus: thanh “Cỡ chữ trên phím” ở Giao diện → Tuỳ chỉnh nâng cao, khi đã đặt, thay cho lựa chọn này."),
     listOf(KeyLabelSize.MEDIUM.id to tr("Vừa"), KeyLabelSize.LARGE.id to tr("Lớn"))) { KeyLabelSize.of(it).id }
 
 @Composable

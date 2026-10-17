@@ -146,6 +146,17 @@ object Keys {
     /** Độ trong suốt phím (nền + phím) / ký tự trên phím, 0…100. */
     const val KEYBOARD_TRANSPARENCY = "keyboardTransparency"
     const val KEY_LABEL_TRANSPARENCY = "keyLabelTransparency"
+    /**
+     * "Tuỳ chỉnh nâng cao" (Plus, [KeyStyle]) — cùng khoá iOS. Màu Int 0xRRGGBB (-1 = theo theme);
+     * bo góc 0…100 % nửa cạnh ngắn (-1 = mặc định); cỡ chữ 80…150 % (0 = mặc định);
+     * phông "default"|"rounded"|"serif"|"mono"|"condensed"; độ đậm "light"…"heavy".
+     */
+    const val KEY_LABEL_COLOR = "keyLabelColor"
+    const val KEY_FILL_COLOR = "keyFillColor"
+    const val KEY_CORNER_RADIUS = "keyCornerRadius"
+    const val KEY_FONT_SCALE = "keyFontScale"
+    const val KEY_LABEL_FONT = "keyLabelFont"
+    const val KEY_LABEL_WEIGHT = "keyLabelWeight"
     /** Lịch sử clipboard (mặc định TẮT — riêng tư). */
     const val CLIPBOARD_HISTORY = "clipboardHistory"
     /** "Giữ lịch sử clipboard": "1h" (mặc định) / "24h" / "7d" — [ClipboardTTL]. */

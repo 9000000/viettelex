@@ -23,6 +23,8 @@ struct ThemeSettingsView: View {
     @State private var error: String?
     @State private var confirmReset = false
     @State private var editor: EditorInput?
+    /// "Tuỳ chỉnh nâng cao" — thu gọn mặc định.
+    @State private var advancedOpen = false
     // Tính Năng → Giao diện gộp luôn logo + chiều cao hàng (không thuộc "Khôi phục giao diện gốc").
     @AppStorage("showSpaceLogo", store: groupDefaults) private var showSpaceLogo = true
     /// ±pt mỗi hàng; iPhone: 0 = như bàn phím iPhone của máy (KeyGeometry.RowAdjust — app
@@ -74,7 +76,8 @@ struct ThemeSettingsView: View {
                 ThemePreview(palette: settings.palette(systemDark: scheme == .dark,
                                                        wallpaperActive: settings.wallpaperActive(fileExists: hasWallpaperFile)),
                              wallpaper: settings.wallpaperActive(fileExists: hasWallpaperFile) ? wallpaperImage : nil,
-                             dim: settings.dim, large: true, systemDark: scheme == .dark)
+                             dim: settings.dim, large: true, systemDark: scheme == .dark,
+                             keyStyle: settings.effectiveKeyStyle)
                     .frame(height: 190)
                     .listRowInsets(EdgeInsets())
             } footer: {
@@ -153,8 +156,10 @@ struct ThemeSettingsView: View {
             } header: {
                 Text(L("Độ trong suốt"))
             } footer: {
-                Text(L("Phím: nền, ảnh nền, nền và viền phím — 100% chỉ còn chữ. Ký tự: chữ và biểu tượng trên phím — 100% là phím trơn không chữ. iOS luôn giữ lớp kính mờ phía sau bàn phím."))
+                Text(L("Phím: nền và viền phím (cả nền bàn phím khi không dùng ảnh nền) — 100% chỉ còn chữ, ảnh nền vẫn giữ nguyên. Ký tự: chữ và biểu tượng trên phím — 100% là phím trơn không chữ. iOS luôn giữ lớp kính mờ phía sau bàn phím."))
             }
+
+            advancedSection
 
             Section {
                 Stepper(value: $rowHeightAdjust, in: KeyGeometry.RowAdjust.range) {
@@ -195,7 +200,7 @@ struct ThemeSettingsView: View {
                 Button(L("Khôi phục giao diện gốc"), role: .destructive) { confirmReset = true }
                     .disabled(settings.isDefault)
             } footer: {
-                Text(L("Về theme Hệ thống, tắt ảnh nền (ảnh vẫn giữ để bật lại), độ tối/mờ và độ trong suốt về mặc định. Chiều cao hàng, nâng bàn phím và logo giữ nguyên."))
+                Text(L("Về theme Hệ thống, tắt ảnh nền (ảnh vẫn giữ để bật lại), độ tối/mờ, độ trong suốt và tuỳ chỉnh nâng cao về mặc định. Chiều cao hàng, nâng bàn phím và logo giữ nguyên."))
             }
 
             GuideLinkSection(page: .giaoDien)
@@ -226,6 +231,105 @@ struct ThemeSettingsView: View {
                     saveEdited(input, crop: crop, dim: dim, blur: blur)
                 })
         }
+    }
+
+    // MARK: Tuỳ chỉnh nâng cao (Plus)
+
+    /// Chưa có Plus: hàng mở trang VietTelex Plus (như "VietTelex Plus" đầu trang). Có Plus:
+    /// hàng thu gọn mở ra bộ chỉnh. Giá trị đã lưu chỉ áp khi có Plus (ThemeSettings.effectiveKeyStyle).
+    @ViewBuilder private var advancedSection: some View {
+        Section {
+            if ThemeGate.allowsAdvanced {
+                DisclosureGroup(isExpanded: $advancedOpen) {
+                    advancedControls
+                } label: {
+                    HStack(spacing: 6) { Text(L("Tuỳ chỉnh nâng cao")); plusBadge }
+                }
+            } else {
+                NavigationLink {
+                    PlusView(model: PlusShared.model)
+                } label: {
+                    HStack(spacing: 6) { Text(L("Tuỳ chỉnh nâng cao")); plusBadge }
+                }
+            }
+        } footer: {
+            Text(L("Màu chữ và màu nền phím, độ bo góc, cỡ chữ, phông và độ đậm. Mỗi màu dùng chung cho giao diện sáng lẫn tối; “Theo theme” trả về màu của theme."))
+        }
+    }
+
+    @ViewBuilder private var advancedControls: some View {
+        let palette = settings.palette(systemDark: scheme == .dark,
+                                       wallpaperActive: settings.wallpaperActive(fileExists: hasWallpaperFile))
+        colorRow(L("Màu chữ trên phím"), \.labelColor, current: palette.keyInk)
+        colorRow(L("Màu nền phím"), \.fillColor, current: palette.keyFill)
+        VStack(alignment: .leading) {
+            HStack {
+                Text(settings.keyStyle.corner.map { L("Độ bo góc phím: %@%", $0) } ?? L("Độ bo góc phím: mặc định"))
+                Spacer()
+                if settings.keyStyle.corner != nil {
+                    Button(L("Mặc định")) { settings.keyStyle.corner = nil; save() }.buttonStyle(.borderless)
+                }
+            }
+            Slider(value: Binding(get: { Double(settings.keyStyle.corner ?? Self.defaultCornerPercent) },
+                                  set: { settings.keyStyle.corner = Int($0); save() }),
+                   in: 0...100, step: 5) {
+                Text(L("Độ bo góc phím"))
+            } minimumValueLabel: {
+                Image(systemName: "square").accessibilityLabel(L("Vuông"))
+            } maximumValueLabel: {
+                Image(systemName: "circle").accessibilityLabel(L("Tròn"))
+            }
+        }
+        VStack(alignment: .leading) {
+            HStack {
+                Text(L("Cỡ chữ trên phím: %@%", settings.keyStyle.fontScale ?? 100))
+                Spacer()
+                if settings.keyStyle.fontScale != nil {
+                    Button(L("Mặc định")) { settings.keyStyle.fontScale = nil; save() }.buttonStyle(.borderless)
+                }
+            }
+            Slider(value: Binding(get: { Double(settings.keyStyle.fontScale ?? 100) },
+                                  set: { settings.keyStyle.fontScale = KeyStyle.parseFontScale(Int($0)); save() }),
+                   in: Double(KeyStyle.fontScaleMin)...Double(KeyStyle.fontScaleMax), step: 5)
+                .accessibilityLabel(L("Cỡ chữ trên phím"))
+            Text(L("Phím hẹp tự thu nhỏ chữ cho vừa, dấu không bị cắt."))
+                .font(.footnote).foregroundStyle(.secondary)
+        }
+        Picker(L("Phông chữ"), selection: Binding(get: { settings.keyStyle.font },
+                                                 set: { settings.keyStyle.font = $0; save() })) {
+            ForEach(KeyLabelFont.allCases, id: \.self) { f in
+                Text(f.title).font(Font(KeyLabelFonts.make(f, .regular, size: 17, compact: nil))).tag(f)
+            }
+        }
+        Picker(L("Độ đậm"), selection: Binding(get: { settings.keyStyle.weight },
+                                              set: { settings.keyStyle.weight = $0; save() })) {
+            ForEach(KeyLabelWeight.allCases, id: \.self) { w in Text(w.title).tag(w) }
+        }
+        Button(L("Đặt lại tuỳ chỉnh nâng cao"), role: .destructive) { settings.keyStyle = KeyStyle(); save() }
+            .disabled(settings.keyStyle.isDefault)
+    }
+
+    /// Bo mặc định (8pt trên phím ~42pt) ≈ 40% nửa cạnh ngắn — vị trí thanh trượt khi chưa chỉnh.
+    static let defaultCornerPercent = 40
+
+    private func colorRow(_ title: String, _ kp: WritableKeyPath<KeyStyle, UInt32?>, current: RGBA) -> some View {
+        HStack {
+            ColorPicker(title, selection: Binding(
+                get: { Color(uiColor: settings.keyStyle[keyPath: kp].map { RGBA(hex: $0).ui } ?? RGBA(r: current.r, g: current.g, b: current.b).ui) },
+                set: { settings.keyStyle[keyPath: kp] = Self.rgb(UIColor($0)); save() }),
+                        supportsOpacity: false)
+            if settings.keyStyle[keyPath: kp] != nil {
+                Button(L("Theo theme")) { settings.keyStyle[keyPath: kp] = nil; save() }.buttonStyle(.borderless)
+            }
+        }
+    }
+
+    /// UIColor (mọi không gian màu) → 0xRRGGBB sRGB.
+    static func rgb(_ c: UIColor) -> UInt32? {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard c.getRed(&r, green: &g, blue: &b, alpha: &a) else { return nil }
+        func ch(_ v: CGFloat) -> UInt32 { UInt32((min(max(v, 0), 1) * 255).rounded()) }
+        return ch(r) << 16 | ch(g) << 8 | ch(b)
     }
 
     @ViewBuilder private var plusBadge: some View {
@@ -407,6 +511,8 @@ struct ThemePreview: View {
     var systemDark: Bool? = nil
     /// Chỉ vẽ phím (lớp phủ trên ảnh trong trình chỉnh ảnh nền).
     var keysOnly = false
+    /// Tuỳ chỉnh nâng cao (bo góc, phông, độ đậm, cỡ) — màu đã nằm trong `palette`.
+    var keyStyle: KeyStyle = .default
 
     private static let rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
 
@@ -416,10 +522,12 @@ struct ThemePreview: View {
                 if !keysOnly { systemBackdrop }
                 if !keysOnly, let bg = palette.background { Color(bg.ui) }
                 if let wallpaper {
+                    // Ảnh nền không theo độ trong suốt phím (KeyboardPalette.wallpaperLayer).
+                    let wl = palette.wallpaperLayer(dim: dim)
                     Image(uiImage: wallpaper).resizable().scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height).clipped()
-                        .opacity(palette.surfaceAlpha)
-                    Color(palette.wallpaperOverlay.alpha(Double(dim) / 100 * palette.surfaceAlpha).ui)
+                        .opacity(wl.imageAlpha)
+                    Color(wl.overlay.ui)
                 }
                 keys(in: geo.size)
             }
@@ -464,11 +572,17 @@ struct ThemePreview: View {
 
     private func key(_ label: String, w: CGFloat, h: CGFloat, r: CGFloat,
                      fill: RGBA? = nil, ink: RGBA? = nil) -> some View {
-        RoundedRectangle(cornerRadius: r)
+        let r = KeyStyle.cornerRadius(percent: keyStyle.corner, size: CGSize(width: w, height: h), fallback: r)
+        let base: CGFloat = label.count > 1 ? 11 : 15
+        let font: Font = keyStyle.customizesLabels
+            ? Font(KeyLabelFonts.make(keyStyle.font, keyStyle.weight,
+                                      size: base * (label.count > 1 ? 1 : keyStyle.labelScale), compact: nil))
+            : .system(size: base)
+        return RoundedRectangle(cornerRadius: r)
             .fill(Color((fill ?? palette.keyFill).ui))
             .overlay(RoundedRectangle(cornerRadius: r)
                 .stroke(Color(palette.keyBorder?.ui ?? .clear), lineWidth: palette.keyBorder == nil ? 0 : 1))
-            .overlay(Text(label).font(.system(size: label.count > 1 ? 11 : 15))
+            .overlay(Text(label).font(font).minimumScaleFactor(0.5).lineLimit(1)
                 .foregroundColor(Color((ink ?? palette.keyInk).ui)))
             .frame(width: max(w, 1), height: max(h, 1))
     }
