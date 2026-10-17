@@ -1,0 +1,150 @@
+// SwipeVocab.swift — TỪ VỰNG GÕ VUỐT = 1666 dạng của vnlexicon (SwipeLexicon) + từ chat/viết
+// tắt (luôn có) + từ tục (chỉ khi TẮT "Lọc từ nhạy cảm" — cùng công tắc thanh gợi ý). Song sinh
+// android SwipeVocab.kt — sửa bảng/hằng ở đây thì sửa y hệt bên kia.
+//
+// - Lọc BẬT (mặc định): SwipeDecoder.expand bỏ mọi âm tiết trong SensitiveWords.set (vnlexicon có
+//   sẵn đĩ, cứt, dâm, điếm) ⇒ vuốt không bao giờ ra từ nhạy cảm, kể cả qua bung dấu.
+// - Lọc TẮT: thêm âm tiết tục vnlexicon không có (địt, lồn, cặc, buồi, đụ) vào dạng sẵn có và
+//   viết tắt tục (vl, đcm, dkm…) thành dạng mới.
+//
+// `chat`: viết tắt chat của seed (ko, dc, ok, vs, mn, vd, ib, cmt, stt, kb, uk, oke, okie, haha…) +
+// nma, ntn, nx, bt, ms. Từ tục = cả SensitiveWords.set, tần suất từ seed (`sensitiveEntries`). Thô
+// tục KHÔNG nằm trong SensitiveWords (vú, ngu, dái, cu, nắc, mày, vãi…) vnlexicon có sẵn ⇒ luôn có.
+// Tần suất cùng thang vnlexicon (0–255; điểm = λ·f/255). Từ 1 chữ (k, j) không vuốt được — chạm là
+// ra. Chi phí: dựng một lần mỗi chế độ (lười), đổi công tắc ⇒ decoder dựng lại template một lần;
+// 0 việc ở đường phím chữ.
+import Foundation
+
+enum SwipeVocab {
+    struct Entry {
+        let word: String
+        let freq: Int
+        var sensitive = false
+    }
+
+    /// Chat / viết tắt — luôn có (không nằm trong SensitiveWords.set).
+    static let chat: [Entry] = [
+        .init(word: "ko", freq: 150), .init(word: "đc", freq: 140), .init(word: "dc", freq: 120),
+        .init(word: "ok", freq: 150), .init(word: "oke", freq: 100), .init(word: "okie", freq: 80),
+        .init(word: "vs", freq: 110), .init(word: "mn", freq: 110), .init(word: "nma", freq: 100),
+        .init(word: "ntn", freq: 110), .init(word: "nx", freq: 100), .init(word: "bt", freq: 110),
+        .init(word: "ms", freq: 110), .init(word: "vd", freq: 80), .init(word: "ib", freq: 90),
+        .init(word: "cmt", freq: 90), .init(word: "stt", freq: 70), .init(word: "kb", freq: 70),
+        .init(word: "uk", freq: 90), .init(word: "haha", freq: 120), .init(word: "hihi", freq: 110),
+        .init(word: "hehe", freq: 100), .init(word: "huhu", freq: 90), .init(word: "kaka", freq: 60),
+    ]
+
+    /// Thô tục KHÔNG nằm trong SensitiveWords.set — luôn có, nhưng vnlexicon ghi tần suất gần 0 (nắc
+    /// 0,01 điểm; dạng "nac" thua "ngac" cùng hình) ⇒ nâng. Chỉ nâng khi không cướp từ thường phổ
+    /// biến (vú/vụ, ngu/ngủ, dái/đại giữ nguyên — cần ngữ cảnh).
+    static let always: [Entry] = [.init(word: "nắc", freq: 140)]
+
+    /// Từ tục khi TẮT lọc = TOÀN BỘ SensitiveWords.set (theo chương trình), tần suất = seed·51/10
+    /// (như TouchTarget.chatWords). Từ vnlexicon ĐÃ CÓ (đĩ, cứt, dâm, điếm) giữ tần suất vnlexicon nếu
+    /// cao hơn; từ vnlexicon KHÔNG có được sàn `sensitiveFloor` — seed ghi từ tục rất thấp (lồn 5 ⇒
+    /// 25), không sàn thì không bao giờ ra. Thứ tự: theo dạng không dấu, dạng có "đ" trước.
+    static let sensitiveFloor = 150
+
+    static func sensitiveEntries(_ seed: [String: Int]) -> [Entry] {
+        SensitiveWords.set.sorted { a, b in
+            let fa = SwipeLexicon.fold(a), fb = SwipeLexicon.fold(b)
+            if fa != fb { return fa < fb }
+            let da = a.contains("đ"), db = b.contains("đ")
+            if da != db { return da }
+            return a < b
+        }.map { Entry(word: $0, freq: min(max((seed[$0] ?? 0) * 51 / 10, 0), 255), sensitive: true) }
+    }
+
+    /// Bảng đầy đủ theo chế độ: chat + thô tục luôn có (+ tục khi tắt lọc, tần suất từ seed).
+    static func entries(filter: Bool) -> [Entry] {
+        filter ? chat + always : chat + always + sensitiveEntries(SeedData.unigrams)
+    }
+
+    /// Tần suất (0–255) của âm tiết `word` trong vnlexicon, -1 nếu không có.
+    private static func lexiconFreq(_ word: String) -> Int {
+        guard let i = SwipeLexicon.index(of: SwipeLexicon.fold(word)) else { return -1 }
+        let lex = SwipeLexicon.forms
+        for id in Int(lex.idStart[i])..<Int(lex.idStart[i + 1]) where VNSuggest.display(id) == word {
+            return Int(VNLexicon2Data.freq(id))
+        }
+        return -1
+    }
+
+    final class Vocab {
+        let filter: Bool
+        /// Dạng lexicon (0..<SwipeLexicon.forms.count) + dạng mới (dải id lexicon rỗng).
+        let forms: SwipeLexicon.Forms
+        /// Từ thêm theo dạng không dấu (cả dạng lexicon lẫn dạng mới), thứ tự `entries`;
+        /// SwipeWord.score = tần suất thô (0–255).
+        let words: [String: [SwipeWord]]
+        private let extraIndex: [String: Int]
+
+        init(filter: Bool, forms: SwipeLexicon.Forms, words: [String: [SwipeWord]], extraIndex: [String: Int]) {
+            self.filter = filter; self.forms = forms; self.words = words; self.extraIndex = extraIndex
+        }
+
+        /// Chỉ số dạng trong `forms`, nil nếu không có.
+        func index(of folded: String) -> Int? {
+            SwipeLexicon.index(of: folded) ?? extraIndex[folded]
+        }
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var filterOn = true
+    nonisolated(unsafe) private static var cache: [Bool: Vocab] = [:]
+
+    /// Đặt lúc bàn phím hiện (KeyboardViewController, cùng chỗ đọc filterSensitive).
+    static var filterSensitive: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return filterOn }
+        set { lock.lock(); filterOn = newValue; lock.unlock() }
+    }
+
+    /// Từ vựng theo công tắc hiện tại (dựng lười, giữ cả hai chế độ).
+    static var current: Vocab {
+        lock.lock(); defer { lock.unlock() }
+        if let v = cache[filterOn] { return v }
+        let v = build(filter: filterOn)
+        cache[filterOn] = v
+        return v
+    }
+
+    static func isSensitive(_ word: String) -> Bool { SensitiveWords.set.contains(word) }
+
+    static func build(filter: Bool) -> Vocab {
+        let lex = SwipeLexicon.forms
+        var words: [String: [SwipeWord]] = [:]
+        for e in entries(filter: filter) {
+            let f = SwipeLexicon.fold(e.word)
+            let lf = SwipeLexicon.index(of: f) == nil ? -1 : lexiconFreq(e.word)
+            // có sẵn trong vnlexicon: chỉ thay khi bảng cao hơn; không có: từ tục được sàn
+            let fr = lf < 0 && e.sensitive ? max(e.freq, sensitiveFloor) : e.freq
+            if lf >= fr { continue }
+            words[f, default: []].append(SwipeWord(word: e.word, score: Float(fr)))
+        }
+        let added = words.keys.filter { SwipeLexicon.index(of: $0) == nil }.sorted()
+        let fc = lex.count
+        let n = lex.idStart[fc]
+        var keys = lex.keys
+        var keyStart = lex.keyStart
+        for a in added {
+            var last: UInt8 = 255
+            for b in a.utf8 {
+                let k = b &- 97
+                if k != last { keys.append(k); last = k }
+            }
+            keyStart.append(Int32(keys.count))
+        }
+        let forms = SwipeLexicon.Forms(
+            folded: lex.folded + added,
+            idStart: Array(lex.idStart.prefix(fc)) + Array(repeating: n, count: added.count + 1),
+            // tần suất dạng = mạnh nhất của dạng, tính cả từ thêm (nắc nâng dạng "nac")
+            freq: (lex.folded + added).enumerated().map { k, f in
+                let ex = words[f]?.map { Int($0.score) }.max() ?? 0
+                return UInt8(k < fc ? max(Int(lex.freq[k]), ex) : ex)
+            },
+            keys: keys, keyStart: keyStart)
+        var extraIndex: [String: Int] = [:]
+        for (k, a) in added.enumerated() { extraIndex[a] = fc + k }
+        return Vocab(filter: filter, forms: forms, words: words, extraIndex: extraIndex)
+    }
+}

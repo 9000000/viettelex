@@ -8,7 +8,7 @@ object SensitiveWords {
     val set: Set<String> = hashSetOf(
         "đcm", "đm", "dm", "dcm", "vcl", "vkl", "vl", "cl", "clgt", "cmnr",
         "cứt", "lồn", "cặc", "buồi", "đĩ", "điếm", "đụ", "địt",
-        "tml", "sml", "dâm",
+        "tml", "sml", "dâm", "đkm", "dkm", "buscu",
         "fuck", "shit", "bitch", "wtf",
     )
 }

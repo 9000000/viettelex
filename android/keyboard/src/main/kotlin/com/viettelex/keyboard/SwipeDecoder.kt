@@ -259,6 +259,8 @@ class SwipeDecoder(val params: Params = Params()) {
     private var tplCY = FloatArray(0)
     private var tplScale = FloatArray(0)
     private var tplValid = BooleanArray(0)
+    /** Từ vựng (theo công tắc lọc từ nhạy cảm) mà template đang dựng theo — đổi ⇒ dựng lại. */
+    private var tplVocab: SwipeVocab.Vocab? = null
     private val alpha: FloatArray
     private val alphaSum: Float
     private val ux: FloatArray
@@ -355,20 +357,23 @@ class SwipeDecoder(val params: Params = Params()) {
         layout = l
         tpl = FloatArray(0); tplCX = tpl; tplCY = tpl; tplScale = tpl; tplLen = tpl; tplDX = tpl; tplDY = tpl
         tplValid = BooleanArray(0)
+        tplVocab = null
     }
 
     /** Dựng template ngay (background khi bàn phím hiện). */
     fun prepare() {
         val l = layout ?: return
-        if (tpl.isEmpty()) buildTemplates(l)
+        val v = SwipeVocab.current
+        if (tpl.isEmpty() || tplVocab !== v) buildTemplates(l, v)
     }
 
     val templateBytes: Int
         get() = tpl.size * 4 + (tplCX.size + tplCY.size + tplScale.size + tplLen.size + tplDX.size + tplDY.size) * 4 +
             tplValid.size
 
-    private fun buildTemplates(l: SwipeLayout) {
-        val forms = SwipeLexicon.forms
+    private fun buildTemplates(l: SwipeLayout, v: SwipeVocab.Vocab) {
+        tplVocab = v
+        val forms = v.forms
         val n = params.points; val fc = forms.count
         tpl = FloatArray(fc * n * 2)
         tplCX = FloatArray(fc); tplCY = FloatArray(fc); tplScale = FloatArray(fc); tplLen = FloatArray(fc)
@@ -436,8 +441,9 @@ class SwipeDecoder(val params: Params = Params()) {
     ): List<SwipeCandidate> {
         val l = layout
         if (count <= 0 || topK <= 0 || l == null) return emptyList()
-        if (tpl.isEmpty()) buildTemplates(l)
-        val forms = SwipeLexicon.forms
+        val vocab = SwipeVocab.current
+        if (tpl.isEmpty() || tplVocab !== vocab) buildTemplates(l, vocab)
+        val forms = vocab.forms
         val en = if (english == null) null else SwipeEnglish.lexicon
         val fc = forms.count
         val n = params.points; val w = l.keyWidth
@@ -614,7 +620,7 @@ class SwipeDecoder(val params: Params = Params()) {
     private fun candidateKeys(idx: Int, l: SwipeLayout, en: SwipeEnglish.Lexicon?, fc: Int): Int {
         val keys: ByteArray; val lo: Int; val hi: Int
         if (idx < fc) {
-            val forms = SwipeLexicon.forms
+            val forms = (tplVocab ?: SwipeVocab.current).forms
             keys = forms.keys; lo = forms.keyStart[idx]; hi = forms.keyStart[idx + 1]
         } else {
             if (en == null) return -1
@@ -895,9 +901,10 @@ class SwipeDecoder(val params: Params = Params()) {
     fun learnOffset(xs0: FloatArray, ys0: FloatArray, count: Int, folded: String): Boolean {
         val l = layout ?: return false
         if (count < 2 || params.offsetRate <= 0f) return false
-        val f = SwipeLexicon.indexOf(folded)
+        val v = tplVocab ?: SwipeVocab.current
+        val f = v.indexOf(folded)
         if (f < 0) return false
-        val km = candidateKeys(f, l, null, SwipeLexicon.forms.count)
+        val km = candidateKeys(f, l, null, v.forms.count)
         if (km <= 0) return false
         val w = l.keyWidth
         val (xs, ys) = shifted(xs0, ys0, count, w)
@@ -966,22 +973,36 @@ class SwipeDecoder(val params: Params = Params()) {
             return top
         }
 
-        /** Bung dạng không dấu → âm tiết có dấu, điểm = λ·tần suất/255 (+context), giảm dần. */
+        /**
+         * Bung dạng không dấu → âm tiết có dấu, điểm = λ·tần suất/255 (+context), giảm dần.
+         * Theo [SwipeVocab.current]: lọc bật ⇒ bỏ từ nhạy cảm; thêm từ chat/viết tắt (+ tục khi tắt lọc).
+         */
         fun expand(
             folded: String, limit: Int = 8, lambdaFreq: Float = Params().lambdaFreq,
             context: ((String) -> Float)? = null,
         ): List<SwipeWord> {
             if (limit <= 0) return emptyList()
+            val vocab = SwipeVocab.current
             val f = SwipeLexicon.indexOf(folded)
-            if (f < 0) return emptyList()
-            val forms = SwipeLexicon.forms
-            val b = VNLexicon2Data.blob
+            val extra = vocab.words[folded]
+            if (f < 0 && extra == null) return emptyList()
             val out = ArrayList<SwipeWord>()
-            for (id in forms.idStart[f] until forms.idStart[f + 1]) {
-                val w = VNSuggest.display(id)
-                var s = lambdaFreq * b.freq(id).toFloat() / 255f
-                if (context != null) s += context(w)
-                out.add(SwipeWord(w, s))
+            if (f >= 0) {
+                val forms = SwipeLexicon.forms
+                val b = VNLexicon2Data.blob
+                for (id in forms.idStart[f] until forms.idStart[f + 1]) {
+                    val w = VNSuggest.display(id)
+                    if (vocab.filter && SwipeVocab.isSensitive(w)) continue
+                    if (extra != null && extra.any { it.word == w }) continue   // bảng thay tần suất
+                    var s = lambdaFreq * b.freq(id).toFloat() / 255f
+                    if (context != null) s += context(w)
+                    out.add(SwipeWord(w, s))
+                }
+            }
+            if (extra != null) for (e in extra) {
+                var s = lambdaFreq * e.score / 255f
+                if (context != null) s += context(e.word)
+                out.add(SwipeWord(e.word, s))
             }
             // ổn định: bằng điểm giữ thứ tự lexicon (id tăng)
             return out.sortedByDescending { it.score }.take(limit)

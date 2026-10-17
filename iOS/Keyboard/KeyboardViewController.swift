@@ -273,6 +273,7 @@ final class KeyboardViewController: UIInputViewController {
         appliedFullAccess = hasFullAccess
         keyboard.setClipboardButton(visible: clip.historyEnabled && appliedFullAccess)
         filterSensitive = settings.filterSensitive
+        SwipeVocab.filterSensitive = settings.filterSensitive   // gõ vuốt theo cùng công tắc
         showSuggestionsSetting = settings.showSuggestions
         autoCapitalizeSetting = settings.autoCapitalize
         autoSpaceSetting = settings.autoSpaceAfterPunct
@@ -2514,7 +2515,7 @@ extension KeyboardViewController {
 
 extension KeyboardViewController {
     /// Chip "↩︎ từ cũ": trả từ vuốt trước về như lúc vuốt; học lại từ cũ như user chọn
-    /// (iOS không rút lượt học từ mới — weight 1, phai dần).
+    /// (rút lượt học từ mới như Android — undoRevise).
     fileprivate func undoSwipeRevision() {
         if let t = swipeTypedUndo {
             swipeTypedUndo = nil
@@ -2525,9 +2526,16 @@ extension KeyboardViewController {
         swipeReviseUndo = nil
         applyingEdit = true
         defer { applyingEdit = false }
+        swipeRevisable = nil                  // như Android: ứng viên từ đang mở chấm theo từ mới
         if bridge.restoreRevisedWord(old: u.old, new: u.new, proxy: Proxy(p: textDocumentProxy)),
            lastWord == u.new {
-            lastWord = lastWord2; lastWord2 = nil
+            // rút lượt học từ mới (như Android KeyboardSession.undoRevise), học lại từ cũ
+            if let l = lastLearned, l.word == u.new {
+                if let r = l.receipt { langModel.retract(r) }
+                lastWord = l.prev1; lastWord2 = l.prev2
+            } else {
+                lastWord = lastWord2; lastWord2 = nil
+            }
             commitAndLearn(u.old, accepted: true)
             KeyboardView.clickModifier()
         }
