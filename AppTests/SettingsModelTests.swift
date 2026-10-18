@@ -47,6 +47,17 @@ final class SettingsModelTests: XCTestCase {
     /// tab không còn tồn tại (PR #125). Mọi chuỗi "Settings → X" (trừ System Settings)
     /// phải chỉ tới một tab có thật, ở cả khoá tiếng Anh lẫn bản dịch tiếng Việt.
     /// Phil 18/10/2026: giữ tên "Chính tả teencode" (dễ hiểu hơn "Chính tả khi nhắn tin").
+    /// Phil 18/10/2026: nút mở cài đặt nguồn nhập liệu macOS phải có tiêu đề + tên rõ ràng (người dùng
+    /// không biết viết hoa / gợi ý chữ / dấu chấm khi gõ hai dấu cách chỉnh ở đó).
+    func testInputSourceSettingsButtonIsDescriptive() throws {
+        let path = try XCTUnwrap(Bundle.main.path(forResource: "vi", ofType: "lproj"))
+        let vi = try XCTUnwrap(Bundle(path: path))
+        XCTAssertEqual(vi.localizedString(forKey: "Open Input Sources settings…", value: nil, table: nil),
+                       "Mở cài đặt nguồn nhập liệu…")
+        let title = vi.localizedString(forKey: "Capitalization, word suggestions, period on double space…", value: nil, table: nil)
+        XCTAssertTrue(title.contains("Viết hoa") && title.contains("gợi ý"))
+    }
+
     func testTeencodeToggleKeepsItsName() throws {
         let path = try XCTUnwrap(Bundle.main.path(forResource: "vi", ofType: "lproj"))
         let vi = try XCTUnwrap(Bundle(path: path))

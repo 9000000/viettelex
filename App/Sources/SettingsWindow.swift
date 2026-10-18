@@ -769,13 +769,17 @@ struct TypingTab: View {
                 Text(model.loc("After an English word, an ambiguous next word whose keys spell an English word is kept English instead of Vietnamese — “he is” → “he is”, not “he í”. After a Vietnamese or unclear word it stays Vietnamese — “sao í”."))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section {
+            // Phil 18/10/2026: các tính năng VietTelex đi theo cài đặt nguồn nhập liệu của macOS
+            // (viết hoa, gợi ý chữ, dấu chấm khi gõ hai dấu cách, ngoặc cong) nằm ngoài cửa sổ này
+            // ⇒ đặt tiêu đề + liệt kê để người dùng biết bấm nút là chỉnh được chúng.
+            Section(header: Label(model.loc("Capitalization, word suggestions, period on double space…"),
+                                  systemImage: "text.cursor")) {
                 Button {
                     TelexInputController.openKeyboardInputSources()
                 } label: {
-                    Label(model.loc("System Settings…"), systemImage: "gearshape")
+                    Label(model.loc("Open Input Sources settings…"), systemImage: "gearshape")
                 }
-                Text(model.loc("Opens Keyboard settings — set automatic input-source switching per app / document there."))
+                Text(model.loc("VietTelex follows the macOS input-source settings: Capitalize words automatically, Show inline predictive text (word suggestions next to the cursor), Add period with double-space, smart quotes and dashes, and automatically switching input source per app / document. Turn them on or off there."))
                     .font(.caption).foregroundStyle(.secondary)
                 Button {
                     TelexInputController.openInputSourceHotkeySettings()

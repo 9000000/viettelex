@@ -349,3 +349,8 @@ Chọn “Sửa tự động” để VietTelex xoá mục quyền cũ của ch�
 "Select text in any app, then open Tools… (VietTelex menu or the hotkey below) and pick a tool or press its number 1–7: add tones to unaccented text (toi di hoc → tôi đi học), UPPERCASE, lowercase, Title Case, Sentence case, remove tones, translate." = "Chọn văn bản trong ứng dụng bất kỳ, rồi mở Công cụ… từ menu VietTelex hoặc bằng phím tắt bên dưới. Chọn một công cụ hoặc bấm số 1–7: thêm dấu (toi di hoc → tôi đi học), viết HOA, viết thường, Viết Hoa Từng Từ, viết hoa đầu câu, xoá dấu hoặc dịch.";
 "Keep VietTelex when macOS auto-switches the input source" = "Giữ VietTelex khi macOS tự đổi bộ gõ";
 "Input Sources…" = "Nguồn nhập liệu…";
+
+/* Cài đặt nguồn nhập liệu của macOS (Phil 18/10/2026) */
+"Capitalization, word suggestions, period on double space…" = "Viết hoa, gợi ý chữ, dấu chấm khi gõ hai dấu cách…";
+"Open Input Sources settings…" = "Mở cài đặt nguồn nhập liệu…";
+"VietTelex follows the macOS input-source settings: Capitalize words automatically, Show inline predictive text (word suggestions next to the cursor), Add period with double-space, smart quotes and dashes, and automatically switching input source per app / document. Turn them on or off there." = "VietTelex làm theo cài đặt nguồn nhập liệu của macOS: Tự động viết hoa từ, Hiển thị văn bản dự đoán (gợi ý chữ cạnh con trỏ), Thêm dấu chấm khi nhấn đúp phím cách, dấu ngoặc kép và gạch ngang thông minh, và tự đổi nguồn nhập liệu theo ứng dụng / tài liệu. Bật hoặc tắt các mục này tại đó.";
