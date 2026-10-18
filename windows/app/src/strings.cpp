@@ -329,6 +329,16 @@ const Pair kStrings[] = {
      L"Word suggestions forget every word and word pair learned from your typing on this PC."},
     {L"Xoá…", L"Clear…"},
     {L"Xoá mọi từ đã học? Không hoàn tác được.", L"Clear all learned words? This cannot be undone."},
+    // Gợi ý chữ khi gõ
+    {L"Gợi ý chữ khi gõ", L"Word suggestions while typing"},
+    {L"Đang bật.", L"On."},
+    {L"Đang tắt — bật trong Cài đặt Windows để dùng gợi ý chữ.",
+     L"Off — turn it on in Windows Settings to use word suggestions."},
+    {L"VietTelex làm theo cài đặt “Hiện gợi ý văn bản khi gõ trên bàn phím vật lý” của Windows, không có công tắc "
+     L"riêng.",
+     L"VietTelex follows the Windows setting “Show text suggestions when typing on the physical keyboard”; it has no "
+     L"switch of its own."},
+    {L"Mở cài đặt Gõ phím của Windows…", L"Open Windows Typing settings…"},
 };
 static_assert(sizeof(kStrings) / sizeof(kStrings[0]) == static_cast<size_t>(S::Count), "string table size");
 }  // namespace
@@ -339,5 +349,11 @@ const wchar_t* tr(S id) {
 }
 
 void setEnglish(bool en) { g_en = en; }
+
+S textPredictionState(bool on) { return on ? S::TextPredictionOn : S::TextPredictionOff; }
+
+std::wstring textPredictionDesc(bool on) {
+    return std::wstring(tr(textPredictionState(on))) + L" " + tr(S::TextPredictionCaption);
+}
 
 }  // namespace vtx::app

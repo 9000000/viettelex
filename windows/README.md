@@ -174,6 +174,7 @@ Keys and clicks:
 - Microsoft does not document this value. The name comes from community guides that write the same toggle.
 - VietTelex.exe reads it at start and watches it with `RegNotifyChangeKeyValue` plus a thread-pool wait. It uses no thread of its own and polls nothing.
 - VietTelex.exe mirrors the value into the snapshot bit `systemTextPrediction` (`isSystemMirror`), never into `HKCU\Software\VietTelex`. TIPs pick a change up at their next focus change.
+- The settings window shows it so users can find it: Chính tả → Gợi ý cạnh con trỏ → **Gợi ý chữ khi gõ** ("Đang bật" / "Đang tắt — bật trong Cài đặt Windows…", `textPredictionDesc`) with a button that opens `ms-settings:typing`. The state is read when the page is built and again when the window is activated (one `RegGetValue`, rebuilt only if it changed).
 
 **Where it never runs:**
 

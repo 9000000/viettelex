@@ -100,6 +100,7 @@ enum Id : int {
     IdConflicts,
     IdDefaultInput,
     IdClearLearned,
+    IdTextPrediction,
     IdIconTile = 6000,  // + IconChoice
 };
 
@@ -462,6 +463,10 @@ void onDefaultInputButton() {
 
 std::vector<FoundConflict> g_conflicts;  // detected when the Kiểu gõ page is built
 
+// "Gợi ý chữ khi gõ" card: the Windows value it shows (read when the Chính tả page is
+// built, and again on WM_ACTIVATE — one RegGetValue, never on the key path).
+bool g_shownTextPrediction = false;
+
 std::vector<Item> pageItems(int tab) {
     std::vector<Item> v;
     switch (tab) {
@@ -517,6 +522,13 @@ std::vector<Item> pageItems(int tab) {
             // Gợi ý cạnh con trỏ: mostly on by default, so always visible (not collapsed).
             v.push_back(section(S::SecHints));
             for (int i = 15; i <= 19; ++i) v.push_back(toggleItem(i));
+            {
+                // Word prediction has no VietTelex switch: show Windows' setting and a way to it.
+                g_shownTextPrediction = readSystemTextPrediction();
+                Item c = buttonItem(S::TextPrediction, S::Count, IdTextPrediction);
+                c.descText = textPredictionDesc(g_shownTextPrediction);
+                v.push_back(c);
+            }
             v.push_back(toggleItem(23));  // Lọc từ nhạy cảm (gợi ý từ + sửa lỗi gõ)
             v.push_back(toggleItem(24));  // Học từ bạn gõ
             v.push_back(buttonItem(S::ClearLearned, S::ClearLearnedDesc, IdClearLearned));
@@ -932,6 +944,7 @@ void createControls() {
                                                                                                    : S::PerAppOpenButton),
                                          it.ctlId, perAppAction(readPerAppInput()) == PerAppAction::Enable ? kBtnPrimary : kBtnSecondary);
                 else if (it.ctlId == IdClearLearned) it.hwnd = makeButton(tr(S::ClearLearnedButton), it.ctlId);
+                else if (it.ctlId == IdTextPrediction) it.hwnd = makeButton(tr(S::TextPredictionButton), it.ctlId);
                 else it.hwnd = makeButton(tr(it.ctlId == IdCheckNow ? S::CheckButton : it.title), it.ctlId);
             }
         } else if (it.kind == ItemKind::IconPicker) {
@@ -1631,6 +1644,7 @@ void onCommand(int id, int code, HWND ctl) {
             break;
         case IdPerAppWin: onPerAppButton(); break;
         case IdDefaultInput: onDefaultInputButton(); break;
+        case IdTextPrediction: openTypingSettings(); break;  // ms-settings:typing
         default: break;
     }
 }
@@ -1848,6 +1862,14 @@ LRESULT CALLBACK wndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             break;
         case WM_DWMCOLORIZATIONCOLORCHANGED: rebuildAll(); break;
         case WM_APP + 1: rebuildAll(); return 0;
+        case WM_ACTIVATE:
+            // Back from Windows Settings: refresh the "Gợi ý chữ khi gõ" state if it changed.
+            if (LOWORD(wp) != WA_INACTIVE && g_tab == 1 && readSystemTextPrediction() != g_shownTextPrediction) {
+                const int keep = g_scroll;
+                buildPage();
+                scrollTo(keep);
+            }
+            break;
         case WM_CLOSE: DestroyWindow(h); return 0;
         case WM_DESTROY:
             g_wnd = g_page = nullptr;

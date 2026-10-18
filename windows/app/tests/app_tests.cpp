@@ -746,3 +746,25 @@ TEST(ui_strings_windows_wording) {
     CHECK(std::wcscmp(tr(S::SecHints), L"Gợi ý cạnh con trỏ") == 0);
 }
 
+// Word prediction follows a Windows setting users could not find from VietTelex: the
+// Chính tả page shows its state ("Gợi ý chữ khi gõ") with a button to ms-settings:typing.
+TEST(ui_strings_text_prediction_card) {
+    using namespace vtx::app;
+    CHECK(textPredictionState(true) == S::TextPredictionOn);
+    CHECK(textPredictionState(false) == S::TextPredictionOff);
+    setEnglish(false);
+    CHECK(std::wcscmp(tr(S::TextPrediction), L"Gợi ý chữ khi gõ") == 0);
+    CHECK(std::wcscmp(tr(S::TextPredictionButton), L"Mở cài đặt Gõ phím của Windows…") == 0);
+    const std::wstring on = textPredictionDesc(true), off = textPredictionDesc(false);
+    CHECK(on.rfind(L"Đang bật", 0) == 0);
+    CHECK(off.rfind(L"Đang tắt — bật trong Cài đặt Windows để dùng gợi ý chữ", 0) == 0);
+    CHECK(on.find(tr(S::TextPredictionCaption)) != std::wstring::npos);  // caption follows the state
+    CHECK(off.find(tr(S::TextPredictionCaption)) != std::wstring::npos);
+    setEnglish(true);
+    CHECK(textPredictionDesc(true).rfind(L"On.", 0) == 0);
+    CHECK(textPredictionDesc(false).rfind(L"Off", 0) == 0);
+    CHECK(std::wcsstr(tr(S::TextPredictionCaption), L"physical keyboard") != nullptr);
+    setEnglish(false);
+    CHECK(std::wstring(vtx::kTypingSettingsUri) == L"ms-settings:typing");  // what the button opens
+}
+

@@ -1,6 +1,7 @@
 // strings.h — UI strings, Vietnamese (default) and English (settings `uiLanguage`).
 // Setting titles/descriptions reuse the macOS wording (App/Resources/*.lproj).
 #pragma once
+#include <string>
 
 namespace vtx::app {
 
@@ -117,10 +118,18 @@ enum class S {
     MenuGameMode,
     // Học từ bạn gõ (Chính tả page, Gợi ý section, next to Lọc từ nhạy cảm)
     LearnWords, LearnWordsDesc, ClearLearned, ClearLearnedDesc, ClearLearnedButton, ClearLearnedConfirm,
+    // Gợi ý chữ khi gõ (Chính tả page, Gợi ý section): word prediction follows Windows'
+    // "Show text suggestions when typing on the physical keyboard" — state + a button to it
+    TextPrediction, TextPredictionOn, TextPredictionOff, TextPredictionCaption, TextPredictionButton,
     Count
 };
 
 const wchar_t* tr(S id);
 void setEnglish(bool en);
+
+// "Gợi ý chữ khi gõ" card: the state line for Windows' physical-keyboard text suggestions
+// (`on` = readSystemTextPrediction()), then the caption saying VietTelex follows it.
+S textPredictionState(bool on);
+std::wstring textPredictionDesc(bool on);
 
 }  // namespace vtx::app
