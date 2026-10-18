@@ -1,3 +1,23 @@
+viettelex (1.0.16) UNRELEASED; urgency=medium
+
+  * Dữ liệu ngôn ngữ mới (thêm văn hội thoại): thêm dấu cả câu và gợi ý từ
+    chính xác hơn; thêm dấu xét hai chữ phía trước.
+  * Cặp từ chọn tay cho các cụm hay sai (không dấu, có dấu, cô dâu…) và
+    tiếng lóng mới (lều báo, xỉu ngang…).
+  * Gợi ý giữ đúng cách viết hoa bạn hay dùng (học trên máy).
+  * Gợi ý thêm dấu cả câu không bị ngắt bởi số, vần iê/uô/ươ hay từ "go".
+  * ---
+  * New language data (adds conversational text): more accurate sentence
+    tone restoring and word prediction; tone restoring uses two words of
+    context.
+  * Hand-picked pairs for common misses (không dấu, có dấu, cô dâu…) and new
+    slang.
+  * Suggestions keep the capitalization you usually use (learned on device).
+  * Sentence tone suggestions are no longer cut by numbers, iê/uô/ươ rhymes
+    or the word "go".
+
+ -- VietTelex Maintainers <maintainers@viettelex.invalid>  Sun, 18 Oct 2026 08:00:00 +0700
+
 viettelex (1.0.15) UNRELEASED; urgency=medium
 
   * Văn bản tự động (Cài đặt → Tuỳ chỉnh, mặc định tắt): thêm dấu chấm khi
